@@ -6,6 +6,7 @@ export class MemoryStore {
     this.data = new Map();
     this.events = [];
     this.env = null;
+    this.hydrated = false;
   }
 
   configure(env) { this.env = env ?? null; }
@@ -37,7 +38,7 @@ export class MemoryStore {
 
   recentEvents(limit = 50) { return this.events.slice(-limit).reverse(); }
 
-  async hydrate(types = ['agents','projects','tasks','approvals','memory','runs','verifications']) {
+  async hydrate(types = ['agents','projects','tasks','approvals','memory','runs','verifications','tools']) {
     if (!hasD1(this.env)) return false;
     for (const type of types) {
       const rows = await d1List(this.env, type);
@@ -46,6 +47,7 @@ export class MemoryStore {
       if (bucket.size) this.data.set(type, bucket);
     }
     this.events = await d1Events(this.env);
+    this.hydrated = true;
     return true;
   }
 }
