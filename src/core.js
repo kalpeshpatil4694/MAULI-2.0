@@ -1,7 +1,7 @@
 export const now = () => new Date().toISOString();
 export const id = (prefix = 'id') => `${prefix}_${crypto.randomUUID()}`;
 
-export const ok = (data = {}, status = 200) => Response.json({ ok: true, ...data }, { status });
+export const ok = (data = {}, status = 200) => Response.json({ ok: true, data }, { status });
 export const fail = (message, status = 400, details = undefined) => Response.json({ ok: false, error: { message, ...(details ? { details } : {}) } }, { status });
 
 export function json(request) {
