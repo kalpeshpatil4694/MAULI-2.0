@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { interpretCommand } from '../src/orchestrator.js';
 import { registerAgent, selectAgents } from '../src/agents.js';
-import { createTask, assignTask } from '../src/tasks.js';
+import { createTask, assignTask, startTask, markVerifying, completeTask } from '../src/tasks.js';
 import { id, now } from '../src/core.js';
-import { riskLevel, requiresApproval } from '../src/governance.js';
+import { riskLevel, requiresApproval, requestApproval, decideApproval, isApprovalGranted } from '../src/governance.js';
 
 test('interprets a founder command', () => {
   const intent = interpretCommand('Build an e-commerce platform');
@@ -23,16 +23,24 @@ test('selects agents by capability', () => {
   assert.ok(found);
 });
 
-test('assigns a compatible task', () => {
+test('assigns a compatible task and advances lifecycle', () => {
   const agent = registerAgent({ name: 'Test Researcher', role: 'Researcher', capabilities: ['research'] });
   const task = createTask({ title: 'Research', requiredCapabilities: ['research'] });
   const assigned = assignTask(task.id);
   assert.equal(assigned.agentId, agent.id);
   assert.equal(assigned.state, 'assigned');
+  assert.equal(startTask(task.id).state, 'working');
+  assert.equal(markVerifying(task.id, { ok: true }).state, 'verifying');
+  assert.equal(completeTask(task.id, { ok: true }).state, 'completed');
 });
 
 test('high-risk code and external actions require approval', () => {
-  const risk = riskLevel({ codeWrite: true, externalSideEffect: true });
+  const risk = riskLevel({ codeWrite: true, externalApi: true });
   assert.equal(risk, 'high');
   assert.equal(requiresApproval(risk), true);
+  const approval = requestApproval({ action: 'Test governed action', risk });
+  assert.equal(approval.state, 'pending');
+  assert.equal(isApprovalGranted(approval.id), false);
+  assert.equal(decideApproval(approval.id, true).state, 'approved');
+  assert.equal(isApprovalGranted(approval.id), true);
 });
