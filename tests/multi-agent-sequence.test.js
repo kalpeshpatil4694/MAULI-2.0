@@ -16,10 +16,10 @@ function setup() {
 
 test('dependent task remains blocked until prerequisite completes', () => {
   const { first, second } = setup();
-  assert.equal(first.state, 'active');
+  assert.equal(first.state, 'assigned');
   assert.equal(second.dependsOn[0], first.id);
   assert.notEqual(store.get('tasks', first.id)?.state, 'completed');
-  assert.equal(store.get('tasks', second.id)?.state, 'active');
+  assert.equal(store.get('tasks', second.id)?.state, 'blocked');
 });
 
 test('completed prerequisite unlocks dependency', () => {
