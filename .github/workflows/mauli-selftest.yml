@@ -1,0 +1,28 @@
+name: MAULI Self Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run MAULI self-tests
+        run: |
+          node --input-type=module <<'EOF'
+          import { runOrchestratorSelfTest } from './src/orchestrator-selftest.js';
+          import { runAgentRecoverySelfTest } from './src/e2e-selftest.js';
+          const results = [runOrchestratorSelfTest(), runAgentRecoverySelfTest()];
+          console.log(JSON.stringify(results, null, 2));
+          if (results.some(result => !result.passed)) process.exit(1);
+          EOF
