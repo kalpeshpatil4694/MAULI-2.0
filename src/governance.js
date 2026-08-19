@@ -20,4 +20,8 @@ export function decideApproval(approvalId, approved, note = '') {
   store.addEvent('approval.decided', next);
   return next;
 }
+export function isApprovalGranted(approvalId) {
+  const approval = store.get('approvals', approvalId);
+  return approval?.state === 'approved';
+}
 export const listApprovals = () => store.list('approvals');
