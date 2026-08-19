@@ -17,8 +17,23 @@ export function interpretCommand(command) {
   return { id:id('intent'), command:text, objective:text, capabilities };
 }
 
-function dependenciesComplete(task) {
-  return (task.dependsOn ?? []).every(depId => store.get('tasks', depId)?.state === 'completed');
+function dependenciesComplete(task) { return (task.dependsOn ?? []).every(depId => store.get('tasks', depId)?.state === 'completed'); }
+
+function taskSpecFromPlan(plan, fallbackObjective, index = 0) {
+  const requirements = Array.isArray(plan?.requirements) ? plan.requirements : [];
+  const caps = Array.isArray(plan?.capabilities) ? plan.capabilities : [];
+  const map = [
+    { key:'research', title:'Research and validate requirements', caps:['research','analysis'], executor:'internal.plan' },
+    { key:'product-planning', title:'Define product and architecture plan', caps:['product-planning','planning'], executor:'internal.plan' },
+    { key:'frontend', title:'Design frontend and user experience', caps:['frontend','ui'], executor:'internal.plan' },
+    { key:'backend', title:'Design backend and API implementation', caps:['backend','api'], executor:'internal.plan' },
+    { key:'database', title:'Design database and persistence', caps:['database','schema','sql'], executor:'internal.plan' },
+    { key:'security', title:'Perform security review', caps:['security','audit'], executor:'internal.plan' },
+    { key:'testing', title:'Create verification and QA plan', caps:['testing','verification'], executor:'internal.plan' }
+  ];
+  const selected = map.filter(x => caps.includes(x.key) || x.caps.some(c => caps.includes(c)));
+  const specs = selected.length ? selected : [{ key:'planning', title:'Analyze requirements and produce execution plan', caps:['planning'], executor:'internal.plan' }];
+  return specs.map((s, i) => ({ ...s, title: requirements[i] ? `${s.title}: ${requirements[i]}` : s.title, description: fallbackObjective, requiredCapabilities:s.caps, maxAttempts:3, executor:s.executor, order:index+i }));
 }
 
 export async function planCommand(command, env = {}) {
@@ -28,22 +43,23 @@ export async function planCommand(command, env = {}) {
   if (env?.AI?.run) { try { aiPlan = await interpretWithAI(env, command); } catch { aiPlan = null; } }
   const objective = aiPlan?.objective ?? basic.objective;
   const capabilities = [...new Set([...(basic.capabilities ?? []), ...(aiPlan?.capabilities ?? [])])];
-  const project = createProject({ name:`Project: ${objective.slice(0,60)}`, objective, founderCommand:basic.command, state:'planning' });
+  const project = createProject({ name:`Project: ${objective.slice(0,60)}`, objective, founderCommand:basic.command, requirements:aiPlan?.requirements ?? [] });
   const risk = riskLevel({ codeWrite:/code|build|create|develop|platform|app|website/i.test(command) });
   const approval = requiresApproval(risk) ? requestApproval({ action:`Execute founder command: ${command}`, risk, projectId:project.id }) : null;
-  const selected = selectAgents(capabilities.length ? capabilities : ['planning'])[0] ?? selectAgents(['planning'])[0];
-  const task = addTaskToProject(project.id, {
-    title:'Analyze requirements and produce execution plan', description:objective,
-    requiredCapabilities:capabilities.length ? capabilities : ['planning'], risk,
-    acceptance:aiPlan?.acceptanceCriteria?.length ? aiPlan.acceptanceCriteria : ['Clear requirements','Execution plan','Agent assignments'],
-    assignedAgentId:selected?.id ?? null, maxAttempts:3, executor:'internal.plan'
+  const specs = taskSpecFromPlan(aiPlan, objective);
+  const tasks = specs.map((spec, i) => {
+    const candidates = selectAgents(spec.requiredCapabilities);
+    const selected = candidates[0] ?? selectAgents(['planning'])[0];
+    const task = addTaskToProject(project.id, { title:spec.title, description:spec.description, requiredCapabilities:spec.requiredCapabilities, risk, acceptance:aiPlan?.acceptanceCriteria?.length ? aiPlan.acceptanceCriteria : ['Clear requirements','Execution plan','Verification'], assignedAgentId:selected?.id ?? null, maxAttempts:spec.maxAttempts, executor:spec.executor, sequence:i });
+    return { task, selectedAgent:selected };
   });
   remember({ type:'project_requirement', content:objective, scope:'project', scopeId:project.id, importance:'high', source:'founder-command' });
-  if (approval) return { intent:basic, aiPlan, project, firstTask:task, selectedAgent:selected, approval, status:'awaiting_approval' };
-  return executePlannedProject({ project, task, selectedAgent:selected, env });
+  if (approval) return { intent:basic, aiPlan, project, tasks, status:'awaiting_approval', approval };
+  return executePlannedProject({ project, task:tasks[0]?.task, selectedAgent:tasks[0]?.selectedAgent, env });
 }
 
 export async function executePlannedProject({ project, task, selectedAgent, env = {}, approved = false }) {
+  if (!task) return { project, status:'error', error:'No executable task was created' };
   if (!dependenciesComplete(task)) return { project, firstTask:task, selectedAgent, status:'blocked', reason:'dependencies_incomplete' };
   if (requiresApproval(task.risk) && !approved) return { project, firstTask:task, selectedAgent, status:'awaiting_approval' };
   if (selectedAgent) updateAgent(selectedAgent.id, { state:'working', currentTaskId:task.id, heartbeatAt:now() });
@@ -70,7 +86,7 @@ export async function resumeApprovedCommand(approvalId, env = {}) {
   const approval = store.get('approvals', approvalId);
   if (!approval || !isApprovalGranted(approvalId)) return { status:'awaiting_approval', approval };
   const project = store.get('projects', approval.projectId);
-  const task = store.list('tasks').find(t => t.projectId === approval.projectId);
+  const task = store.list('tasks').find(t => t.projectId === approval.projectId && (t.state === 'active' || t.state === 'planning' || t.state === 'working'));
   const selectedAgent = task?.assignedAgentId ? store.get('agents', task.assignedAgentId) : selectAgents(task?.requiredCapabilities ?? ['planning'])[0];
   if (!project || !task) return { status:'error', error:'Approved project/task not found' };
   return executePlannedProject({ project, task, selectedAgent, env, approved:true });
