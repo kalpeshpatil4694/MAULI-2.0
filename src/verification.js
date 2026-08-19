@@ -3,18 +3,22 @@ import { store } from './store.js';
 
 function matchesAcceptance(task, result) {
   const acceptance = Array.isArray(task?.acceptance) ? task.acceptance : [];
-  if (acceptance.length === 0) return true;
-  if (!result || typeof result !== 'object') return false;
+  if (acceptance.length === 0) return { passed: true, checks: [] };
+  if (!result || typeof result !== 'object') return { passed: false, checks: acceptance.map(rule => ({ rule, passed: false, reason: 'missing_result' })) };
 
-  return acceptance.every(rule => {
-    if (typeof rule === 'string') return Object.values(result).some(value => String(value).includes(rule));
-    if (!rule || typeof rule !== 'object') return true;
-    if (!rule.field) return true;
+  const checks = acceptance.map(rule => {
+    if (typeof rule === 'string') {
+      const passed = Object.values(result).some(value => String(value).toLowerCase().includes(rule.toLowerCase()));
+      return { rule, passed, mode: 'text-match' };
+    }
+    if (!rule || typeof rule !== 'object') return { rule, passed: true, mode: 'ignored' };
+    if (!rule.field) return { rule, passed: true, mode: 'ignored' };
     const actual = result[rule.field];
-    if (Object.prototype.hasOwnProperty.call(rule, 'equals')) return actual === rule.equals;
-    if (Object.prototype.hasOwnProperty.call(rule, 'includes')) return String(actual ?? '').includes(String(rule.includes));
-    return actual !== undefined && actual !== null;
+    if (Object.prototype.hasOwnProperty.call(rule, 'equals')) return { rule, passed: actual === rule.equals, actual, mode: 'equals' };
+    if (Object.prototype.hasOwnProperty.call(rule, 'includes')) return { rule, passed: String(actual ?? '').toLowerCase().includes(String(rule.includes).toLowerCase()), actual, mode: 'includes' };
+    return { rule, passed: actual !== undefined && actual !== null, actual, mode: 'exists' };
   });
+  return { passed: checks.every(x => x.passed), checks };
 }
 
 export function verifyResult(task, execution) {
@@ -28,19 +32,11 @@ export function verifyResult(task, execution) {
     checks.push({ name: 'agent_identity', passed: execution?.agentId === expectedAgent });
   }
 
-  if (Array.isArray(task?.acceptance) && task.acceptance.length > 0) {
-    checks.push({ name: 'acceptance_criteria', passed: matchesAcceptance(task, execution?.result) });
-  }
+  const acceptance = matchesAcceptance(task, execution?.result);
+  if (Array.isArray(task?.acceptance) && task.acceptance.length > 0) checks.push({ name: 'acceptance_criteria', passed: acceptance.passed, details: acceptance.checks });
 
   const passed = checks.every(x => x.passed);
-  const result = {
-    id: id('verification'),
-    taskId: task?.id ?? null,
-    executionId: execution?.id ?? null,
-    passed,
-    checks,
-    verifiedAt: now()
-  };
+  const result = { id: id('verification'), taskId: task?.id ?? null, executionId: execution?.id ?? null, passed, checks, verifiedAt: now() };
   store.put('verifications', result);
   store.addEvent('verification.completed', result);
   return result;
