@@ -17,7 +17,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run MAULI self-tests
+      - name: Install dependencies
+        run: npm install
+      - name: Run Node tests
+        run: npm test
+      - name: Run MAULI integration self-tests
         run: |
           node --input-type=module <<'EOF'
           import { runOrchestratorSelfTest } from './src/orchestrator-selftest.js';
