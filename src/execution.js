@@ -1,6 +1,7 @@
 import { id, now } from './core.js';
 import { store } from './store.js';
 import { executeTool } from './tools.js';
+import { code } from './ai.js';
 import { startTask, markVerifying, completeTask, failTask } from './tasks.js';
 import { verifyResult, retryDecision } from './verification.js';
 
@@ -86,3 +87,41 @@ export function recoverRunningExecutions() {
 
 registerExecutor('internal.plan', async ({ task, callTool }) => ({ type: 'plan', taskId: task.id, output: 'Execution plan generated.', diagnostics: await callTool('health.check') }), { description: 'Safe internal planning executor', risk: 'low', scope: 'internal' });
 grantExecutor('internal.plan', 'internal');
+
+/**
+ * Free/open-model coding executor. It generates a structured workspace artifact
+ * instead of directly mutating external systems. External writes remain behind
+ * the Tool Registry and approval boundary.
+ */
+registerExecutor('internal.code', async ({ task, env }) => {
+  if (!env) throw new Error('AI runtime environment is required for coding');
+  const prompt = [
+    'You are the MAULI Coding Agent.',
+    'Produce implementation artifacts for the task.',
+    'Return JSON only with this schema:',
+    '{"summary":string,"files":[{"path":string,"content":string}],"tests":[string],"notes":[string]}',
+    'Do not claim that files were written or tests were executed.',
+    `Task: ${task.title ?? 'Coding task'}`,
+    `Objective: ${task.description ?? ''}`,
+    `Required capabilities: ${(task.requiredCapabilities ?? []).join(', ')}`,
+    `Acceptance criteria: ${JSON.stringify(task.acceptance ?? [])}`
+  ].join('\n');
+
+  const raw = await code(env, [{ role: 'system', content: 'Generate safe, minimal, production-oriented code artifacts.' }, { role: 'user', content: prompt }]);
+  let parsed;
+  try { parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { parsed = { summary: 'Code artifact generated as raw model output.', files: [], tests: [], notes: [String(raw)] }; }
+  const files = Array.isArray(parsed?.files) ? parsed.files.filter(file => file && typeof file.path === 'string' && typeof file.content === 'string') : [];
+  const artifact = store.put('artifacts', {
+    id: id('artifact'),
+    taskId: task.id,
+    kind: 'code-workspace',
+    summary: String(parsed?.summary ?? 'Code artifact'),
+    files,
+    tests: Array.isArray(parsed?.tests) ? parsed.tests : [],
+    notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
+    generatedAt: now()
+  });
+  store.addEvent('artifact.generated', { artifactId: artifact.id, taskId: task.id, fileCount: files.length });
+  return { type: 'code', artifactId: artifact.id, summary: artifact.summary, files: artifact.files, tests: artifact.tests, notes: artifact.notes };
+}, { description: 'Generates code workspace artifacts using the MAULI Intelligence Bus', risk: 'low', scope: 'internal', capabilities: ['coding', 'software-development'] });
+grantExecutor('internal.code', 'internal');
