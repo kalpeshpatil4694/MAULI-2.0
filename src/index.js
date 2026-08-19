@@ -15,9 +15,14 @@ const dashboard = () => `<!doctype html><html><head><meta charset="utf-8"><meta 
 export default {
   async fetch(request, env) {
     try {
-      await ensureSchema(env); store.configure(env); await store.hydrate(); seedAgents(); const recoveredRuns = recoverRunningExecutions(); const url = new URL(request.url);
+      await ensureSchema(env);
+      store.configure(env);
+      if (!store.hydrated) await store.hydrate();
+      seedAgents();
+      const recoveredRuns = recoverRunningExecutions();
+      const url = new URL(request.url);
       if (request.method === 'GET' && url.pathname === '/') return new Response(dashboard(), { headers:{'content-type':'text/html;charset=UTF-8'} });
-      if (request.method === 'GET' && url.pathname === '/api/health') return ok({ service:'mauli2.0', status:'healthy', persistence:hasD1(env), ai:Boolean(env?.AI), recoveredRuns:recoveredRuns.length, time:now() });
+      if (request.method === 'GET' && url.pathname === '/api/health') return ok({ service:'mauli2.0', status:'healthy', persistence:hasD1(env), hydrated:store.hydrated, ai:Boolean(env?.AI), recoveredRuns:recoveredRuns.length, time:now() });
       if (request.method === 'GET' && url.pathname === '/api/state') { const [agents,projects,tasks,approvals,events] = hasD1(env) ? await Promise.all([d1List(env,'agents'),d1List(env,'projects'),d1List(env,'tasks'),d1List(env,'approvals'),d1Events(env)]) : [listAgents(),listProjects(),listTasks(),listApprovals(),store.recentEvents()]; return ok({ agents, projects, tasks, approvals, tools:listTools(), events, recoveredRuns }); }
       if (request.method === 'POST' && url.pathname === '/api/command') { const limit=checkRateLimit(request); if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter}); const auth=requireFounder(request,env); if(!auth.ok)return fail(auth.error,auth.status); const body=await json(request); if(!body.command)return fail('Founder command is required',400); store.addEvent('security.command_authorized',{ip:request.headers.get('cf-connecting-ip') ?? 'unknown',remaining:limit.remaining}); return ok({ result:await planCommand(body.command,env) },201); }
       if (request.method === 'POST' && url.pathname.startsWith('/api/approvals/')) { const limit=checkRateLimit(request); if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter}); const auth=requireFounder(request,env); if(!auth.ok)return fail(auth.error,auth.status); const approvalId=url.pathname.split('/').pop(); const body=await json(request); const result=decideApproval(approvalId,Boolean(body.approved),body.note ?? ''); if(!result)return fail('Approval not found',404); store.addEvent('security.approval_action',{approvalId,approved:Boolean(body.approved)}); if(result.state==='rejected')return ok({approval:result,status:'rejected'}); const resumed=await resumeApprovedCommand(approvalId,env); return ok({approval:result,result:resumed}); }
