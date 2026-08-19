@@ -3,12 +3,18 @@ import assert from 'node:assert/strict';
 import { interpretCommand } from '../src/orchestrator.js';
 import { registerAgent, selectAgents } from '../src/agents.js';
 import { createTask, assignTask } from '../src/tasks.js';
-
+import { id, now } from '../src/core.js';
+import { riskLevel, requiresApproval } from '../src/governance.js';
 
 test('interprets a founder command', () => {
   const intent = interpretCommand('Build an e-commerce platform');
   assert.equal(intent.command, 'Build an e-commerce platform');
   assert.ok(intent.id);
+});
+
+test('identifiers are prefixed and timestamps are valid ISO strings', () => {
+  assert.match(id('task'), /^task_[a-z0-9]+$/);
+  assert.doesNotThrow(() => new Date(now()).toISOString());
 });
 
 test('selects agents by capability', () => {
@@ -23,4 +29,10 @@ test('assigns a compatible task', () => {
   const assigned = assignTask(task.id);
   assert.equal(assigned.agentId, agent.id);
   assert.equal(assigned.state, 'assigned');
+});
+
+test('high-risk code and external actions require approval', () => {
+  const risk = riskLevel({ codeWrite: true, externalSideEffect: true });
+  assert.equal(risk, 'high');
+  assert.equal(requiresApproval(risk), true);
 });
