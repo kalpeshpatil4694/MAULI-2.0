@@ -6,21 +6,21 @@ export class MemoryStore {
     this.data = new Map();
     this.events = [];
     this.env = null;
-    this.hydrated = false;
   }
 
   configure(env) { this.env = env ?? null; }
+
   list(type) { return [...(this.data.get(type) ?? new Map()).values()]; }
   get(type, key) { return this.data.get(type)?.get(key) ?? null; }
 
   put(type, value) {
+    const bucket = this.data.get(type) ?? new Map();
     const item = {
       ...value,
       id: value.id ?? id(type),
       updatedAt: now(),
       createdAt: value.createdAt ?? now()
     };
-    const bucket = this.data.get(type) ?? new Map();
     bucket.set(item.id, item);
     this.data.set(type, bucket);
     if (hasD1(this.env)) void d1Put(this.env, type, item).catch(() => {});
@@ -37,7 +37,7 @@ export class MemoryStore {
 
   recentEvents(limit = 50) { return this.events.slice(-limit).reverse(); }
 
-  async hydrate(types = ['agents','projects','tasks','approvals','memory','runs']) {
+  async hydrate(types = ['agents','projects','tasks','approvals','memory','runs','verifications']) {
     if (!hasD1(this.env)) return false;
     for (const type of types) {
       const rows = await d1List(this.env, type);
@@ -46,7 +46,6 @@ export class MemoryStore {
       if (bucket.size) this.data.set(type, bucket);
     }
     this.events = await d1Events(this.env);
-    this.hydrated = true;
     return true;
   }
 }
