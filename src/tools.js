@@ -12,7 +12,26 @@ export function registerTool({ name, description, risk = 'read', handler, capabi
   return tool;
 }
 
-export function listTools() { return store.list('tools'); }
+export function listTools() { return store.list('tools').filter(tool => tool.enabled !== false); }
+
+export function selectTools(requiredCapabilities = [], options = {}) {
+  const required = [...new Set(requiredCapabilities)];
+  return listTools()
+    .filter(tool => !options.scope || tool.scope === options.scope)
+    .filter(tool => !options.maxRisk || ['read','write','destructive','external'].indexOf(tool.risk) <= ['read','write','destructive','external'].indexOf(options.maxRisk))
+    .map(tool => {
+      const matched = required.filter(cap => (tool.capabilities ?? []).includes(cap));
+      const score = required.length === 0 ? 1 : matched.length * 100 + (matched.length === required.length ? 50 : 0);
+      return { tool, score };
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name))
+    .map(x => x.tool);
+}
+
+export function toolsForTask(task, options = {}) {
+  return selectTools(task?.requiredCapabilities ?? [], options).map(tool => tool.name);
+}
 
 function agentAllowed(tool, context) {
   if (!tool.allowedAgents?.length) return true;
@@ -20,7 +39,7 @@ function agentAllowed(tool, context) {
 }
 
 export async function executeTool(name, input = {}, context = {}) {
-  const tool = store.list('tools').find(t => t.name === name && t.enabled);
+  const tool = listTools().find(t => t.name === name);
   if (!tool) throw new Error(`Tool not available: ${name}`);
   if (!agentAllowed(tool, context)) throw new Error(`Agent is not authorized for ${name}`);
   if (tool.scope === 'external' && !context.allowExternal) throw new Error(`External scope is not permitted for ${name}`);
