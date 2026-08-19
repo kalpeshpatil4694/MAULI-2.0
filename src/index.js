@@ -14,6 +14,8 @@ export default {
   async fetch(request, env) {
     try {
       await ensureSchema(env);
+      store.configure(env);
+      await store.hydrate();
       seedAgents();
       const url = new URL(request.url);
       if (request.method === 'GET' && url.pathname === '/') return new Response(dashboard(), { headers:{'content-type':'text/html;charset=UTF-8'} });
