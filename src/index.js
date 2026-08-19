@@ -4,7 +4,7 @@ import { seedAgents, listAgents } from './agents.js';
 import { listProjects } from './projects.js';
 import { listTasks } from './tasks.js';
 import { listApprovals, decideApproval } from './governance.js';
-import { planCommand } from './orchestrator.js';
+import { planCommand, resumeApprovedCommand } from './orchestrator.js';
 import { listTools } from './tools.js';
 import { ensureSchema, hasD1, d1List, d1Events } from './db.js';
 
@@ -32,7 +32,10 @@ export default {
       if (request.method === 'POST' && url.pathname.startsWith('/api/approvals/')) {
         const approvalId=url.pathname.split('/').pop(); const body=await json(request);
         const result=decideApproval(approvalId,Boolean(body.approved),body.note ?? '');
-        return result ? ok({approval:result}) : fail('Approval not found',404);
+        if (!result) return fail('Approval not found',404);
+        if (result.state === 'rejected') return ok({ approval:result, status:'rejected' });
+        const resumed = await resumeApprovedCommand(approvalId, env);
+        return ok({ approval:result, result:resumed });
       }
       return fail('Route not found',404);
     } catch(error) { return fail(error.message || 'Internal error',500); }
