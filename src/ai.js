@@ -21,26 +21,44 @@ export async function code(env, messages, options = {}) { return generateAI(env,
 
 const CAPABILITIES = ['research','planning','product-planning','frontend','ui','backend','api','database','schema','sql','security','testing','verification'];
 
+function cleanList(value, limit = 30) { return Array.isArray(value) ? value.map(x => String(x).trim()).filter(Boolean).slice(0, limit) : []; }
 function normalizePlan(parsed, command) {
-  const requirements = Array.isArray(parsed?.requirements) ? parsed.requirements.map(String).filter(Boolean).slice(0, 30) : [];
-  const capabilities = Array.isArray(parsed?.capabilities) ? [...new Set(parsed.capabilities.map(String).map(x => x.toLowerCase()).filter(x => CAPABILITIES.includes(x)))] : [];
-  const acceptanceCriteria = Array.isArray(parsed?.acceptanceCriteria) ? parsed.acceptanceCriteria.map(String).filter(Boolean).slice(0, 30) : [];
-  return { objective: String(parsed?.objective ?? command), requirements, capabilities, risks: Array.isArray(parsed?.risks) ? parsed.risks.map(String).slice(0, 20) : [], acceptanceCriteria };
+  const capabilities = [...new Set(cleanList(parsed?.capabilities).map(x => x.toLowerCase()).filter(x => CAPABILITIES.includes(x)))];
+  const requirements = cleanList(parsed?.requirements);
+  const acceptanceCriteria = cleanList(parsed?.acceptanceCriteria);
+  const risks = cleanList(parsed?.risks, 20);
+  const objective = String(parsed?.objective ?? command).trim() || String(command);
+  return { objective, requirements, capabilities, risks, acceptanceCriteria };
+}
+
+function extractJson(raw) {
+  if (raw && typeof raw === 'object') return raw;
+  const text = String(raw ?? '').trim();
+  try { return JSON.parse(text); } catch {}
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  if (fenced) { try { return JSON.parse(fenced); } catch {} }
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if (first >= 0 && last > first) { try { return JSON.parse(text.slice(first, last + 1)); } catch {} }
+  return null;
 }
 
 export async function interpretWithAI(env, command, options = {}) {
   const system = [
     'You are MAULI Executive AI for a software company.',
     'Analyze the Founder command before any execution.',
-    'Return JSON only. Never claim work is completed.',
-    'Break the request into concrete requirements and select capabilities needed to execute it.',
+    'Return one valid JSON object only. Do not use markdown fences or explanatory text.',
+    'Never claim work is completed. You are planning only.',
     `Allowed capabilities: ${CAPABILITIES.join(', ')}.`,
-    'For a software product, include only capabilities genuinely needed; prefer research/product-planning first, then frontend/backend/database/security/testing as applicable.',
+    'Select only capabilities genuinely needed. For software products, normally consider research, product-planning, frontend, backend, database, security, and testing according to the request.',
+    'Requirements must be concrete and testable. Acceptance criteria must describe observable completion conditions.',
+    'Risks must mention meaningful execution or approval concerns, not generic filler.',
     'Schema: {"objective":string,"requirements":string[],"capabilities":string[],"risks":string[],"acceptanceCriteria":string[]}'
   ].join(' ');
   const raw = await reason(env, [{ role:'system', content:system }, { role:'user', content:String(command) }], options);
-  try { return normalizePlan(typeof raw === 'string' ? JSON.parse(raw) : raw, command); }
-  catch { return { objective:String(command), requirements:[], capabilities:[], risks:[], acceptanceCriteria:[], raw }; }
+  const parsed = extractJson(raw);
+  if (!parsed) return { objective:String(command), requirements:[], capabilities:[], risks:['AI planning response was not valid JSON'], acceptanceCriteria:[], raw };
+  return normalizePlan(parsed, command);
 }
 
 export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true }; }
