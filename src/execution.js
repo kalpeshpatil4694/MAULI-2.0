@@ -13,12 +13,7 @@ export function registerExecutor(name, handler, meta = {}) {
 }
 
 export function listExecutors() {
-  return [...handlers.entries()].map(([name, x]) => ({
-    name,
-    description: x.description ?? '',
-    risk: x.risk ?? 'normal',
-    capabilities: x.capabilities ?? []
-  }));
+  return [...handlers.entries()].map(([name, x]) => ({ name, description: x.description ?? '', risk: x.risk ?? 'normal', capabilities: x.capabilities ?? [] }));
 }
 
 export function grantExecutor(name, scope = 'internal') {
@@ -29,42 +24,20 @@ export function grantExecutor(name, scope = 'internal') {
 export async function executeTask(task, context = {}) {
   const executorName = task.executor ?? 'internal.plan';
   const executor = handlers.get(executorName);
-  const existing = task.id
-    ? store.list('runs')
-        .filter(r => r.taskId === task.id && r.state === 'running')
-        .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))[0]
-    : null;
-
+  const existing = task.id ? store.list('runs').filter(r => r.taskId === task.id && r.state === 'running').sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))[0] : null;
   if (existing && !context.forceRestart) {
     store.addEvent('execution.recovered', { runId: existing.id, taskId: task.id, executor: executorName });
     return existing;
   }
-
-  const startedAt = now();
-  const run = {
-    id: id('run'),
-    taskId: task.id,
-    executor: executorName,
-    state: 'running',
-    startedAt,
-    attempt: context.attempt ?? 1,
-    recoverable: true
-  };
+  const run = { id: id('run'), taskId: task.id, executor: executorName, state: 'running', startedAt: now(), attempt: context.attempt ?? 1, agentId: task.agentId ?? task.assignedAgentId ?? context.agentId ?? null, recoverable: true };
   store.put('runs', run);
   store.addEvent('execution.started', run);
-
   try {
     if (!executor) throw new Error(`No executor registered: ${executorName}`);
     const scope = permissions.get(executorName) ?? executor.scope ?? 'internal';
     if (scope === 'external' && !context.allowExternal) throw new Error('External execution permission is not granted');
     if ((executor.risk === 'critical' || task.risk === 'critical') && !context.approved) throw new Error('Critical execution requires explicit approval');
-
-    const result = await executor.handler({
-      task,
-      ...context,
-      callTool: (name, input = {}) => executeTool(name, input, context)
-    });
-
+    const result = await executor.handler({ task, ...context, callTool: (name, input = {}) => executeTool(name, input, context) });
     const completed = { ...run, state: 'completed', result, completedAt: now(), recoverable: false };
     store.put('runs', completed);
     store.addEvent('execution.completed', completed);
@@ -79,67 +52,37 @@ export async function executeTask(task, context = {}) {
 
 export async function executeTaskLifecycle(task, context = {}) {
   if (!task?.id) return { status: 'failed', error: 'Task is required' };
-
   let currentTask = store.get('tasks', task.id) ?? task;
-  if (currentTask.state !== 'working') {
+  if (currentTask.agentId == null && currentTask.assignedAgentId != null) currentTask = store.put('tasks', { ...currentTask, agentId: currentTask.assignedAgentId, id: currentTask.id });
+  if (currentTask.state === 'queued' || currentTask.state === 'assigned' || currentTask.state === 'blocked') {
+    if (currentTask.state === 'blocked' && !context.dependenciesComplete) return { status: 'blocked', task: currentTask, reason: currentTask.blockedReason ?? 'Dependencies incomplete' };
     currentTask = startTask(currentTask.id) ?? currentTask;
   }
-
-  let attempt = Number(currentTask.attempts ?? 1);
-  let execution = await executeTask(currentTask, { ...context, attempt });
+  let attempt = Math.max(1, Number(currentTask.attempts ?? 1));
+  let execution = await executeTask(currentTask, { ...context, attempt, agentId: currentTask.agentId ?? context.agentId });
   let verification = verifyResult(currentTask, execution);
   currentTask = markVerifying(currentTask.id, execution.result ?? { error: execution.error }) ?? currentTask;
-
   while (!verification.passed) {
     const decision = retryDecision(currentTask, verification, attempt);
     if (decision.action !== 'retry') {
       const failed = failTask(currentTask.id, execution.error ?? decision.reason) ?? currentTask;
-      store.addEvent('task.escalated', {
-        taskId: failed.id,
-        executionId: execution.id,
-        verificationId: verification.id,
-        reason: decision.reason ?? 'verification_failed'
-      });
+      store.addEvent('task.escalated', { taskId: failed.id, executionId: execution.id, verificationId: verification.id, reason: decision.reason ?? 'verification_failed' });
       return { status: 'escalated', task: failed, execution, verification, decision };
     }
-
     attempt = decision.attempt;
     currentTask = startTask(currentTask.id) ?? currentTask;
-    execution = await executeTask(currentTask, {
-      ...context,
-      retry: true,
-      attempt,
-      forceRestart: true
-    });
+    execution = await executeTask(currentTask, { ...context, retry: true, attempt, forceRestart: true, agentId: currentTask.agentId ?? context.agentId });
     verification = verifyResult(currentTask, execution);
     currentTask = markVerifying(currentTask.id, execution.result ?? { error: execution.error }) ?? currentTask;
   }
-
   const completed = completeTask(currentTask.id, execution.result ?? {}) ?? currentTask;
-  store.addEvent('task.execution_lifecycle_completed', {
-    taskId: completed.id,
-    executionId: execution.id,
-    verificationId: verification.id,
-    attempts: completed.attempts
-  });
+  store.addEvent('task.execution_lifecycle_completed', { taskId: completed.id, executionId: execution.id, verificationId: verification.id, attempts: completed.attempts });
   return { status: 'completed', task: completed, execution, verification };
 }
 
 export function recoverRunningExecutions() {
-  return store.list('runs').filter(run => run.state === 'running').map(run => {
-    store.addEvent('execution.recovery_candidate', { runId: run.id, taskId: run.taskId, executor: run.executor });
-    return run;
-  });
+  return store.list('runs').filter(run => run.state === 'running').map(run => { store.addEvent('execution.recovery_candidate', { runId: run.id, taskId: run.taskId, executor: run.executor }); return run; });
 }
 
-registerExecutor(
-  'internal.plan',
-  async ({ task, callTool }) => ({
-    type: 'plan',
-    taskId: task.id,
-    output: 'Execution plan generated.',
-    diagnostics: await callTool('health.check')
-  }),
-  { description: 'Safe internal planning executor', risk: 'low', scope: 'internal' }
-);
+registerExecutor('internal.plan', async ({ task, callTool }) => ({ type: 'plan', taskId: task.id, output: 'Execution plan generated.', diagnostics: await callTool('health.check') }), { description: 'Safe internal planning executor', risk: 'low', scope: 'internal' });
 grantExecutor('internal.plan', 'internal');
