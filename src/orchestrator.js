@@ -71,7 +71,7 @@ export async function resumeApprovedCommand(approvalId, env = {}) {
   if (!approval || !isApprovalGranted(approvalId)) return { status:'awaiting_approval', approval };
   const project = store.get('projects', approval.projectId);
   const task = store.list('tasks').find(t => t.projectId === approval.projectId);
-  const selectedAgent = task?.agentId ? store.get('agents', task.agentId) : selectAgents(task?.requiredCapabilities ?? ['planning'])[0];
+  const selectedAgent = task?.assignedAgentId ? store.get('agents', task.assignedAgentId) : selectAgents(task?.requiredCapabilities ?? ['planning'])[0];
   if (!project || !task) return { status:'error', error:'Approved project/task not found' };
   return executePlannedProject({ project, task, selectedAgent, env, approved:true });
 }
