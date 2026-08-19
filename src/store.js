@@ -2,62 +2,15 @@ import { id, now } from './core.js';
 import { hasD1, d1List, d1Put, d1Event, d1Events } from './db.js';
 
 export class MemoryStore {
-  constructor() {
-    this.data = new Map();
-    this.events = [];
-    this.env = null;
-    this.hydrated = false;
-  }
-
-  configure(env) { this.env = env ?? null; }
-
-  list(type) { return [...(this.data.get(type) ?? new Map()).values()]; }
-  get(type, key) { return this.data.get(type)?.get(key) ?? null; }
-
-  put(type, value) {
-    const bucket = this.data.get(type) ?? new Map();
-    const item = {
-      ...value,
-      id: value.id ?? id(type),
-      updatedAt: now(),
-      createdAt: value.createdAt ?? now()
-    };
-    bucket.set(item.id, item);
-    this.data.set(type, bucket);
-    if (hasD1(this.env)) void d1Put(this.env, type, item).catch(() => {});
-    return item;
-  }
-
-  addEvent(type, payload) {
-    const event = { id: id('evt'), type, payload, at: now() };
-    this.events.push(event);
-    if (this.events.length > 1000) this.events.shift();
-    if (hasD1(this.env)) void d1Event(this.env, event).catch(() => {});
-    return event;
-  }
-
-  recentEvents(limit = 50) { return this.events.slice(-limit).reverse(); }
-
-  async hydrate(types = ['agents','projects','tasks','approvals','memory','runs','verifications','tools']) {
-    if (!hasD1(this.env)) return false;
-    for (const type of types) {
-      const rows = await d1List(this.env, type);
-      const bucket = new Map();
-      for (const item of rows) if (item?.id) bucket.set(item.id, item);
-      if (bucket.size) this.data.set(type, bucket);
-    }
-    this.events = await d1Events(this.env);
-    this.hydrated = true;
-    return true;
-  }
-
-  snapshot() {
-    return {
-      hydrated: this.hydrated,
-      entities: Object.fromEntries([...this.data.entries()].map(([type, bucket]) => [type, [...bucket.values()]])),
-      events: this.recentEvents(100)
-    };
-  }
+  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; }
+  configure(env) { this.env=env??null; }
+  list(type) { return [...(this.data.get(type)??new Map()).values()]; }
+  get(type,key) { return this.data.get(type)?.get(key)??null; }
+  put(type,value) { const bucket=this.data.get(type)??new Map(); const item={...value,id:value.id??id(type),updatedAt:now(),createdAt:value.createdAt??now()}; bucket.set(item.id,item); this.data.set(type,bucket); if(hasD1(this.env)) void d1Put(this.env,type,item).catch(()=>{}); return item; }
+  addEvent(type,payload) { const event={id:id('evt'),type,payload,at:now()}; this.events.push(event); if(this.events.length>1000)this.events.shift(); if(hasD1(this.env))void d1Event(this.env,event).catch(()=>{}); return event; }
+  recentEvents(limit=50){return this.events.slice(-limit).reverse();}
+  async hydrate(types=['agents','projects','tasks','approvals','memory','runs','verifications','tools']) { if(!hasD1(this.env))return false; for(const type of types){const rows=await d1List(this.env,type);const bucket=new Map();for(const item of rows)if(item?.id)bucket.set(item.id,item);if(bucket.size)this.data.set(type,bucket);} this.events=await d1Events(this.env); this.hydrated=true; return true; }
+  async hydrateLearning() { return this.hydrate(['agents','memory']); }
+  snapshot(){return{hydrated:this.hydrated,entities:Object.fromEntries([...this.data.entries()].map(([type,bucket])=>[type,[...bucket.values()]])),events:this.recentEvents(100)};}
 }
-
-export const store = new MemoryStore();
+export const store=new MemoryStore();
