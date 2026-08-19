@@ -1,10 +1,10 @@
 import { id } from './core.js';
 import { store } from './store.js';
 import { createProject, addTaskToProject } from './projects.js';
-import { seedAgents, chooseAgent } from './agents.js';
+import { seedAgents, selectAgents } from './agents.js';
 import { riskLevel, requiresApproval, requestApproval } from './governance.js';
 import { remember } from './memory.js';
-import { generateAI, interpretWithAI } from './ai.js';
+import { interpretWithAI } from './ai.js';
 import { executeTask } from './execution.js';
 import { verifyResult, retryDecision } from './verification.js';
 
@@ -27,7 +27,7 @@ export async function planCommand(command, env = {}) {
   const project = createProject({ name:`Project: ${objective.slice(0,60)}`, objective, founderCommand:basic.command });
   const risk = riskLevel({ codeWrite:/code|build|create|develop|platform|app|website/i.test(command) });
   const approval = requiresApproval(risk) ? requestApproval({ action:`Execute founder command: ${command}`, risk, projectId:project.id }) : null;
-  const selected = chooseAgent(capabilities.length ? capabilities : ['planning']);
+  const selected = selectAgents(capabilities.length ? capabilities : ['planning'])[0] ?? selectAgents(['planning'])[0];
   const task = addTaskToProject(project.id, {
     title:'Analyze requirements and produce execution plan', description:objective,
     requiredCapabilities:capabilities.length ? capabilities : ['planning'], risk,
@@ -49,12 +49,4 @@ export async function planCommand(command, env = {}) {
   const status = verification.passed ? 'completed' : 'escalated';
   store.addEvent('command.completed', { projectId:project.id, taskId:task.id, status });
   return { intent:basic, aiPlan, project, firstTask:task, selectedAgent:selected, execution, verification, status };
-}
-
-export async function answerFounder(command, env) {
-  if (!env?.AI?.run) return null;
-  return generateAI(env, [
-    { role:'system', content:'You are MAULI Executive AI. Explain current company/project state clearly to the founder. Do not claim an action happened unless the system state confirms it.' },
-    { role:'user', content:String(command) }
-  ]);
 }
