@@ -1,5 +1,6 @@
 import { id, now } from './core.js';
 import { store } from './store.js';
+import { executeTool } from './tools.js';
 
 const handlers = new Map();
 const permissions = new Map();
@@ -22,7 +23,7 @@ export async function executeTask(task, context = {}) {
     const scope = permissions.get(executorName) ?? executor.scope ?? 'internal';
     if (scope === 'external' && !context.allowExternal) throw new Error('External execution permission is not granted');
     if ((executor.risk === 'critical' || task.risk === 'critical') && !context.approved) throw new Error('Critical execution requires explicit approval');
-    const result = await executor.handler({ task, ...context });
+    const result = await executor.handler({ task, ...context, callTool: (name, input = {}) => executeTool(name, input, context) });
     const completed = { ...run, state:'completed', result, completedAt:now() };
     store.put('runs', completed); store.addEvent('execution.completed', completed);
     return completed;
@@ -33,5 +34,5 @@ export async function executeTask(task, context = {}) {
   }
 }
 
-registerExecutor('internal.plan', async ({ task }) => ({ type:'plan', taskId:task.id, output:'Execution plan generated.' }), { description:'Safe internal planning executor', risk:'low', scope:'internal' });
+registerExecutor('internal.plan', async ({ task, callTool }) => ({ type:'plan', taskId:task.id, output:'Execution plan generated.', diagnostics:await callTool('health.check') }), { description:'Safe internal planning executor', risk:'low', scope:'internal' });
 grantExecutor('internal.plan', 'internal');
