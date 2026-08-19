@@ -6,6 +6,7 @@ export class MemoryStore {
     this.data = new Map();
     this.events = [];
     this.env = null;
+    this.hydrated = false;
   }
 
   configure(env) { this.env = env ?? null; }
@@ -13,11 +14,16 @@ export class MemoryStore {
   get(type, key) { return this.data.get(type)?.get(key) ?? null; }
 
   put(type, value) {
+    const item = {
+      ...value,
+      id: value.id ?? id(type),
+      updatedAt: now(),
+      createdAt: value.createdAt ?? now()
+    };
     const bucket = this.data.get(type) ?? new Map();
-    const item = { ...value, updatedAt: now(), createdAt: value.createdAt ?? now() };
-    bucket.set(item.id ?? id(type), item);
+    bucket.set(item.id, item);
     this.data.set(type, bucket);
-    if (hasD1(this.env) && item.id) void d1Put(this.env, type, item).catch(() => {});
+    if (hasD1(this.env)) void d1Put(this.env, type, item).catch(() => {});
     return item;
   }
 
@@ -40,6 +46,7 @@ export class MemoryStore {
       if (bucket.size) this.data.set(type, bucket);
     }
     this.events = await d1Events(this.env);
+    this.hydrated = true;
     return true;
   }
 }
