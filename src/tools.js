@@ -4,10 +4,10 @@ import { store } from './store.js';
 export const TOOL_RISK = { read: 'low', write: 'high', destructive: 'critical', external: 'high' };
 const runtimeHandlers = new Map();
 
-export function registerTool({ name, description, risk = 'read', handler, capabilities = [], scope = 'internal', allowedAgents = [] }) {
+export function registerTool({ name, description, risk = 'read', handler, capabilities = [], scope = 'internal', allowedAgents = [], allowedProjects = [] }) {
   if (!name || typeof name !== 'string') throw new Error('Tool name is required');
   if (!Object.prototype.hasOwnProperty.call(TOOL_RISK, risk)) throw new Error(`Unknown tool risk: ${risk}`);
-  const tool = store.put('tools', { id: id('tool'), name, description, risk, capabilities, scope, allowedAgents, enabled: true, registeredAt: now() });
+  const tool = store.put('tools', { id: id('tool'), name, description, risk, capabilities, scope, allowedAgents, allowedProjects, enabled: true, registeredAt: now() });
   if (typeof handler === 'function') runtimeHandlers.set(name, handler);
   return tool;
 }
@@ -37,23 +37,34 @@ function agentAllowed(tool, context) {
   if (!tool.allowedAgents?.length) return true;
   return Boolean(context.agentId && tool.allowedAgents.includes(context.agentId));
 }
+function projectAllowed(tool, context) {
+  if (!tool.allowedProjects?.length) return true;
+  return Boolean(context.projectId && tool.allowedProjects.includes(context.projectId));
+}
+
+export function authorizeTool(tool, context = {}) {
+  if (!agentAllowed(tool, context)) return { ok: false, reason: 'agent_not_authorized' };
+  if (!projectAllowed(tool, context)) return { ok: false, reason: 'project_not_authorized' };
+  if (tool.scope === 'external' && !context.allowExternal) return { ok: false, reason: 'external_scope_denied' };
+  if (tool.risk !== 'read' && !context.approved) return { ok: false, reason: 'approval_required' };
+  if (tool.risk === 'destructive' && !context.approvalId) return { ok: false, reason: 'explicit_approval_id_required' };
+  return { ok: true };
+}
 
 export async function executeTool(name, input = {}, context = {}) {
   const tool = listTools().find(t => t.name === name);
   if (!tool) throw new Error(`Tool not available: ${name}`);
-  if (!agentAllowed(tool, context)) throw new Error(`Agent is not authorized for ${name}`);
-  if (tool.scope === 'external' && !context.allowExternal) throw new Error(`External scope is not permitted for ${name}`);
-  if (tool.risk !== 'read' && !context.approved) throw new Error(`Approval required for ${name}`);
-  if (tool.risk === 'destructive' && context.approvalId == null) throw new Error(`Explicit approval ID required for destructive tool ${name}`);
+  const authorization = authorizeTool(tool, context);
+  if (!authorization.ok) throw new Error(`Tool authorization denied: ${authorization.reason}`);
   const handler = runtimeHandlers.get(name);
   if (typeof handler !== 'function') return { tool: name, status: 'registered_no_runtime', input };
   const startedAt = now();
   try {
     const result = await handler(input, context);
-    store.addEvent('tool.executed', { tool: name, agentId: context.agentId ?? null, startedAt, finishedAt: now(), status: 'completed' });
+    store.addEvent('tool.executed', { tool: name, agentId: context.agentId ?? null, projectId: context.projectId ?? null, startedAt, finishedAt: now(), status: 'completed' });
     return result;
   } catch (error) {
-    store.addEvent('tool.failed', { tool: name, agentId: context.agentId ?? null, startedAt, finishedAt: now(), error: error.message });
+    store.addEvent('tool.failed', { tool: name, agentId: context.agentId ?? null, projectId: context.projectId ?? null, startedAt, finishedAt: now(), error: error.message });
     throw error;
   }
 }
