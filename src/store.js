@@ -50,6 +50,14 @@ export class MemoryStore {
     this.hydrated = true;
     return true;
   }
+
+  snapshot() {
+    return {
+      hydrated: this.hydrated,
+      entities: Object.fromEntries([...this.data.entries()].map(([type, bucket]) => [type, [...bucket.values()]])),
+      events: this.recentEvents(100)
+    };
+  }
 }
 
 export const store = new MemoryStore();
