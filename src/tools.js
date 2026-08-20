@@ -2,8 +2,8 @@ import { id, now } from './core.js';
 import { store } from './store.js';
 
 export const TOOL_RISK = {
-  read: 'low', write: 'high', destructive: 'critical', external: 'high',
-  low: 'low', high: 'high', critical: 'critical'
+  read: 'low', low: 'low', medium: 'medium',
+  write: 'high', high: 'high', destructive: 'critical', critical: 'critical', external: 'high'
 };
 const runtimeHandlers = new Map();
 
@@ -11,26 +11,29 @@ function normalizeRisk(risk = 'read') {
   if (risk === 'low') return 'read';
   if (risk === 'high') return 'write';
   if (risk === 'critical') return 'destructive';
-  if (['read', 'write', 'destructive', 'external'].includes(risk)) return risk;
+  if (['read', 'medium', 'write', 'destructive', 'external'].includes(risk)) return risk;
   throw new Error(`Unknown tool risk: ${risk}`);
 }
 
-export function registerTool({ name, description, risk = 'read', handler, capabilities = [], scope = 'internal', allowedAgents = [], allowedProjects = [] }) {
+export function registerTool({ name, description, risk = 'read', handler, capabilities = [], scope = 'internal', allowedAgents = [], allowedProjects = [], enabled = true }) {
   if (!name || typeof name !== 'string') throw new Error('Tool name is required');
   const normalizedRisk = normalizeRisk(risk);
-  const tool = store.put('tools', { id: id('tool'), name, description, risk: normalizedRisk, capabilities, scope, allowedAgents, allowedProjects, enabled: true, registeredAt: now() });
+  const tool = store.put('tools', { id: id('tool'), name, description, risk: normalizedRisk, capabilities, scope, allowedAgents, allowedProjects, enabled: enabled !== false, registeredAt: now() });
   if (typeof handler === 'function') runtimeHandlers.set(name, handler);
   return tool;
 }
 
 export function listTools() { return store.list('tools').filter(tool => tool.enabled !== false); }
 
-const riskOrder = { read: 0, external: 1, write: 1, destructive: 2 };
+const riskOrder = { read: 0, medium: 1, external: 2, write: 2, destructive: 3 };
 export function selectTools(requiredCapabilities = [], options = {}) {
   const required = [...new Set(requiredCapabilities)];
+  const allowedScopes = Array.isArray(options.allowedScopes) ? options.allowedScopes : null;
+  const maxRisk = options.maxRisk == null ? null : normalizeRisk(options.maxRisk);
   return listTools()
     .filter(tool => !options.scope || tool.scope === options.scope)
-    .filter(tool => options.maxRisk == null || (riskOrder[tool.risk] ?? 99) <= (riskOrder[normalizeRisk(options.maxRisk)] ?? 99))
+    .filter(tool => !allowedScopes || allowedScopes.includes(tool.scope))
+    .filter(tool => maxRisk == null || (riskOrder[tool.risk] ?? 99) <= (riskOrder[maxRisk] ?? 99))
     .map(tool => { const matched = required.filter(cap => (tool.capabilities ?? []).includes(cap)); const score = required.length === 0 ? 1 : matched.length * 100 + (matched.length === required.length ? 50 : 0); return { tool, score }; })
     .filter(x => x.score > 0).sort((a,b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name)).map(x => x.tool);
 }
@@ -41,11 +44,11 @@ function projectAllowed(tool, context) { if (!tool.allowedProjects?.length) retu
 
 export function authorizeTool(tool, context = {}) {
   const risk = normalizeRisk(tool.risk);
-  if (!agentAllowed(tool, context)) return { ok: false, reason: 'Agent not authorized' };
-  if (!projectAllowed(tool, context)) return { ok: false, reason: 'Project not authorized' };
-  if (tool.scope === 'external' && !context.allowExternal) return { ok: false, reason: 'External scope is not permitted' };
-  if (risk !== 'read' && !context.approved) return { ok: false, reason: 'Approval required' };
-  if (risk === 'destructive' && !context.approvalId) return { ok: false, reason: 'Approval ID required' };
+  if (!agentAllowed(tool, context)) return { ok: false, reason: 'agent_not_authorized' };
+  if (!projectAllowed(tool, context)) return { ok: false, reason: 'project_not_authorized' };
+  if (tool.scope === 'external' && !context.allowExternal) return { ok: false, reason: 'external_scope_not_permitted' };
+  if (risk !== 'read' && !context.approved) return { ok: false, reason: 'approval_required' };
+  if (risk === 'destructive' && !context.approvalId) return { ok: false, reason: 'explicit_approval_id_required' };
   return { ok: true };
 }
 
@@ -53,7 +56,14 @@ export async function executeTool(name, input = {}, context = {}) {
   const tool = listTools().find(t => t.name === name);
   if (!tool) throw new Error(`Tool not available: ${name}`);
   const authorization = authorizeTool(tool, context);
-  if (!authorization.ok) throw new Error(`Tool authorization denied: ${authorization.reason}`);
+  if (!authorization.ok) {
+    const message = authorization.reason === 'approval_required'
+      ? 'Approval required (approval_required)'
+      : authorization.reason === 'explicit_approval_id_required'
+        ? 'Explicit approval ID required (explicit_approval_id_required)'
+        : authorization.reason;
+    throw new Error(`Tool authorization denied: ${message}`);
+  }
   const handler = runtimeHandlers.get(name);
   if (typeof handler !== 'function') return { tool: name, status: 'registered_no_runtime', input };
   const startedAt = now();
