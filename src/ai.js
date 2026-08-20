@@ -43,6 +43,26 @@ function extractJson(raw) {
   return null;
 }
 
+export function freePlanFromCommand(command) {
+  const text = String(command ?? '').trim();
+  const lower = text.toLowerCase();
+  const capabilities = ['planning'];
+  const requirements = [text];
+  const acceptanceCriteria = ['Clear requirements', 'Execution plan', 'Verification'];
+  if (/(e-commerce|ecommerce|online store|online shop|shop|store)/i.test(text)) {
+    capabilities.push('product-planning','frontend','backend','database','security','testing');
+    requirements.push('Product catalog and product details', 'Shopping cart and checkout flow', 'Order and customer data persistence', 'Basic authentication and security review', 'Responsive user interface');
+    acceptanceCriteria.splice(0, acceptanceCriteria.length, 'Product catalog is defined', 'Cart and checkout flow is defined', 'Order persistence is defined', 'Security review is included', 'Testing plan is included');
+  } else if (/(website|web app|application|platform|software|app)/i.test(text)) {
+    capabilities.push('product-planning','frontend','backend','testing');
+    requirements.push('User interface', 'Application/API structure', 'Basic verification');
+  } else if (/(research|analysis|study)/i.test(text)) {
+    capabilities.push('research','verification');
+    requirements.push('Research questions and evidence', 'Independent verification');
+  }
+  return { objective:text, requirements, capabilities:[...new Set(capabilities)], risks:['AI model unavailable; deterministic free planning fallback used'], acceptanceCriteria };
+}
+
 export async function interpretWithAI(env, command, options = {}) {
   const system = [
     'You are MAULI Executive AI for a software company.',
@@ -61,4 +81,4 @@ export async function interpretWithAI(env, command, options = {}) {
   return normalizePlan(parsed, command);
 }
 
-export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true }; }
+export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'deterministic-free-planner' }; }
