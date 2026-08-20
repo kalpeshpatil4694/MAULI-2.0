@@ -15,7 +15,7 @@ test('executive orchestrator completes a multi-task founder command end-to-end',
           requirements: ['research requirements', 'design frontend'],
           capabilities: ['research', 'frontend'],
           risks: [],
-          acceptanceCriteria: ['Requirements researched', 'Frontend plan produced']
+          acceptanceCriteria: ['Execution plan generated']
         });
       }
     }
