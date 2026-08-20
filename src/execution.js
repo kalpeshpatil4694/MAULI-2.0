@@ -16,6 +16,7 @@ function requiredToolNames(task){return [...new Set((task?.toolNames??task?.requ
 async function authorizeRequiredTools(task, context, callTool){const required=requiredToolNames(task);const results=[];for(const name of required){const tool=store.list('tools').find(t=>t.name===name&&t.enabled!==false);if(!tool)throw new Error(`Required tool is not registered: ${name}`);const toolContext={type:'authorization-check',taskId:task.id};const authorization=await callTool(name,toolContext);results.push({name,authorization});}return results;}
 function persistExecution(record) { store.put('executions', { ...record, status: record.state, executionId: record.id }); return record; }
 function publicExecution(record) { return { ...record, status: record.state, executionId: record.id }; }
+function grantedApprovalForTask(task) { return store.list('approvals').find(approval => approval.state === 'approved' && (approval.taskId === task?.id || (!approval.taskId && approval.projectId === task?.projectId))) ?? null; }
 
 export async function executeTask(task, context = {}) {
   const executorName = task.executor ?? 'internal.plan';
@@ -43,20 +44,22 @@ export async function executeTask(task, context = {}) {
 export async function executeTaskLifecycle(task, context = {}) {
   if (!task?.id) return { status:'failed', error:'Task is required' };
   let currentTask=store.get('tasks',task.id)??task;
+  const grantedApproval=grantedApprovalForTask(currentTask);
+  const lifecycleContext={...context,approved:context.approved||Boolean(grantedApproval),approvalId:context.approvalId??grantedApproval?.id};
   if (currentTask.agentId==null&&currentTask.assignedAgentId!=null) currentTask=store.put('tasks',{...currentTask,agentId:currentTask.assignedAgentId,id:currentTask.id});
   if (currentTask.state==='queued'||currentTask.state==='assigned'||currentTask.state==='blocked') {
-    if(currentTask.state==='blocked'&&!context.dependenciesComplete)return{status:'blocked',task:currentTask,reason:currentTask.blockedReason??'Dependencies incomplete'};
+    if(currentTask.state==='blocked'&&!lifecycleContext.dependenciesComplete&&!grantedApproval)return{status:'blocked',task:currentTask,reason:currentTask.blockedReason??'Dependencies incomplete'};
     currentTask=startTask(currentTask.id)??currentTask;
   }
   let attempt=Math.max(1,Number(currentTask.attempts??1));
-  let execution=await executeTask(currentTask,{...context,attempt,agentId:currentTask.agentId??context.agentId});
+  let execution=await executeTask(currentTask,{...lifecycleContext,attempt,agentId:currentTask.agentId??lifecycleContext.agentId});
   let verification=verifyResult(currentTask,execution);
   currentTask=markVerifying(currentTask.id,execution.result??{error:execution.error})??currentTask;
   while(!verification.passed){
     const decision=retryDecision(currentTask,verification,attempt);
     if(decision.action!=='retry'){const failed=failTask(currentTask.id,execution.error??decision.reason)??currentTask;store.addEvent('task.escalated',{taskId:failed.id,executionId:execution.executionId??execution.id,verificationId:verification.id,reason:decision.reason??'verification_failed'});return{status:'escalated',task:failed,execution,verification,decision};}
     attempt=decision.attempt; currentTask=startTask(currentTask.id)??currentTask;
-    execution=await executeTask(currentTask,{...context,retry:true,attempt,forceRestart:true,agentId:currentTask.agentId??context.agentId});
+    execution=await executeTask(currentTask,{...lifecycleContext,retry:true,attempt,forceRestart:true,agentId:currentTask.agentId??lifecycleContext.agentId});
     verification=verifyResult(currentTask,execution); currentTask=markVerifying(currentTask.id,execution.result??{error:execution.error})??currentTask;
   }
   const completed=completeTask(currentTask.id,execution.result??{})??currentTask;
