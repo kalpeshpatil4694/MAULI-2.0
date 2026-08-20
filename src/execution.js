@@ -52,9 +52,19 @@ export async function executeTaskLifecycle(task, context = {}) {
   if(currentTask.state==='blocked'){
     const dependenciesComplete=(currentTask.dependsOn??[]).every(depId=>store.get('tasks',depId)?.state==='completed');
     if(!dependenciesComplete&&!lifecycleContext.dependenciesComplete)return{status:'blocked',task:currentTask,reason:currentTask.blockedReason??'Dependencies incomplete'};
-    const reassigned=assignTask(currentTask.id,currentTask.assignedAgentId??null);
-    if(reassigned?.state==='assigned') currentTask=reassigned;
-    else if(reassigned?.state==='blocked') return{status:'blocked',task:reassigned,reason:reassigned.blockedReason??'Task remains blocked'};
+    // A dependency-aware caller may explicitly certify that prerequisites have been
+    // completed. Do not call assignTask here: assignTask re-checks the dependency
+    // graph and can re-block a task while the dependency executor is unwinding.
+    if (lifecycleContext.dependenciesComplete && !dependenciesComplete) {
+      return { status:'blocked',task:currentTask,reason:'Dependencies incomplete'};
+    }
+    const ready=store.put('tasks',{...currentTask,state:'queued',blockedReason:null,id:currentTask.id});
+    currentTask=ready;
+    if(currentTask.assignedAgentId==null){
+      const reassigned=assignTask(currentTask.id,currentTask.assignedAgentId??null);
+      if(reassigned?.state==='assigned') currentTask=reassigned;
+      else if(reassigned?.state==='blocked') return{status:'blocked',task:reassigned,reason:reassigned.blockedReason??'Task remains blocked'};
+    }
   }
   if (currentTask.state==='queued'||currentTask.state==='assigned') {
     currentTask=startTask(currentTask.id)??currentTask;
