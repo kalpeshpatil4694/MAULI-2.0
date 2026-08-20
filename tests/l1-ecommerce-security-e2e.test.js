@@ -12,7 +12,7 @@ async function executeDependencies(task) {
     const dependency = store.get('tasks', dependencyId);
     if (!dependency || dependency.state === 'completed') continue;
     await executeDependencies(dependency);
-    const execution = await executeTaskLifecycle(dependency, {});
+    const execution = await executeTaskLifecycle(dependency, { dependenciesComplete: true });
     assert.equal(execution.status, 'completed', `dependency ${dependency.title} should complete before the approved code task`);
   }
 }
@@ -45,7 +45,7 @@ test('L1 e-commerce security-aware flow gates code work and completes after appr
   assert.equal(isApprovalGranted(approval.id), true);
 
   await executeDependencies(codeTask);
-  const execution = await executeTaskLifecycle(codeTask, { approved: true, approvalId: approval.id });
+  const execution = await executeTaskLifecycle(codeTask, { approved: true, approvalId: approval.id, dependenciesComplete: true });
   assert.equal(execution.status, 'completed');
   assert.equal(execution.verification.passed, true);
   assert.ok(store.list('runs').some(r => r.taskId === codeTask.id));
