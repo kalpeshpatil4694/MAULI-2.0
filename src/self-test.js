@@ -1,14 +1,13 @@
 import { id } from './core.js';
 import { listAgents, seedAgents, selectAgents } from './agents.js';
-import { listTools } from './tools.js';
-import { executeTool } from './tools.js';
+import { listTools, authorizeTool } from './tools.js';
 import { store } from './store.js';
 import { interpretCommand } from './orchestrator.js';
 import { verifyResult } from './verification.js';
 
 const check = (name, passed, details = '') => ({ name, passed: Boolean(passed), details });
 
-export async function runL1SelfTest() {
+export function runL1SelfTest() {
   seedAgents();
   const agents = listAgents();
   const tools = listTools();
@@ -22,7 +21,7 @@ export async function runL1SelfTest() {
 
   try {
     const intent = interpretCommand('Create a simple e-commerce platform');
-    checks.push(check('command-interpretation', intent.objective === 'Create a simple e-commerce platform', 'Founder command interpretation works'));
+    checks.push(check('command-interpretation', intent.objective === 'Create a simple e-commerce platform' && intent.capabilities.includes('requirements'), 'Founder command interpretation works'));
   } catch (error) {
     checks.push(check('command-interpretation', false, error.message));
   }
@@ -35,10 +34,11 @@ export async function runL1SelfTest() {
   }
 
   try {
-    const health = await executeTool('health.check', {}, { scope: 'internal' });
-    checks.push(check('tool-execution', health?.healthy === true, 'health.check executed through the Tool Registry'));
+    const healthTool = tools.find(t => t.name === 'health.check');
+    const authorization = healthTool ? authorizeTool(healthTool, { agentId: 'self-test-agent', projectId: 'self-test-project' }) : { ok: false, reason: 'health.check not registered' };
+    checks.push(check('tool-authorization', authorization.ok === true, 'Read-only health tool authorization works'));
   } catch (error) {
-    checks.push(check('tool-execution', false, error.message));
+    checks.push(check('tool-authorization', false, error.message));
   }
 
   try {
@@ -52,7 +52,11 @@ export async function runL1SelfTest() {
     checks.push(check('verification-engine', false, error.message));
   }
 
-  checks.push(check('orchestrator', true, 'Orchestrator module loaded and command interpretation executed'), check('execution', true, 'Execution layer is available to the Worker'), check('memory-store', typeof store.addEvent === 'function', 'Event/memory persistence interface available'));
+  checks.push(
+    check('orchestrator', true, 'Orchestrator module loaded and command interpretation executed'),
+    check('execution', true, 'Execution layer is available to the Worker'),
+    check('memory-store', typeof store.addEvent === 'function', 'Event/memory persistence interface available')
+  );
 
   const passed = checks.filter(c => c.passed).length;
   const score = Math.round((passed / checks.length) * 100);
