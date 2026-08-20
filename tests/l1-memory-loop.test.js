@@ -2,8 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planCommand } from '../src/orchestrator.js';
 import { recall } from '../src/memory.js';
+import { registerAgent } from '../src/agents.js';
 
 test('L1 memory loop records task results and reusable solutions', async () => {
+  registerAgent({
+    name: 'Memory Loop Planner',
+    role: 'Planner',
+    department: 'Quality',
+    capabilities: ['planning'],
+    tools: []
+  });
+
   const env = {
     AI: {
       async run() {
