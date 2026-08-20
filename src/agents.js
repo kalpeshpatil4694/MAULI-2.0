@@ -29,7 +29,11 @@ export function seedAgents(){
     if(name==='Product Agent'){
       const mergedTools=new Set(current.tools??[]); mergedTools.add('planning.execute');
       const mergedCapabilities=new Set(current.capabilities??[]); mergedCapabilities.add('requirements'); mergedCapabilities.add('product-planning'); mergedCapabilities.add('planning');
-      updateAgent(current.id,{capabilities:[...mergedCapabilities],tools:[...mergedTools],heartbeatAt:now()});
+      const availabilityPatch={capabilities:[...mergedCapabilities],tools:[...mergedTools],heartbeatAt:now()};
+      // A persisted Product Agent can retain a stale blocked/escalated state from an earlier run.
+      // If it is not actively executing a task, restore it to available so planning work can be assigned.
+      if(!current.currentTaskId && !['working','assigned','verifying'].includes(current.state)) availabilityPatch.state='available';
+      updateAgent(current.id,availabilityPatch);
     }
   }
   return listAgents();
