@@ -6,6 +6,7 @@ import { registerArtifact } from './artifacts.js';
 import { startTask, markVerifying, completeTask, failTask } from './tasks.js';
 import { verifyResult, retryDecision } from './verification.js';
 import { executeWithAdapter } from './execution-adapter.js';
+import { remember } from './memory.js';
 
 const handlers = new Map();
 const permissions = new Map();
@@ -17,6 +18,7 @@ async function authorizeRequiredTools(task, context, callTool){const required=re
 function persistExecution(record) { store.put('executions', { ...record, status: record.state, executionId: record.id }); return record; }
 function publicExecution(record) { return { ...record, status: record.state, executionId: record.id }; }
 function grantedApprovalForTask(task) { return store.list('approvals').find(approval => approval.state === 'approved' && (approval.taskId === task?.id || (!approval.taskId && approval.projectId === task?.projectId))) ?? null; }
+function recordExecutionMemory(task, execution) { const base={scope:'task',scopeId:task?.id??null,source:'execution',tags:[task?.executor,...(task?.requiredCapabilities??[])].filter(Boolean)}; remember({type:'task_result',content:{taskId:task?.id??null,status:execution?.state??'unknown',result:execution?.result??null,executionId:execution?.executionId??execution?.id??null},importance:execution?.state==='completed'?'normal':'high',...base}); if(execution?.state==='completed'){remember({type:'solution',content:{taskId:task?.id??null,summary:'Task execution completed successfully.',executionId:execution?.executionId??execution?.id??null},importance:'normal',...base});} else if(execution?.error){remember({type:'error',content:{taskId:task?.id??null,error:execution.error},importance:'high',...base});} }
 
 export async function executeTask(task, context = {}) {
   const executorName = task.executor ?? 'internal.plan';
@@ -34,10 +36,10 @@ export async function executeTask(task, context = {}) {
     const requiredTools=await authorizeRequiredTools(task,context,callTool);
     const result = await executor.handler({ task, ...context, agentId:run.agentId, callTool, requiredTools });
     const completed = { ...run, state:'completed', result, requiredTools, completedAt:now(), recoverable:false };
-    store.put('runs',completed); persistExecution(completed); store.addEvent('execution.completed',completed); return publicExecution(completed);
+    store.put('runs',completed); persistExecution(completed); recordExecutionMemory(task,completed); store.addEvent('execution.completed',completed); return publicExecution(completed);
   } catch(error) {
     const failed={...run,state:'failed',error:error.message,completedAt:now(),recoverable:false};
-    store.put('runs',failed); persistExecution(failed); store.addEvent('execution.failed',failed); return publicExecution(failed);
+    store.put('runs',failed); persistExecution(failed); recordExecutionMemory(task,failed); store.addEvent('execution.failed',failed); return publicExecution(failed);
   }
 }
 
