@@ -7,6 +7,16 @@ import { executeTaskLifecycle } from '../src/execution.js';
 import { store } from '../src/store.js';
 import { seedAgents } from '../src/agents.js';
 
+async function executeDependencies(task) {
+  for (const dependencyId of task.dependsOn ?? []) {
+    const dependency = store.get('tasks', dependencyId);
+    if (!dependency || dependency.state === 'completed') continue;
+    await executeDependencies(dependency);
+    const execution = await executeTaskLifecycle(dependency, {});
+    assert.equal(execution.status, 'completed', `dependency ${dependency.title} should complete before the approved code task`);
+  }
+}
+
 test('L1 e-commerce security-aware flow gates code work and completes after approval', async () => {
   seedAgents();
   const command = 'Create a simple e-commerce platform';
@@ -34,6 +44,7 @@ test('L1 e-commerce security-aware flow gates code work and completes after appr
   assert.equal(approved.state, 'approved');
   assert.equal(isApprovalGranted(approval.id), true);
 
+  await executeDependencies(codeTask);
   const execution = await executeTaskLifecycle(codeTask, { approved: true, approvalId: approval.id });
   assert.equal(execution.status, 'completed');
   assert.equal(execution.verification.passed, true);
