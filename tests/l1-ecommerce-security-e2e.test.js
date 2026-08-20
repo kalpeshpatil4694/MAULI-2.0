@@ -34,7 +34,7 @@ test('L1 e-commerce security-aware flow gates code work and completes after appr
   assert.equal(approved.state, 'approved');
   assert.equal(isApprovalGranted(approval.id), true);
 
-  const execution = await executeTaskLifecycle(codeTask, {});
+  const execution = await executeTaskLifecycle(codeTask, { approved: true, approvalId: approval.id });
   assert.equal(execution.status, 'completed');
   assert.equal(execution.verification.passed, true);
   assert.ok(store.list('runs').some(r => r.taskId === codeTask.id));
