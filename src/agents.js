@@ -30,9 +30,12 @@ export function seedAgents(){
       const mergedTools=new Set(current.tools??[]); mergedTools.add('planning.execute');
       const mergedCapabilities=new Set(current.capabilities??[]); mergedCapabilities.add('requirements'); mergedCapabilities.add('product-planning'); mergedCapabilities.add('planning');
       const availabilityPatch={capabilities:[...mergedCapabilities],tools:[...mergedTools],heartbeatAt:now()};
-      // A persisted Product Agent can retain a stale blocked/escalated state from an earlier run.
-      // If it is not actively executing a task, restore it to available so planning work can be assigned.
-      if(!current.currentTaskId && !['working','assigned','verifying'].includes(current.state)) availabilityPatch.state='available';
+      // Persisted planning agents can retain stale state/task references from previous runs.
+      // Only genuinely active execution states are preserved; otherwise clear stale assignment and restore availability.
+      if(!['working','assigned','verifying'].includes(current.state)) {
+        availabilityPatch.state='available';
+        availabilityPatch.currentTaskId=null;
+      }
       updateAgent(current.id,availabilityPatch);
     }
   }
