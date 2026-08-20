@@ -15,24 +15,18 @@ jobs:
     name: L1 validation
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install
-
       - name: JavaScript syntax check
         run: node --check src/index.js
-
       - name: Run test suite
         run: npm test
-
       - name: Validate Wrangler configuration and Worker bundle
         run: npx wrangler deploy --dry-run
