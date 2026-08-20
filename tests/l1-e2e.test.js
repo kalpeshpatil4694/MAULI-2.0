@@ -21,7 +21,7 @@ test('L1 core smoke: project/task/artifact verification primitives work without 
   store.put('artifacts', artifact);
   const result = verifyResult(
     { id: 'task-test', projectId: 'project-test' },
-    { state: 'completed', result: { artifactId: artifact.id } }
+    { state: 'completed', taskId: 'task-test', result: { artifactId: artifact.id } }
   );
 
   assert.equal(result.passed, true);
