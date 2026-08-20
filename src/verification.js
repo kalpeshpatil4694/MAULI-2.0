@@ -6,6 +6,19 @@ function matchesAcceptance(task, result) {
   if (acceptance.length === 0) return { passed: true, checks: [] };
   if (!result || typeof result !== 'object') return { passed: false, checks: acceptance.map(rule => ({ rule, passed: false, reason: 'missing_result' })) };
 
+  // Planning tasks have a different contract from implementation tasks.
+  // Project-level feature acceptance criteria must not be applied to the
+  // architecture/planning dependency; that dependency is verified by the
+  // planning result itself.
+  const planningCapabilities = new Set(['planning', 'product-planning']);
+  if (task?.executor === 'internal.plan' && (task?.requiredCapabilities ?? []).some(cap => planningCapabilities.has(cap))) {
+    const passed = result.type === 'plan' && Boolean(result.output || result.summary);
+    return {
+      passed,
+      checks: acceptance.map(rule => ({ rule, passed, mode: 'planning-contract' }))
+    };
+  }
+
   const checks = acceptance.map(rule => {
     if (typeof rule === 'string') {
       const needle = rule.toLowerCase().trim();
