@@ -19,6 +19,7 @@ test('Result persistence exposes final delivery artifact id', async () => {
     const result = await saveCommandResult({ command: 'test', result: { status: 'completed', finalDelivery: { id: 'artifact_final_123', type: 'final-delivery' } } }, { GITHUB_TOKEN: 'test-token' });
     assert.equal(result.saved, true);
     const write = calls.find(call => call.options.method === 'PUT');
+    assert.ok(write, 'Result must be written to GitHub');
     const payload = JSON.parse(Buffer.from(JSON.parse(write.options.body).content, 'base64').toString('utf8'));
     assert.equal(payload.result.artifact, 'artifact_final_123');
     assert.equal(payload.result.artifactType, 'final-delivery');
