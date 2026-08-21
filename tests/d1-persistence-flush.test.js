@@ -6,7 +6,9 @@ test('L1 store flush waits for pending persistence before Result snapshot', asyn
   let persisted = false;
   let release;
   const pending = new Promise(resolve => { release = () => { persisted = true; resolve(); }; });
-  store.pendingWrites.add(pending);
+  let tracked;
+  tracked = pending.finally(() => store.pendingWrites.delete(tracked));
+  store.pendingWrites.add(tracked);
 
   let flushed = false;
   const flushPromise = store.flush().then(() => { flushed = true; });
