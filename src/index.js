@@ -5,7 +5,7 @@ import { listProjects } from './projects.js';
 import { listTasks } from './tasks.js';
 import { listApprovals, decideApproval } from './governance.js';
 import { planCommand, resumeApprovedCommand } from './orchestrator.js';
-import { listTools } from './tools.js';
+import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { ensureSchema, hasD1, d1List, d1Events } from './db.js';
 import { recoverRunningExecutions } from './execution.js';
@@ -18,7 +18,7 @@ const dashboard = () => '<!doctype html><html><head><meta charset="utf-8"><meta 
 function artifactJson(artifact) { return artifact ? ok({ artifact }) : fail('Artifact not found',404); }
 
 export default { async fetch(request, env) { try {
-  await ensureSchema(env); store.configure(env); if(!store.hydrated) await store.hydrate(); seedAgents(); const recoveredRuns=recoverRunningExecutions(); const url=new URL(request.url);
+  await ensureSchema(env); store.configure(env); if(!store.hydrated) await store.hydrate(); ensureBuiltinTools(); seedAgents(); const recoveredRuns=recoverRunningExecutions(); const url=new URL(request.url);
   if(request.method==='GET'&&url.pathname==='/') return new Response(dashboard(),{headers:{'content-type':'text/html;charset=UTF-8'}});
   if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,time:now()});
   if(request.method==='GET'&&url.pathname==='/api/state'){const [agents,projects,tasks,approvals,events]=hasD1(env)?await Promise.all([d1List(env,'agents'),d1List(env,'projects'),d1List(env,'tasks'),d1List(env,'approvals'),d1Events(env)]):[listAgents(),listProjects(),listTasks(),listApprovals(),store.recentEvents()];return ok({agents,projects,tasks,approvals,tools:listTools(),artifacts:store.list('artifacts'),events,recoveredRuns});}
