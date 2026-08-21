@@ -1,66 +1,119 @@
 {
-  "ok": true,
-  "data": {
-    "result": {
-      "project": {
-        "id": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-        "name": "Project: एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-        "objective": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-        "founderCommand": "एक simple e-commerce platform तयार करण्यासाठी complete project plan तयार करा.",
-        "requirements": [
-          "वापरकर्त्यांना उत्पादने शोधण्याची आणि खरेदी करण्याची सुविधा",
-          "वापरकर्त्यांचे वैयक्तिक डेटा सुरक्षित ठेवणे",
-          "उत्पादनांची माहिती संचयित करणे आणि व्यवस्थापित करणे",
-          "पेमेंट गेटवे एकात्मिक करणे",
-          "वापरकर्त्यांना सुरक्षित लॉगिन आणि रजिस्ट्रेशन सुविधा प्रदान करणे"
-        ],
-        "priority": "normal",
-        "state": "planning",
-        "milestones": [],
-        "createdAt": "2026-08-21T04:35:15.781Z",
-        "updatedAt": "2026-08-21T04:35:15.781Z"
-      },
-      "firstTask": {
-        "id": "task_833bdd06-c848-4c2b-9939-37856b246c4e",
-        "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-        "title": "Define product and architecture plan: वापरकर्त्यांचे वैयक्तिक डेटा सुरक्षित ठेवणे",
-        "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
+  "command": "Car game banun dya",
+  "generatedAt": "2026-08-21T14:33:42.917Z",
+  "result": {
+    "project": {
+      "id": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+      "name": "Project: Design a car game",
+      "objective": "Design a car game",
+      "founderCommand": "Car game banun dya",
+      "requirements": [
+        "User can create and customize their own car",
+        "User can participate in racing tournaments",
+        "User can explore different racing tracks",
+        "User can interact with other players online"
+      ],
+      "priority": "normal",
+      "state": "planning",
+      "milestones": [],
+      "createdAt": "2026-08-21T14:33:42.917Z",
+      "updatedAt": "2026-08-21T14:33:42.917Z"
+    },
+    "firstTask": {
+      "id": "task_24d717b4-7964-404e-85cd-50a6c53bac05",
+      "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+      "title": "Implement backend code and API: User can interact with other players online",
+      "description": "Design a car game",
+      "requiredCapabilities": [
+        "backend",
+        "api"
+      ],
+      "risk": "normal",
+      "dependsOn": [
+        "task_bd4bfc95-8b8e-4717-93ec-b0b877200ec2"
+      ],
+      "acceptance": [
+        {
+          "field": "type",
+          "equals": "code"
+        }
+      ],
+      "state": "blocked",
+      "attempts": 0,
+      "maxAttempts": 3,
+      "executor": "internal.code",
+      "assignedAgentId": null,
+      "agentId": null,
+      "toolNames": [],
+      "requiredTools": [],
+      "sequence": 30,
+      "updatedAt": "2026-08-21T14:33:42.917Z",
+      "createdAt": "2026-08-21T14:33:42.917Z",
+      "blockedReason": "Dependencies incomplete"
+    },
+    "status": "blocked",
+    "reason": "no_available_agent_with_required_tools",
+    "requiredTools": [],
+    "tasks": [
+      {
+        "id": "task_f6d5daa6-7aa1-4cf3-858f-3daeb8c425b6",
+        "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+        "title": "Research and validate requirements: User can create and customize their own car",
+        "description": "Design a car game",
         "requiredCapabilities": [
-          "product-planning",
-          "planning"
+          "research",
+          "analysis"
         ],
         "risk": "normal",
-        "dependsOn": [
-          "task_364413a6-6503-427e-a41e-5a4022cf3dea"
-        ],
+        "dependsOn": [],
         "acceptance": [
           {
             "field": "type",
             "equals": "plan"
           }
         ],
-        "state": "blocked",
-        "attempts": 0,
+        "state": "completed",
+        "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.plan",
-        "assignedAgentId": null,
-        "agentId": null,
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
         "toolNames": [],
         "requiredTools": [],
-        "sequence": 20,
-        "updatedAt": "2026-08-21T04:35:15.781Z",
-        "createdAt": "2026-08-21T04:35:15.781Z",
-        "blockedReason": "Dependencies incomplete"
-      },
-      "status": "blocked",
-      "reason": "no_available_agent_with_required_tools",
-      "requiredTools": [],
-      "tasks": [
-        {
-          "id": "task_364413a6-6503-427e-a41e-5a4022cf3dea",
-          "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-          "title": "Research and validate requirements: वापरकर्त्यांना उत्पादने शोधण्याची आणि खरेदी करण्याची सुविधा",
-          "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
+        "sequence": 10,
+        "updatedAt": "2026-08-21T14:33:42.917Z",
+        "createdAt": "2026-08-21T14:33:42.917Z",
+        "assignedAt": "2026-08-21T14:33:42.917Z",
+        "startedAt": "2026-08-21T14:33:42.917Z",
+        "memoryContext": [
+          {
+            "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
+            "summary": "Task execution completed successfully.",
+            "executionId": "run_53603b7d-0560-4b73-887d-fd24076c4bd0"
+          },
+          {
+            "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
+            "summary": "Task execution passed L1 verification.",
+            "artifactId": null
+          }
+        ],
+        "result": {
+          "type": "plan",
+          "taskId": "task_f6d5daa6-7aa1-4cf3-858f-3daeb8c425b6",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-21T14:33:42.917Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_0f48091e-c414-48f7-9feb-9c2cf545496d",
+        "completedAt": "2026-08-21T14:33:42.917Z",
+        "task": {
+          "id": "task_f6d5daa6-7aa1-4cf3-858f-3daeb8c425b6",
+          "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+          "title": "Research and validate requirements: User can create and customize their own car",
+          "description": "Design a car game",
           "requiredCapabilities": [
             "research",
             "analysis"
@@ -77,123 +130,158 @@
           "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.plan",
-          "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
-          "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
           "toolNames": [],
           "requiredTools": [],
           "sequence": 10,
-          "updatedAt": "2026-08-21T04:35:15.781Z",
-          "createdAt": "2026-08-21T04:35:15.781Z",
-          "assignedAt": "2026-08-21T04:35:15.781Z",
-          "startedAt": "2026-08-21T04:35:15.781Z",
-          "memoryContext": [],
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-21T14:33:42.917Z",
+          "assignedAt": "2026-08-21T14:33:42.917Z",
+          "startedAt": "2026-08-21T14:33:42.917Z",
+          "memoryContext": [
+            {
+              "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
+              "summary": "Task execution completed successfully.",
+              "executionId": "run_53603b7d-0560-4b73-887d-fd24076c4bd0"
+            },
+            {
+              "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
+              "summary": "Task execution passed L1 verification.",
+              "artifactId": null
+            }
+          ],
           "result": {
             "type": "plan",
-            "taskId": "task_364413a6-6503-427e-a41e-5a4022cf3dea",
+            "taskId": "task_f6d5daa6-7aa1-4cf3-858f-3daeb8c425b6",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T04:35:15.781Z"
+              "at": "2026-08-21T14:33:42.917Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_4f183af9-3e2e-4005-b59a-27e45c5874f0",
-          "completedAt": "2026-08-21T04:35:15.781Z",
-          "task": {
-            "id": "task_364413a6-6503-427e-a41e-5a4022cf3dea",
-            "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-            "title": "Research and validate requirements: वापरकर्त्यांना उत्पादने शोधण्याची आणि खरेदी करण्याची सुविधा",
-            "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-            "requiredCapabilities": [
-              "research",
-              "analysis"
-            ],
-            "risk": "normal",
-            "dependsOn": [],
-            "acceptance": [
-              {
-                "field": "type",
-                "equals": "plan"
-              }
-            ],
-            "state": "completed",
-            "attempts": 1,
-            "maxAttempts": 3,
-            "executor": "internal.plan",
-            "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
-            "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
-            "toolNames": [],
-            "requiredTools": [],
-            "sequence": 10,
-            "updatedAt": "2026-08-21T04:35:15.781Z",
-            "createdAt": "2026-08-21T04:35:15.781Z",
-            "assignedAt": "2026-08-21T04:35:15.781Z",
-            "startedAt": "2026-08-21T04:35:15.781Z",
-            "memoryContext": [],
-            "result": {
-              "type": "plan",
-              "taskId": "task_364413a6-6503-427e-a41e-5a4022cf3dea",
-              "output": "Execution plan generated.",
-              "diagnostics": {
-                "healthy": true,
-                "at": "2026-08-21T04:35:15.781Z"
-              },
-              "summary": "Execution plan generated. Verification complete."
-            },
-            "verificationId": "verification_4f183af9-3e2e-4005-b59a-27e45c5874f0",
-            "completedAt": "2026-08-21T04:35:15.781Z"
-          },
-          "selectedAgent": {
-            "id": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
-            "name": "Research Agent",
-            "role": "Research",
-            "department": "Research",
-            "capabilities": [
-              "research",
-              "analysis"
-            ],
-            "tools": [
-              "web.search"
-            ],
-            "state": "available",
-            "heartbeatAt": "2026-08-21T04:35:15.781Z",
-            "metadata": {
-              "outcomeCount": 1,
-              "successCount": 1,
-              "failureCount": 0,
-              "successRate": 1,
-              "lastOutcomeAt": "2026-08-21T04:35:15.781Z",
-              "lastOutcome": "success",
-              "reliabilityScore": 100,
-              "consecutiveFailures": 0,
-              "learning": {
-                "analysis|research": {
-                  "attempts": 1,
-                  "successes": 1,
-                  "failures": 0,
-                  "successRate": 1,
-                  "confidence": 0.1,
-                  "lastOutcomeAt": "2026-08-21T04:35:15.781Z"
-                }
-              }
-            },
-            "updatedAt": "2026-08-21T04:35:15.781Z",
-            "createdAt": "2026-08-20T08:12:51.655Z",
-            "currentTaskId": null
-          }
+          "verificationId": "verification_0f48091e-c414-48f7-9feb-9c2cf545496d",
+          "completedAt": "2026-08-21T14:33:42.917Z"
         },
-        {
-          "id": "task_833bdd06-c848-4c2b-9939-37856b246c4e",
-          "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-          "title": "Define product and architecture plan: वापरकर्त्यांचे वैयक्तिक डेटा सुरक्षित ठेवणे",
-          "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
+        "selectedAgent": {
+          "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "name": "Product Agent",
+          "role": "Product",
+          "department": "Business",
+          "capabilities": [
+            "requirements",
+            "product-planning",
+            "planning"
+          ],
+          "tools": [
+            "planning.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-21T14:33:42.917Z",
+          "metadata": {
+            "outcomeCount": 4,
+            "successCount": 4,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-21T14:33:42.917Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "analysis|research": {
+                "attempts": 2,
+                "successes": 2,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T14:33:42.917Z"
+              },
+              "planning|product-planning": {
+                "attempts": 2,
+                "successes": 2,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T14:33:42.917Z"
+              }
+            }
+          },
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_bd4bfc95-8b8e-4717-93ec-b0b877200ec2",
+        "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+        "title": "Define product and architecture plan: User can participate in racing tournaments",
+        "description": "Design a car game",
+        "requiredCapabilities": [
+          "product-planning",
+          "planning"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_f6d5daa6-7aa1-4cf3-858f-3daeb8c425b6"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [
+          "planning.execute"
+        ],
+        "requiredTools": [],
+        "sequence": 20,
+        "updatedAt": "2026-08-21T14:33:42.917Z",
+        "createdAt": "2026-08-21T14:33:42.917Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-21T14:33:42.917Z",
+        "memoryContext": [
+          {
+            "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
+            "summary": "Task execution passed L1 verification.",
+            "artifactId": null
+          },
+          {
+            "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
+            "summary": "Task execution completed successfully.",
+            "executionId": "run_95b882da-6671-4919-9cb1-23f3cc9ef2d8"
+          }
+        ],
+        "result": {
+          "type": "plan",
+          "taskId": "task_bd4bfc95-8b8e-4717-93ec-b0b877200ec2",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-21T14:33:42.917Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_c4ddc5c7-43d8-4b56-bdfb-45e38adbfd62",
+        "completedAt": "2026-08-21T14:33:42.917Z",
+        "task": {
+          "id": "task_bd4bfc95-8b8e-4717-93ec-b0b877200ec2",
+          "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+          "title": "Define product and architecture plan: User can participate in racing tournaments",
+          "description": "Design a car game",
           "requiredCapabilities": [
             "product-planning",
             "planning"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_364413a6-6503-427e-a41e-5a4022cf3dea"
+            "task_f6d5daa6-7aa1-4cf3-858f-3daeb8c425b6"
           ],
           "acceptance": [
             {
@@ -201,64 +289,137 @@
               "equals": "plan"
             }
           ],
-          "state": "blocked",
-          "attempts": 0,
+          "state": "completed",
+          "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.plan",
-          "assignedAgentId": null,
-          "agentId": null,
-          "toolNames": [],
+          "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "toolNames": [
+            "planning.execute"
+          ],
           "requiredTools": [],
           "sequence": 20,
-          "updatedAt": "2026-08-21T04:35:15.781Z",
-          "createdAt": "2026-08-21T04:35:15.781Z",
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-21T14:33:42.917Z",
           "blockedReason": "Dependencies incomplete",
-          "task": {
-            "id": "task_833bdd06-c848-4c2b-9939-37856b246c4e",
-            "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-            "title": "Define product and architecture plan: वापरकर्त्यांचे वैयक्तिक डेटा सुरक्षित ठेवणे",
-            "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-            "requiredCapabilities": [
-              "product-planning",
-              "planning"
-            ],
-            "risk": "normal",
-            "dependsOn": [
-              "task_364413a6-6503-427e-a41e-5a4022cf3dea"
-            ],
-            "acceptance": [
-              {
-                "field": "type",
-                "equals": "plan"
-              }
-            ],
-            "state": "blocked",
-            "attempts": 0,
-            "maxAttempts": 3,
-            "executor": "internal.plan",
-            "assignedAgentId": null,
-            "agentId": null,
-            "toolNames": [],
-            "requiredTools": [],
-            "sequence": 20,
-            "updatedAt": "2026-08-21T04:35:15.781Z",
-            "createdAt": "2026-08-21T04:35:15.781Z",
-            "blockedReason": "Dependencies incomplete"
+          "startedAt": "2026-08-21T14:33:42.917Z",
+          "memoryContext": [
+            {
+              "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
+              "summary": "Task execution passed L1 verification.",
+              "artifactId": null
+            },
+            {
+              "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
+              "summary": "Task execution completed successfully.",
+              "executionId": "run_95b882da-6671-4919-9cb1-23f3cc9ef2d8"
+            }
+          ],
+          "result": {
+            "type": "plan",
+            "taskId": "task_bd4bfc95-8b8e-4717-93ec-b0b877200ec2",
+            "output": "Execution plan generated.",
+            "diagnostics": {
+              "healthy": true,
+              "at": "2026-08-21T14:33:42.917Z"
+            },
+            "summary": "Execution plan generated. Verification complete."
           },
-          "selectedAgent": null
+          "verificationId": "verification_c4ddc5c7-43d8-4b56-bdfb-45e38adbfd62",
+          "completedAt": "2026-08-21T14:33:42.917Z"
         },
-        {
-          "id": "task_52febd77-03cc-4242-b392-1d0df51f0b0a",
-          "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-          "title": "Implement backend code and API: पेमेंट गेटवे एकात्मिक करणे",
-          "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
+        "selectedAgent": {
+          "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "name": "Product Agent",
+          "role": "Product",
+          "department": "Business",
+          "capabilities": [
+            "requirements",
+            "product-planning",
+            "planning"
+          ],
+          "tools": [
+            "planning.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-21T14:33:42.917Z",
+          "metadata": {
+            "outcomeCount": 4,
+            "successCount": 4,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-21T14:33:42.917Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "analysis|research": {
+                "attempts": 2,
+                "successes": 2,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T14:33:42.917Z"
+              },
+              "planning|product-planning": {
+                "attempts": 2,
+                "successes": 2,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T14:33:42.917Z"
+              }
+            }
+          },
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_24d717b4-7964-404e-85cd-50a6c53bac05",
+        "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+        "title": "Implement backend code and API: User can interact with other players online",
+        "description": "Design a car game",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_bd4bfc95-8b8e-4717-93ec-b0b877200ec2"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": null,
+        "agentId": null,
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "updatedAt": "2026-08-21T14:33:42.917Z",
+        "createdAt": "2026-08-21T14:33:42.917Z",
+        "blockedReason": "Dependencies incomplete",
+        "task": {
+          "id": "task_24d717b4-7964-404e-85cd-50a6c53bac05",
+          "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+          "title": "Implement backend code and API: User can interact with other players online",
+          "description": "Design a car game",
           "requiredCapabilities": [
             "backend",
             "api"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_833bdd06-c848-4c2b-9939-37856b246c4e"
+            "task_bd4bfc95-8b8e-4717-93ec-b0b877200ec2"
           ],
           "acceptance": [
             {
@@ -270,72 +431,54 @@
           "attempts": 0,
           "maxAttempts": 3,
           "executor": "internal.code",
-          "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
-          "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+          "assignedAgentId": null,
+          "agentId": null,
           "toolNames": [],
           "requiredTools": [],
           "sequence": 30,
-          "updatedAt": "2026-08-21T04:35:15.781Z",
-          "createdAt": "2026-08-21T04:35:15.781Z",
-          "blockedReason": "Dependencies incomplete",
-          "task": {
-            "id": "task_52febd77-03cc-4242-b392-1d0df51f0b0a",
-            "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-            "title": "Implement backend code and API: पेमेंट गेटवे एकात्मिक करणे",
-            "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-            "requiredCapabilities": [
-              "backend",
-              "api"
-            ],
-            "risk": "normal",
-            "dependsOn": [
-              "task_833bdd06-c848-4c2b-9939-37856b246c4e"
-            ],
-            "acceptance": [
-              {
-                "field": "type",
-                "equals": "code"
-              }
-            ],
-            "state": "blocked",
-            "attempts": 0,
-            "maxAttempts": 3,
-            "executor": "internal.code",
-            "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
-            "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
-            "toolNames": [],
-            "requiredTools": [],
-            "sequence": 30,
-            "updatedAt": "2026-08-21T04:35:15.781Z",
-            "createdAt": "2026-08-21T04:35:15.781Z",
-            "blockedReason": "Dependencies incomplete"
-          },
-          "selectedAgent": {
-            "id": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
-            "name": "Backend Agent",
-            "role": "Engineer",
-            "department": "Engineering",
-            "capabilities": [
-              "backend",
-              "api",
-              "javascript"
-            ],
-            "tools": [
-              "code.execute",
-              "test.run"
-            ],
-            "state": "available",
-            "heartbeatAt": "2026-08-20T08:12:51.655Z",
-            "metadata": {},
-            "updatedAt": "2026-08-20T08:12:51.655Z",
-            "createdAt": "2026-08-20T08:12:51.655Z"
-          }
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-21T14:33:42.917Z",
+          "blockedReason": "Dependencies incomplete"
         },
-        {
-          "id": "task_7ee9a3fb-ecfb-48c1-8490-91ea9f894eb2",
-          "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-          "title": "Implement database and persistence schema: वापरकर्त्यांना सुरक्षित लॉगिन आणि रजिस्ट्रेशन सुविधा प्रदान करणे",
-          "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
+        "selectedAgent": null
+      },
+      {
+        "id": "task_b1977fe2-9353-4dc7-ad13-91d0334eecbf",
+        "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+        "title": "Implement database and persistence schema",
+        "description": "Design a car game",
+        "requiredCapabilities": [
+          "database",
+          "schema",
+          "sql"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_24d717b4-7964-404e-85cd-50a6c53bac05"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 40,
+        "updatedAt": "2026-08-21T14:33:42.917Z",
+        "createdAt": "2026-08-21T14:33:42.917Z",
+        "blockedReason": "Dependencies incomplete",
+        "task": {
+          "id": "task_b1977fe2-9353-4dc7-ad13-91d0334eecbf",
+          "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+          "title": "Implement database and persistence schema",
+          "description": "Design a car game",
           "requiredCapabilities": [
             "database",
             "schema",
@@ -343,7 +486,7 @@
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_52febd77-03cc-4242-b392-1d0df51f0b0a"
+            "task_24d717b4-7964-404e-85cd-50a6c53bac05"
           ],
           "acceptance": [
             {
@@ -360,75 +503,75 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 40,
-          "updatedAt": "2026-08-21T04:35:15.781Z",
-          "createdAt": "2026-08-21T04:35:15.781Z",
-          "blockedReason": "Dependencies incomplete",
-          "task": {
-            "id": "task_7ee9a3fb-ecfb-48c1-8490-91ea9f894eb2",
-            "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-            "title": "Implement database and persistence schema: वापरकर्त्यांना सुरक्षित लॉगिन आणि रजिस्ट्रेशन सुविधा प्रदान करणे",
-            "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-            "requiredCapabilities": [
-              "database",
-              "schema",
-              "sql"
-            ],
-            "risk": "normal",
-            "dependsOn": [
-              "task_52febd77-03cc-4242-b392-1d0df51f0b0a"
-            ],
-            "acceptance": [
-              {
-                "field": "type",
-                "equals": "code"
-              }
-            ],
-            "state": "blocked",
-            "attempts": 0,
-            "maxAttempts": 3,
-            "executor": "internal.code",
-            "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
-            "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
-            "toolNames": [],
-            "requiredTools": [],
-            "sequence": 40,
-            "updatedAt": "2026-08-21T04:35:15.781Z",
-            "createdAt": "2026-08-21T04:35:15.781Z",
-            "blockedReason": "Dependencies incomplete"
-          },
-          "selectedAgent": {
-            "id": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
-            "name": "Database Agent",
-            "role": "Engineer",
-            "department": "Engineering",
-            "capabilities": [
-              "database",
-              "schema",
-              "sql"
-            ],
-            "tools": [
-              "database.query",
-              "code.execute"
-            ],
-            "state": "available",
-            "heartbeatAt": "2026-08-20T08:12:51.655Z",
-            "metadata": {},
-            "updatedAt": "2026-08-20T08:12:51.655Z",
-            "createdAt": "2026-08-20T08:12:51.655Z"
-          }
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-21T14:33:42.917Z",
+          "blockedReason": "Dependencies incomplete"
         },
-        {
-          "id": "task_6e8399df-535c-4a49-b88a-2e22cb9d53e0",
-          "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-          "title": "Implement frontend code and user experience: उत्पादनांची माहिती संचयित करणे आणि व्यवस्थापित करणे",
-          "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
+        "selectedAgent": {
+          "id": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+          "name": "Database Agent",
+          "role": "Engineer",
+          "department": "Engineering",
+          "capabilities": [
+            "database",
+            "schema",
+            "sql"
+          ],
+          "tools": [
+            "database.query",
+            "code.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-21T14:33:42.917Z",
+          "metadata": {},
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_2e7fb2bc-621e-4914-860c-031ba649b4f2",
+        "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+        "title": "Implement frontend code and user experience: User can explore different racing tracks",
+        "description": "Design a car game",
+        "requiredCapabilities": [
+          "frontend",
+          "ui"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_b1977fe2-9353-4dc7-ad13-91d0334eecbf"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 50,
+        "updatedAt": "2026-08-21T14:33:42.917Z",
+        "createdAt": "2026-08-21T14:33:42.917Z",
+        "blockedReason": "Dependencies incomplete",
+        "task": {
+          "id": "task_2e7fb2bc-621e-4914-860c-031ba649b4f2",
+          "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+          "title": "Implement frontend code and user experience: User can explore different racing tracks",
+          "description": "Design a car game",
           "requiredCapabilities": [
             "frontend",
             "ui"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_7ee9a3fb-ecfb-48c1-8490-91ea9f894eb2"
+            "task_b1977fe2-9353-4dc7-ad13-91d0334eecbf"
           ],
           "acceptance": [
             {
@@ -445,74 +588,75 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 50,
-          "updatedAt": "2026-08-21T04:35:15.781Z",
-          "createdAt": "2026-08-21T04:35:15.781Z",
-          "blockedReason": "Dependencies incomplete",
-          "task": {
-            "id": "task_6e8399df-535c-4a49-b88a-2e22cb9d53e0",
-            "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-            "title": "Implement frontend code and user experience: उत्पादनांची माहिती संचयित करणे आणि व्यवस्थापित करणे",
-            "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-            "requiredCapabilities": [
-              "frontend",
-              "ui"
-            ],
-            "risk": "normal",
-            "dependsOn": [
-              "task_7ee9a3fb-ecfb-48c1-8490-91ea9f894eb2"
-            ],
-            "acceptance": [
-              {
-                "field": "type",
-                "equals": "code"
-              }
-            ],
-            "state": "blocked",
-            "attempts": 0,
-            "maxAttempts": 3,
-            "executor": "internal.code",
-            "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
-            "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
-            "toolNames": [],
-            "requiredTools": [],
-            "sequence": 50,
-            "updatedAt": "2026-08-21T04:35:15.781Z",
-            "createdAt": "2026-08-21T04:35:15.781Z",
-            "blockedReason": "Dependencies incomplete"
-          },
-          "selectedAgent": {
-            "id": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
-            "name": "Frontend Agent",
-            "role": "Engineer",
-            "department": "Engineering",
-            "capabilities": [
-              "frontend",
-              "javascript",
-              "ui"
-            ],
-            "tools": [
-              "code.execute",
-              "test.run"
-            ],
-            "state": "available",
-            "heartbeatAt": "2026-08-20T08:12:51.655Z",
-            "metadata": {},
-            "updatedAt": "2026-08-20T08:12:51.655Z",
-            "createdAt": "2026-08-20T08:12:51.655Z"
-          }
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-21T14:33:42.917Z",
+          "blockedReason": "Dependencies incomplete"
         },
-        {
-          "id": "task_c8002031-1ffc-4a69-85fc-7bfc51fc77ad",
-          "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
+        "selectedAgent": {
+          "id": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+          "name": "Frontend Agent",
+          "role": "Engineer",
+          "department": "Engineering",
+          "capabilities": [
+            "frontend",
+            "javascript",
+            "ui"
+          ],
+          "tools": [
+            "code.execute",
+            "test.run"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-21T14:33:42.917Z",
+          "metadata": {},
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_1d95c238-c327-4b2a-87e0-0c4ce8d4f6d1",
+        "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+        "title": "Perform security review",
+        "description": "Design a car game",
+        "requiredCapabilities": [
+          "security",
+          "audit"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_2e7fb2bc-621e-4914-860c-031ba649b4f2"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 60,
+        "updatedAt": "2026-08-21T14:33:42.917Z",
+        "createdAt": "2026-08-21T14:33:42.917Z",
+        "blockedReason": "Dependencies incomplete",
+        "task": {
+          "id": "task_1d95c238-c327-4b2a-87e0-0c4ce8d4f6d1",
+          "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
           "title": "Perform security review",
-          "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
+          "description": "Design a car game",
           "requiredCapabilities": [
             "security",
             "audit"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_6e8399df-535c-4a49-b88a-2e22cb9d53e0"
+            "task_2e7fb2bc-621e-4914-860c-031ba649b4f2"
           ],
           "acceptance": [
             {
@@ -529,103 +673,75 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 60,
-          "updatedAt": "2026-08-21T04:35:15.781Z",
-          "createdAt": "2026-08-21T04:35:15.781Z",
-          "blockedReason": "Dependencies incomplete",
-          "task": {
-            "id": "task_c8002031-1ffc-4a69-85fc-7bfc51fc77ad",
-            "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-            "title": "Perform security review",
-            "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-            "requiredCapabilities": [
-              "security",
-              "audit"
-          ],
-          "risk": "normal",
-          "dependsOn": [
-            "task_6e8399df-535c-4a49-b88a-2e22cb9d53e0"
-          ],
-          "acceptance": [
-            {
-              "field": "type",
-              "equals": "code"
-            }
-          ],
-          "state": "blocked",
-          "attempts": 0,
-          "maxAttempts": 3,
-          "executor": "internal.code",
-          "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
-          "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
-          "toolNames": [],
-          "requiredTools": [],
-          "sequence": 60,
-          "updatedAt": "2026-08-21T04:35:15.781Z",
-          "createdAt": "2026-08-21T04:35:15.781Z",
-          "blockedReason": "Dependencies incomplete",
-          "task": {
-            "id": "task_c8002031-1ffc-4a69-85fc-7bfc51fc77ad",
-            "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-            "title": "Perform security review",
-            "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-            "requiredCapabilities": [
-              "security",
-              "audit"
-            ],
-            "risk": "normal",
-            "dependsOn": [
-              "task_6e8399df-535c-4a49-b88a-2e22cb9d53e0"
-            ],
-            "acceptance": [
-              {
-                "field": "type",
-                "equals": "code"
-              }
-            ],
-            "state": "blocked",
-            "attempts": 0,
-            "maxAttempts": 3,
-            "executor": "internal.code",
-            "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
-            "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
-            "toolNames": [],
-            "requiredTools": [],
-            "sequence": 60,
-            "updatedAt": "2026-08-21T04:35:15.781Z",
-            "createdAt": "2026-08-21T04:35:15.781Z",
-            "blockedReason": "Dependencies incomplete"
-          },
-          "selectedAgent": {
-            "id": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
-            "name": "Security Agent",
-            "role": "Reviewer",
-            "department": "Security",
-            "capabilities": [
-              "security",
-              "audit"
-            ],
-            "tools": [
-              "security.scan"
-            ],
-            "state": "available",
-            "heartbeatAt": "2026-08-20T08:12:51.655Z",
-            "metadata": {},
-            "updatedAt": "2026-08-20T08:12:51.655Z",
-            "createdAt": "2026-08-20T08:12:51.655Z"
-          }
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-21T14:33:42.917Z",
+          "blockedReason": "Dependencies incomplete"
         },
-        {
-          "id": "task_e19a8c56-0868-46f7-87ad-9ba313119d84",
-          "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
+        "selectedAgent": {
+          "id": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+          "name": "Security Agent",
+          "role": "Reviewer",
+          "department": "Security",
+          "capabilities": [
+            "security",
+            "audit"
+          ],
+          "tools": [
+            "security.scan"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-21T14:33:42.917Z",
+          "metadata": {},
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_ffb5af37-c386-472f-9765-9393983f321e",
+        "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
+        "title": "Create testing and verification plan",
+        "description": "Design a car game",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_1d95c238-c327-4b2a-87e0-0c4ce8d4f6d1"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [
+          "test.run"
+        ],
+        "requiredTools": [],
+        "sequence": 70,
+        "updatedAt": "2026-08-21T14:33:42.917Z",
+        "createdAt": "2026-08-21T14:33:42.917Z",
+        "blockedReason": "Dependencies incomplete",
+        "task": {
+          "id": "task_ffb5af37-c386-472f-9765-9393983f321e",
+          "projectId": "project_b74bf242-db5e-4d69-a776-f8925df4a94c",
           "title": "Create testing and verification plan",
-          "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
+          "description": "Design a car game",
           "requiredCapabilities": [
             "testing",
             "verification"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_c8002031-1ffc-4a69-85fc-7bfc51fc77ad"
+            "task_1d95c238-c327-4b2a-87e0-0c4ce8d4f6d1"
           ],
           "acceptance": [
             {
@@ -637,67 +753,65 @@
           "attempts": 0,
           "maxAttempts": 3,
           "executor": "internal.plan",
-          "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-          "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-          "toolNames": [],
+          "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "toolNames": [
+            "test.run"
+          ],
           "requiredTools": [],
           "sequence": 70,
-          "updatedAt": "2026-08-21T04:35:15.781Z",
-          "createdAt": "2026-08-21T04:35:15.781Z",
-          "blockedReason": "Dependencies incomplete",
-          "task": {
-            "id": "task_e19a8c56-0868-46f7-87ad-9ba313119d84",
-            "projectId": "project_1e87c1f1-bf56-428b-91e2-8cbd69084f66",
-            "title": "Create testing and verification plan",
-            "description": "एक साधे ई-कॉमर्स प्लॅटफॉर्म तयार करणे",
-            "requiredCapabilities": [
-              "testing",
-              "verification"
-            ],
-            "risk": "normal",
-            "dependsOn": [
-              "task_c8002031-1ffc-4a69-85fc-7bfc51fc77ad"
-            ],
-            "acceptance": [
-              {
-                "field": "type",
-                "equals": "plan"
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-21T14:33:42.917Z",
+          "blockedReason": "Dependencies incomplete"
+        },
+        "selectedAgent": {
+          "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "name": "Product Agent",
+          "role": "Product",
+          "department": "Business",
+          "capabilities": [
+            "requirements",
+            "product-planning",
+            "planning"
+          ],
+          "tools": [
+            "planning.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-21T14:33:42.917Z",
+          "metadata": {
+            "outcomeCount": 4,
+            "successCount": 4,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-21T14:33:42.917Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "analysis|research": {
+                "attempts": 2,
+                "successes": 2,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T14:33:42.917Z"
+              },
+              "planning|product-planning": {
+                "attempts": 2,
+                "successes": 2,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T14:33:42.917Z"
               }
-            ],
-            "state": "blocked",
-            "attempts": 0,
-            "maxAttempts": 3,
-            "executor": "internal.plan",
-            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-            "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-            "toolNames": [],
-            "requiredTools": [],
-            "sequence": 70,
-            "updatedAt": "2026-08-21T04:35:15.781Z",
-            "createdAt": "2026-08-21T04:35:15.781Z",
-            "blockedReason": "Dependencies incomplete"
+            }
           },
-          "selectedAgent": {
-            "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-            "name": "QA Agent",
-            "role": "Tester",
-            "department": "Quality",
-            "capabilities": [
-              "testing",
-              "verification"
-            ],
-            "tools": [
-              "test.run",
-              "code.execute"
-            ],
-            "state": "available",
-            "heartbeatAt": "2026-08-20T08:12:51.655Z",
-            "metadata": {},
-            "updatedAt": "2026-08-20T08:12:51.655Z",
-            "createdAt": "2026-08-20T08:12:51.655Z"
-          }
+          "updatedAt": "2026-08-21T14:33:42.917Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
         }
-      ]
-    }
+      }
+    ]
   }
 }
