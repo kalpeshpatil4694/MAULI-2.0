@@ -1,36 +1,36 @@
 {
-  "command": "Game banun dya",
-  "generatedAt": "2026-08-21T15:07:36.495Z",
+  "command": "Calculator banva",
+  "generatedAt": "2026-08-21T15:11:08.732Z",
   "result": {
     "project": {
-      "id": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-      "name": "Project: Design a game development project",
-      "objective": "Design a game development project",
-      "founderCommand": "Game banun dya",
+      "id": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+      "name": "Project: Create a calculator software product",
+      "objective": "Create a calculator software product",
+      "founderCommand": "Calculator banva",
       "requirements": [
-        "Define game genre and target audience",
-        "Determine game mechanics and features",
-        "Create a detailed game design document",
-        "Develop a project timeline and budget"
+        "User can input numbers and mathematical operators",
+        "User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+        "User can view calculation history",
+        "User can clear calculation history"
       ],
       "priority": "normal",
       "state": "planning",
       "milestones": [],
-      "createdAt": "2026-08-21T15:07:36.495Z",
-      "updatedAt": "2026-08-21T15:07:36.495Z"
+      "createdAt": "2026-08-21T15:11:08.732Z",
+      "updatedAt": "2026-08-21T15:11:08.732Z"
     },
     "firstTask": {
-      "id": "task_ba0f5ed0-53f1-4c12-90a0-0b1390d7a03e",
-      "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-      "title": "Implement backend code and API: Develop a project timeline and budget",
-      "description": "Design a game development project",
+      "id": "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4",
+      "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+      "title": "Implement backend code and API: User can clear calculation history",
+      "description": "Create a calculator software product",
       "requiredCapabilities": [
         "backend",
         "api"
       ],
       "risk": "normal",
       "dependsOn": [
-        "task_6553a938-9fac-42c7-b28b-ef53b552e774"
+        "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c"
       ],
       "acceptance": [
         {
@@ -47,8 +47,8 @@
       "toolNames": [],
       "requiredTools": [],
       "sequence": 30,
-      "updatedAt": "2026-08-21T15:07:36.495Z",
-      "createdAt": "2026-08-21T15:07:36.495Z",
+      "updatedAt": "2026-08-21T15:11:08.732Z",
+      "createdAt": "2026-08-21T15:11:08.732Z",
       "blockedReason": "Dependencies incomplete"
     },
     "status": "blocked",
@@ -56,10 +56,10 @@
     "requiredTools": [],
     "tasks": [
       {
-        "id": "task_adfc219e-d57f-46d3-ae56-5fea71e58a39",
-        "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-        "title": "Research and validate requirements: Define game genre and target audience",
-        "description": "Design a game development project",
+        "id": "task_13da0ba5-6f23-4601-abd1-5fc0361daffd",
+        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+        "title": "Research and validate requirements: User can input numbers and mathematical operators",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "research",
           "analysis"
@@ -81,10 +81,10 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 10,
-        "updatedAt": "2026-08-21T15:07:36.495Z",
-        "createdAt": "2026-08-21T15:07:36.495Z",
-        "assignedAt": "2026-08-21T15:07:36.495Z",
-        "startedAt": "2026-08-21T15:07:36.495Z",
+        "updatedAt": "2026-08-21T15:11:08.732Z",
+        "createdAt": "2026-08-21T15:11:08.732Z",
+        "assignedAt": "2026-08-21T15:11:08.732Z",
+        "startedAt": "2026-08-21T15:11:08.732Z",
         "memoryContext": [
           {
             "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
@@ -99,21 +99,21 @@
         ],
         "result": {
           "type": "plan",
-          "taskId": "task_adfc219e-d57f-46d3-ae56-5fea71e58a39",
+          "taskId": "task_13da0ba5-6f23-4601-abd1-5fc0361daffd",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T15:07:36.495Z"
+            "at": "2026-08-21T15:11:08.732Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_d5091c89-992c-4f40-8e70-eeb7bd8f7f82",
-        "completedAt": "2026-08-21T15:07:36.495Z",
+        "verificationId": "verification_505d58c3-7b5d-4652-a165-2baf233c66af",
+        "completedAt": "2026-08-21T15:11:08.732Z",
         "task": {
-          "id": "task_adfc219e-d57f-46d3-ae56-5fea71e58a39",
-          "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-          "title": "Research and validate requirements: Define game genre and target audience",
-          "description": "Design a game development project",
+          "id": "task_13da0ba5-6f23-4601-abd1-5fc0361daffd",
+          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+          "title": "Research and validate requirements: User can input numbers and mathematical operators",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "research",
             "analysis"
@@ -135,10 +135,10 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 10,
-          "updatedAt": "2026-08-21T15:07:36.495Z",
-          "createdAt": "2026-08-21T15:07:36.495Z",
-          "assignedAt": "2026-08-21T15:07:36.495Z",
-          "startedAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "createdAt": "2026-08-21T15:11:08.732Z",
+          "assignedAt": "2026-08-21T15:11:08.732Z",
+          "startedAt": "2026-08-21T15:11:08.732Z",
           "memoryContext": [
             {
               "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
@@ -153,16 +153,16 @@
           ],
           "result": {
             "type": "plan",
-            "taskId": "task_adfc219e-d57f-46d3-ae56-5fea71e58a39",
+            "taskId": "task_13da0ba5-6f23-4601-abd1-5fc0361daffd",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T15:07:36.495Z"
+              "at": "2026-08-21T15:11:08.732Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_d5091c89-992c-4f40-8e70-eeb7bd8f7f82",
-          "completedAt": "2026-08-21T15:07:36.495Z"
+          "verificationId": "verification_505d58c3-7b5d-4652-a165-2baf233c66af",
+          "completedAt": "2026-08-21T15:11:08.732Z"
         },
         "selectedAgent": {
           "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -178,52 +178,52 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:07:36.495Z",
+          "heartbeatAt": "2026-08-21T15:11:08.732Z",
           "metadata": {
-            "outcomeCount": 8,
-            "successCount": 8,
+            "outcomeCount": 10,
+            "successCount": 10,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T15:07:36.495Z",
+            "lastOutcomeAt": "2026-08-21T15:11:08.732Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 4,
-                "successes": 4,
+                "attempts": 5,
+                "successes": 5,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.4,
-                "lastOutcomeAt": "2026-08-21T15:07:36.495Z"
+                "confidence": 0.5,
+                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
               },
               "planning|product-planning": {
-                "attempts": 4,
-                "successes": 4,
+                "attempts": 5,
+                "successes": 5,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.4,
-                "lastOutcomeAt": "2026-08-21T15:07:36.495Z"
+                "confidence": 0.5,
+                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_6553a938-9fac-42c7-b28b-ef53b552e774",
-        "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-        "title": "Define product and architecture plan: Determine game mechanics and features",
-        "description": "Design a game development project",
+        "id": "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c",
+        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+        "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "product-planning",
           "planning"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_adfc219e-d57f-46d3-ae56-5fea71e58a39"
+          "task_13da0ba5-6f23-4601-abd1-5fc0361daffd"
         ],
         "acceptance": [
           {
@@ -242,10 +242,10 @@
         ],
         "requiredTools": [],
         "sequence": 20,
-        "updatedAt": "2026-08-21T15:07:36.495Z",
-        "createdAt": "2026-08-21T15:07:36.495Z",
+        "updatedAt": "2026-08-21T15:11:08.732Z",
+        "createdAt": "2026-08-21T15:11:08.732Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T15:07:36.495Z",
+        "startedAt": "2026-08-21T15:11:08.732Z",
         "memoryContext": [
           {
             "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
@@ -260,28 +260,28 @@
         ],
         "result": {
           "type": "plan",
-          "taskId": "task_6553a938-9fac-42c7-b28b-ef53b552e774",
+          "taskId": "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T15:07:36.495Z"
+            "at": "2026-08-21T15:11:08.732Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_9741a331-6b4d-4b8a-bb3a-c10f6bc33b85",
-        "completedAt": "2026-08-21T15:07:36.495Z",
+        "verificationId": "verification_b7a2679b-14af-4bdb-87f1-4eec45e21f5b",
+        "completedAt": "2026-08-21T15:11:08.732Z",
         "task": {
-          "id": "task_6553a938-9fac-42c7-b28b-ef53b552e774",
-          "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-          "title": "Define product and architecture plan: Determine game mechanics and features",
-          "description": "Design a game development project",
+          "id": "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c",
+          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+          "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "product-planning",
             "planning"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_adfc219e-d57f-46d3-ae56-5fea71e58a39"
+            "task_13da0ba5-6f23-4601-abd1-5fc0361daffd"
           ],
           "acceptance": [
             {
@@ -300,10 +300,10 @@
           ],
           "requiredTools": [],
           "sequence": 20,
-          "updatedAt": "2026-08-21T15:07:36.495Z",
-          "createdAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "createdAt": "2026-08-21T15:11:08.732Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T15:07:36.495Z",
+          "startedAt": "2026-08-21T15:11:08.732Z",
           "memoryContext": [
             {
               "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
@@ -318,16 +318,16 @@
           ],
           "result": {
             "type": "plan",
-            "taskId": "task_6553a938-9fac-42c7-b28b-ef53b552e774",
+            "taskId": "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T15:07:36.495Z"
+              "at": "2026-08-21T15:11:08.732Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_9741a331-6b4d-4b8a-bb3a-c10f6bc33b85",
-          "completedAt": "2026-08-21T15:07:36.495Z"
+          "verificationId": "verification_b7a2679b-14af-4bdb-87f1-4eec45e21f5b",
+          "completedAt": "2026-08-21T15:11:08.732Z"
         },
         "selectedAgent": {
           "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -343,52 +343,52 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:07:36.495Z",
+          "heartbeatAt": "2026-08-21T15:11:08.732Z",
           "metadata": {
-            "outcomeCount": 8,
-            "successCount": 8,
+            "outcomeCount": 10,
+            "successCount": 10,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T15:07:36.495Z",
+            "lastOutcomeAt": "2026-08-21T15:11:08.732Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 4,
-                "successes": 4,
+                "attempts": 5,
+                "successes": 5,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.4,
-                "lastOutcomeAt": "2026-08-21T15:07:36.495Z"
+                "confidence": 0.5,
+                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
               },
               "planning|product-planning": {
-                "attempts": 4,
-                "successes": 4,
+                "attempts": 5,
+                "successes": 5,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.4,
-                "lastOutcomeAt": "2026-08-21T15:07:36.495Z"
+                "confidence": 0.5,
+                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_ba0f5ed0-53f1-4c12-90a0-0b1390d7a03e",
-        "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-        "title": "Implement backend code and API: Develop a project timeline and budget",
-        "description": "Design a game development project",
+        "id": "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4",
+        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+        "title": "Implement backend code and API: User can clear calculation history",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "backend",
           "api"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_6553a938-9fac-42c7-b28b-ef53b552e774"
+          "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c"
         ],
         "acceptance": [
           {
@@ -405,21 +405,21 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 30,
-        "updatedAt": "2026-08-21T15:07:36.495Z",
-        "createdAt": "2026-08-21T15:07:36.495Z",
+        "updatedAt": "2026-08-21T15:11:08.732Z",
+        "createdAt": "2026-08-21T15:11:08.732Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_ba0f5ed0-53f1-4c12-90a0-0b1390d7a03e",
-          "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-          "title": "Implement backend code and API: Develop a project timeline and budget",
-          "description": "Design a game development project",
+          "id": "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4",
+          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+          "title": "Implement backend code and API: User can clear calculation history",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "backend",
             "api"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_6553a938-9fac-42c7-b28b-ef53b552e774"
+            "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c"
           ],
           "acceptance": [
             {
@@ -436,17 +436,17 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 30,
-          "updatedAt": "2026-08-21T15:07:36.495Z",
-          "createdAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "createdAt": "2026-08-21T15:11:08.732Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": null
       },
       {
-        "id": "task_04e107d2-9914-453b-8745-d699b0a6339e",
-        "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
+        "id": "task_f3f875b3-c37b-445f-a6ab-9602f89b47c8",
+        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
         "title": "Implement database and persistence schema",
-        "description": "Design a game development project",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "database",
           "schema",
@@ -454,7 +454,7 @@
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_ba0f5ed0-53f1-4c12-90a0-0b1390d7a03e"
+          "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4"
         ],
         "acceptance": [
           {
@@ -471,14 +471,14 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 40,
-        "updatedAt": "2026-08-21T15:07:36.495Z",
-        "createdAt": "2026-08-21T15:07:36.495Z",
+        "updatedAt": "2026-08-21T15:11:08.732Z",
+        "createdAt": "2026-08-21T15:11:08.732Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_04e107d2-9914-453b-8745-d699b0a6339e",
-          "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
+          "id": "task_f3f875b3-c37b-445f-a6ab-9602f89b47c8",
+          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
           "title": "Implement database and persistence schema",
-          "description": "Design a game development project",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "database",
             "schema",
@@ -486,7 +486,7 @@
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_ba0f5ed0-53f1-4c12-90a0-0b1390d7a03e"
+            "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4"
           ],
           "acceptance": [
             {
@@ -503,8 +503,8 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 40,
-          "updatedAt": "2026-08-21T15:07:36.495Z",
-          "createdAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "createdAt": "2026-08-21T15:11:08.732Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": {
@@ -522,25 +522,25 @@
             "code.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:07:36.495Z",
+          "heartbeatAt": "2026-08-21T15:11:08.732Z",
           "metadata": {},
-          "updatedAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_3b3815f3-65b1-4ba1-8aa1-dda1da9db33c",
-        "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-        "title": "Implement frontend code and user experience: Create a detailed game design document",
-        "description": "Design a game development project",
+        "id": "task_594437e8-8390-451b-9267-92f935718194",
+        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+        "title": "Implement frontend code and user experience: User can view calculation history",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "frontend",
           "ui"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_04e107d2-9914-453b-8745-d699b0a6339e"
+          "task_f3f875b3-c37b-445f-a6ab-9602f89b47c8"
         ],
         "acceptance": [
           {
@@ -557,21 +557,21 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 50,
-        "updatedAt": "2026-08-21T15:07:36.495Z",
-        "createdAt": "2026-08-21T15:07:36.495Z",
+        "updatedAt": "2026-08-21T15:11:08.732Z",
+        "createdAt": "2026-08-21T15:11:08.732Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_3b3815f3-65b1-4ba1-8aa1-dda1da9db33c",
-          "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
-          "title": "Implement frontend code and user experience: Create a detailed game design document",
-          "description": "Design a game development project",
+          "id": "task_594437e8-8390-451b-9267-92f935718194",
+          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+          "title": "Implement frontend code and user experience: User can view calculation history",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "frontend",
             "ui"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_04e107d2-9914-453b-8745-d699b0a6339e"
+            "task_f3f875b3-c37b-445f-a6ab-9602f89b47c8"
           ],
           "acceptance": [
             {
@@ -588,8 +588,8 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 50,
-          "updatedAt": "2026-08-21T15:07:36.495Z",
-          "createdAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "createdAt": "2026-08-21T15:11:08.732Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": {
@@ -607,25 +607,25 @@
             "test.run"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:07:36.495Z",
+          "heartbeatAt": "2026-08-21T15:11:08.732Z",
           "metadata": {},
-          "updatedAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_c1ee5cf3-69bf-4275-98a1-84d6f8b8562a",
-        "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
+        "id": "task_b78ac420-ff6f-4e6e-b0c4-b71c2a08f107",
+        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
         "title": "Perform security review",
-        "description": "Design a game development project",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "security",
           "audit"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_3b3815f3-65b1-4ba1-8aa1-dda1da9db33c"
+          "task_594437e8-8390-451b-9267-92f935718194"
         ],
         "acceptance": [
           {
@@ -642,21 +642,21 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 60,
-        "updatedAt": "2026-08-21T15:07:36.495Z",
-        "createdAt": "2026-08-21T15:07:36.495Z",
+        "updatedAt": "2026-08-21T15:11:08.732Z",
+        "createdAt": "2026-08-21T15:11:08.732Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_c1ee5cf3-69bf-4275-98a1-84d6f8b8562a",
-          "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
+          "id": "task_b78ac420-ff6f-4e6e-b0c4-b71c2a08f107",
+          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
           "title": "Perform security review",
-          "description": "Design a game development project",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "security",
             "audit"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_3b3815f3-65b1-4ba1-8aa1-dda1da9db33c"
+            "task_594437e8-8390-451b-9267-92f935718194"
           ],
           "acceptance": [
             {
@@ -673,8 +673,8 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 60,
-          "updatedAt": "2026-08-21T15:07:36.495Z",
-          "createdAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "createdAt": "2026-08-21T15:11:08.732Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": {
@@ -690,25 +690,25 @@
             "security.scan"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:07:36.495Z",
+          "heartbeatAt": "2026-08-21T15:11:08.732Z",
           "metadata": {},
-          "updatedAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_1cea28f5-0821-448a-94db-9a947a959966",
-        "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
+        "id": "task_7bf91530-89d3-4cbf-b445-ac12c606f325",
+        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
         "title": "Create testing and verification plan",
-        "description": "Design a game development project",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "testing",
           "verification"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_c1ee5cf3-69bf-4275-98a1-84d6f8b8562a"
+          "task_b78ac420-ff6f-4e6e-b0c4-b71c2a08f107"
         ],
         "acceptance": [
           {
@@ -727,21 +727,21 @@
         ],
         "requiredTools": [],
         "sequence": 70,
-        "updatedAt": "2026-08-21T15:07:36.495Z",
-        "createdAt": "2026-08-21T15:07:36.495Z",
+        "updatedAt": "2026-08-21T15:11:08.732Z",
+        "createdAt": "2026-08-21T15:11:08.732Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_1cea28f5-0821-448a-94db-9a947a959966",
-          "projectId": "project_9064105e-1c24-4adc-82e3-e89578e6b214",
+          "id": "task_7bf91530-89d3-4cbf-b445-ac12c606f325",
+          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
           "title": "Create testing and verification plan",
-          "description": "Design a game development project",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "testing",
             "verification"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_c1ee5cf3-69bf-4275-98a1-84d6f8b8562a"
+            "task_b78ac420-ff6f-4e6e-b0c4-b71c2a08f107"
           ],
           "acceptance": [
             {
@@ -760,8 +760,8 @@
           ],
           "requiredTools": [],
           "sequence": 70,
-          "updatedAt": "2026-08-21T15:07:36.495Z",
-          "createdAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "createdAt": "2026-08-21T15:11:08.732Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": {
@@ -778,36 +778,36 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:07:36.495Z",
+          "heartbeatAt": "2026-08-21T15:11:08.732Z",
           "metadata": {
-            "outcomeCount": 8,
-            "successCount": 8,
+            "outcomeCount": 10,
+            "successCount": 10,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T15:07:36.495Z",
+            "lastOutcomeAt": "2026-08-21T15:11:08.732Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 4,
-                "successes": 4,
+                "attempts": 5,
+                "successes": 5,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.4,
-                "lastOutcomeAt": "2026-08-21T15:07:36.495Z"
+                "confidence": 0.5,
+                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
               },
               "planning|product-planning": {
-                "attempts": 4,
-                "successes": 4,
+                "attempts": 5,
+                "successes": 5,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.4,
-                "lastOutcomeAt": "2026-08-21T15:07:36.495Z"
+                "confidence": 0.5,
+                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T15:07:36.495Z",
+          "updatedAt": "2026-08-21T15:11:08.732Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
