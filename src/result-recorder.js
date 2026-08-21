@@ -19,6 +19,19 @@ function headers(token) {
   return { Accept:'application/vnd.github+json', Authorization:`Bearer ${token}`, 'X-GitHub-Api-Version':'2022-11-28', 'User-Agent':'MAULI-2.0-result-recorder', 'Content-Type':'application/json' };
 }
 function diag(stage, extra={}) { return { stage, at:new Date().toISOString(), ...extra }; }
+function config(env={}) {
+  return {
+    api: env?.GITHUB_API_URL || GITHUB_API,
+    repo: env?.GITHUB_RESULT_REPO || DEFAULT_REPO,
+    path: env?.GITHUB_RESULT_PATH || DEFAULT_PATH,
+    branch: env?.GITHUB_RESULT_BRANCH || DEFAULT_BRANCH
+  };
+}
+function tokenInfo(env={}) {
+  const token = env?.GITHUB_TOKEN || env?.MAULI_GITHUB_TOKEN || env?.GITHUB_PAT || env?.RESULT_GITHUB_TOKEN;
+  const tokenSource = env?.GITHUB_TOKEN ? 'GITHUB_TOKEN' : env?.MAULI_GITHUB_TOKEN ? 'MAULI_GITHUB_TOKEN' : env?.GITHUB_PAT ? 'GITHUB_PAT' : env?.RESULT_GITHUB_TOKEN ? 'RESULT_GITHUB_TOKEN' : null;
+  return { token, tokenSource };
+}
 async function github(url, options={}) {
   const response = await fetch(url, options);
   const text = await response.text();
@@ -31,8 +44,8 @@ async function readCurrent(url, requestHeaders) {
   if(response.status===404) return {ok:true,sha:null,content:''};
   return {ok:false,status:response.status,detail:data?.message||''};
 }
-async function verifyWrite(url, requestHeaders, expectedPayload) {
-  const verifyUrl = `${url}?ref=${encodeURIComponent(DEFAULT_BRANCH)}`;
+async function verifyWrite(url, requestHeaders, expectedPayload, branch) {
+  const verifyUrl = `${url}?ref=${encodeURIComponent(branch)}`;
   const {response,data}=await github(verifyUrl,{headers:requestHeaders});
   if(!response.ok) return {ok:false,reason:`GitHub verification failed (${response.status})${data?.message?`: ${data.message}`:''}`};
   let actual='';
@@ -40,33 +53,44 @@ async function verifyWrite(url, requestHeaders, expectedPayload) {
   return actual===expectedPayload ? {ok:true,sha:data?.sha||null} : {ok:false,reason:'GitHub verification failed: Result content does not match latest command result'};
 }
 
+export async function diagnoseResultPersistence(env={}) {
+  const cfg=config(env);
+  const {token,tokenSource}=tokenInfo(env);
+  const diagnostics=[diag('diagnostic-start',{repo:cfg.repo,path:cfg.path,branch:cfg.branch,api:cfg.api,tokenConfigured:Boolean(token),tokenSource})];
+  if(!token) return {ok:false,tokenConfigured:false,reason:'GitHub token is not configured (expected GITHUB_TOKEN, MAULI_GITHUB_TOKEN, GITHUB_PAT, or RESULT_GITHUB_TOKEN)',diagnostics:diagnostics.concat(diag('missing-token'))};
+  const url=`${cfg.api}/repos/${cfg.repo}/contents/${encodeURIComponent(cfg.path)}`;
+  const current=await readCurrent(`${url}?ref=${encodeURIComponent(cfg.branch)}`,headers(token));
+  if(!current.ok) return {ok:false,tokenConfigured:true,reason:`GitHub Result read failed (${current.status})${current.detail?`: ${current.detail}`:''}`,diagnostics:diagnostics.concat(diag('read-failed',{status:current.status}))};
+  return {ok:true,tokenConfigured:true,tokenSource,repo:cfg.repo,path:cfg.path,branch:cfg.branch,exists:Boolean(current.sha),sha:current.sha||null,diagnostics:diagnostics.concat(diag('read-ok',{exists:Boolean(current.sha),sha:current.sha||null}))};
+}
+
 export async function saveCommandResult(result, env) {
   const diagnostics=[];
-  const token=env?.GITHUB_TOKEN||env?.GITHUB_PAT||env?.MAULI_GITHUB_TOKEN;
-  const tokenSource=env?.GITHUB_TOKEN?'GITHUB_TOKEN':env?.GITHUB_PAT?'GITHUB_PAT':env?.MAULI_GITHUB_TOKEN?'MAULI_GITHUB_TOKEN':null;
-  diagnostics.push(diag('start',{repo:DEFAULT_REPO,path:DEFAULT_PATH,branch:DEFAULT_BRANCH,tokenConfigured:Boolean(token),tokenSource}));
-  if(!token) return {saved:false,reason:'GitHub token is not configured (expected GITHUB_TOKEN, GITHUB_PAT, or MAULI_GITHUB_TOKEN)',diagnostics:diagnostics.concat(diag('missing-token'))};
+  const cfg=config(env);
+  const {token,tokenSource}=tokenInfo(env);
+  diagnostics.push(diag('start',{repo:cfg.repo,path:cfg.path,branch:cfg.branch,api:cfg.api,tokenConfigured:Boolean(token),tokenSource}));
+  if(!token) return {saved:false,reason:'GitHub token is not configured (expected GITHUB_TOKEN, MAULI_GITHUB_TOKEN, GITHUB_PAT, or RESULT_GITHUB_TOKEN)',diagnostics:diagnostics.concat(diag('missing-token'))};
 
-  const url=`${GITHUB_API}/repos/${DEFAULT_REPO}/contents/${encodeURIComponent(DEFAULT_PATH)}`;
+  const url=`${cfg.api}/repos/${cfg.repo}/contents/${encodeURIComponent(cfg.path)}`;
   const requestHeaders=headers(token);
   const payload=JSON.stringify(result,null,2)+'\n';
 
   for(let attempt=1;attempt<=MAX_ATTEMPTS;attempt++) {
     diagnostics.push(diag('read-start',{attempt}));
-    const current=await readCurrent(`${url}?ref=${encodeURIComponent(DEFAULT_BRANCH)}`,requestHeaders);
+    const current=await readCurrent(`${url}?ref=${encodeURIComponent(cfg.branch)}`,requestHeaders);
     if(!current.ok) return {saved:false,reason:`GitHub read failed (${current.status})${current.detail?`: ${current.detail}`:''}`,diagnostics:diagnostics.concat(diag('read-failed',{attempt,status:current.status}))};
     diagnostics.push(diag('read-ok',{attempt,existingSha:current.sha,replacing:Boolean(current.sha)}));
 
-    const body={message:'chore: replace latest MAULI command result',content:utf8ToBase64(payload),branch:DEFAULT_BRANCH};
+    const body={message:'chore: replace latest MAULI command result',content:utf8ToBase64(payload),branch:cfg.branch};
     if(current.sha) body.sha=current.sha;
     diagnostics.push(diag('write-start',{attempt,replacing:Boolean(current.sha)}));
     const {response,data}=await github(url,{method:'PUT',headers:requestHeaders,body:JSON.stringify(body)});
     if(response.ok) {
       diagnostics.push(diag('write-ok',{attempt,commitSha:data?.commit?.sha||null,contentSha:data?.content?.sha||null}));
-      const verified=await verifyWrite(url,requestHeaders,payload);
+      const verified=await verifyWrite(url,requestHeaders,payload,cfg.branch);
       diagnostics.push(diag(verified.ok?'verify-ok':'verify-failed',{attempt,sha:verified.sha||null,reason:verified.reason||null}));
       if(!verified.ok) return {saved:false,reason:verified.reason,diagnostics};
-      return {saved:true,replaced:Boolean(current.sha),path:DEFAULT_PATH,branch:DEFAULT_BRANCH,commitSha:data?.commit?.sha||verified.sha||null,attempts:attempt,diagnostics};
+      return {saved:true,replaced:Boolean(current.sha),path:cfg.path,branch:cfg.branch,commitSha:data?.commit?.sha||verified.sha||null,attempts:attempt,diagnostics};
     }
     diagnostics.push(diag('write-failed',{attempt,status:response.status,error:data?.message||null}));
     if(response.status!==409 || attempt===MAX_ATTEMPTS) return {saved:false,reason:`GitHub write failed (${response.status})${data?.message?`: ${data.message}`:''}`,diagnostics};
