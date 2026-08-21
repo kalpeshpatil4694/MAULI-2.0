@@ -1,1 +1,0 @@
-L1 CI tests use MAULI_TEST_MODE and never write the production Result file.
