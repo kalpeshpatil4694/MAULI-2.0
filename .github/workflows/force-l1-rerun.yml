@@ -1,13 +1,11 @@
 name: Force L1 CI Rerun
 
-on:
-  workflow_dispatch:
-  push:
-    branches: [main]
+on: [push, workflow_dispatch]
 
 jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - run: echo "L1 CI rerun trigger: $(git rev-parse HEAD)"
+      - name: Trigger marker
+        run: echo "L1 CI rerun trigger"
