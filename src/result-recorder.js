@@ -30,14 +30,37 @@ function headers(token) {
   };
 }
 
-async function readCurrentSha(url, requestHeaders) {
+async function readCurrent(url, requestHeaders) {
   const response = await fetch(url, { headers: requestHeaders });
   if (response.ok) {
     const data = await response.json();
-    return { ok: true, sha: data.sha || null };
+    return { ok: true, sha: data.sha || null, content: data.content || '' };
   }
-  if (response.status === 404) return { ok: true, sha: null };
-  return { ok: false, status: response.status };
+  if (response.status === 404) return { ok: true, sha: null, content: '' };
+  let detail = '';
+  try {
+    const data = await response.json();
+    detail = data?.message || '';
+  } catch {}
+  return { ok: false, status: response.status, detail };
+}
+
+async function verifyWrite(url, requestHeaders, expectedPayload) {
+  const response = await fetch(`${url}?ref=${encodeURIComponent(DEFAULT_BRANCH)}`, {
+    headers: requestHeaders
+  });
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json())?.message || ''; } catch {}
+    return { ok: false, reason: `GitHub verification failed (${response.status})${detail ? `: ${detail}` : ''}` };
+  }
+  const data = await response.json();
+  let actual = '';
+  try { actual = base64ToUtf8(data.content || ''); } catch {}
+  if (actual !== expectedPayload) {
+    return { ok: false, reason: 'GitHub verification failed: Result content does not match latest command result' };
+  }
+  return { ok: true, sha: data.sha || null };
 }
 
 export async function saveCommandResult(result, env) {
@@ -46,24 +69,23 @@ export async function saveCommandResult(result, env) {
     return { saved: false, reason: 'GITHUB_TOKEN is not configured' };
   }
 
-  const repo = env.GITHUB_REPO || DEFAULT_REPO;
-  const path = env.GITHUB_RESULT_PATH || DEFAULT_PATH;
-  const branch = env.GITHUB_RESULT_BRANCH || DEFAULT_BRANCH;
+  // Result is intentionally fixed to the production repository/main branch.
+  // This prevents an accidental Worker variable from redirecting writes to a
+  // different branch or file.
+  const repo = DEFAULT_REPO;
+  const path = DEFAULT_PATH;
+  const branch = DEFAULT_BRANCH;
   const url = `${GITHUB_API}/repos/${repo}/contents/${encodeURIComponent(path)}`;
   const requestHeaders = headers(token);
   const payload = JSON.stringify(result, null, 2) + '\n';
 
-  // The GitHub Contents API replaces the complete file when PUT is given
-  // the current SHA. Nothing is appended: every command becomes the sole
-  // content of Result. Retry on 409 because another command may have updated
-  // Result between the SHA read and the write.
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const current = await readCurrentSha(
-      `${url}?ref=${encodeURIComponent(branch)}`,
-      requestHeaders
-    );
+    const current = await readCurrent(`${url}?ref=${encodeURIComponent(branch)}`, requestHeaders);
     if (!current.ok) {
-      return { saved: false, reason: `GitHub read failed (${current.status})` };
+      return {
+        saved: false,
+        reason: `GitHub read failed (${current.status})${current.detail ? `: ${current.detail}` : ''}`
+      };
     }
 
     const body = {
@@ -81,22 +103,27 @@ export async function saveCommandResult(result, env) {
 
     if (response.ok) {
       const data = await response.json();
+      const verified = await verifyWrite(url, requestHeaders, payload);
+      if (!verified.ok) {
+        return { saved: false, reason: verified.reason };
+      }
       return {
         saved: true,
         replaced: Boolean(current.sha),
         path,
         branch,
-        commitSha: data.commit?.sha || null,
+        commitSha: data.commit?.sha || verified.sha || null,
         attempts: attempt
       };
     }
 
+    let detail = '';
+    try {
+      const error = await response.json();
+      detail = error?.message ? `: ${error.message}` : '';
+    } catch {}
+
     if (response.status !== 409 || attempt === MAX_ATTEMPTS) {
-      let detail = '';
-      try {
-        const error = await response.json();
-        detail = error?.message ? `: ${error.message}` : '';
-      } catch {}
       return { saved: false, reason: `GitHub write failed (${response.status})${detail}` };
     }
   }
