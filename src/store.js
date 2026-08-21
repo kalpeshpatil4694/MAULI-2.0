@@ -8,8 +8,7 @@ export class MemoryStore {
   get(type,key) { return this.data.get(type)?.get(key)??null; }
   put(type,value) { const bucket=this.data.get(type)??new Map(); const item={...value,id:value.id??id(type),updatedAt:now(),createdAt:value.createdAt??now()}; bucket.set(item.id,item); this.data.set(type,bucket); if(hasD1(this.env)) void d1Put(this.env,type,item).catch(()=>{}); return item; }
   addEvent(type,payload) { const event={id:id('evt'),type,payload,at:now()}; this.events.push(event); if(this.events.length>1000)this.events.shift(); if(hasD1(this.env))void d1Event(this.env,event).catch(()=>{}); return event; }
-  recentEvents(limit=50){return this.events.slice(-limit).reverse();}
-  async hydrate(types=['agents','projects','tasks','approvals','memory','runs','verifications','tools']) { if(!hasD1(this.env))return false; for(const type of types){const rows=await d1List(this.env,type);const bucket=new Map();for(const item of rows)if(item?.id)bucket.set(item.id,item);if(bucket.size)this.data.set(type,bucket);} this.events=await d1Events(this.env); this.hydrated=true; return true; }
+  async hydrate(types=['agents','projects','tasks','approvals','memory','runs','verifications','tools']) { if(!hasD1(this.env))return false; for(const type of types){const rows=await d1List(this.env,type);const existing=this.data.get(type)??new Map();for(const item of rows)if(item?.id)existing.set(item.id,item);if(existing.size)this.data.set(type,existing);} this.events=await d1Events(this.env); this.hydrated=true; return true; }
   async hydrateLearning() { return this.hydrate(['agents','memory']); }
   snapshot(){return{hydrated:this.hydrated,entities:Object.fromEntries([...this.data.entries()].map(([type,bucket])=>[type,[...bucket.values()]])),events:this.recentEvents(100)};}
 }
