@@ -17,31 +17,20 @@ export function selectBestAgent(requiredCapabilities=[],options={}){return selec
 
 const DEFAULT_AGENTS=[['SK Executive','Executive','Executive',['planning','governance','delegation'],[]],['Research Agent','Research','Research',['research','analysis'],['web.search']],['Product Agent','Product','Business',['requirements','product-planning','planning'],['planning.execute']],['Frontend Agent','Engineer','Engineering',['frontend','javascript','ui'],['code.execute','test.run']],['Backend Agent','Engineer','Engineering',['backend','api','javascript'],['code.execute','test.run']],['Database Agent','Engineer','Engineering',['database','schema','sql'],['database.query','code.execute']],['Security Agent','Reviewer','Security',['security','audit'],['security.scan']],['QA Agent','Tester','Quality',['testing','verification'],['test.run','code.execute']]];
 
+function activeTaskOwnedBy(agent){const taskId=agent?.currentTaskId;if(!taskId)return false;const task=store.get('tasks',taskId);return Boolean(task&&task.agentId===agent.id&&['assigned','working','verifying'].includes(task.state));}
+
 export function seedAgents(){
-  const existing=listAgents();
-  const existingByName=new Map(existing.map(agent=>[agent.name,agent]));
+  const existingByName=new Map(listAgents().map(agent=>[agent.name,agent]));
   for(const [name,role,department,caps,tools] of DEFAULT_AGENTS){
     const current=existingByName.get(name);
-    if(!current){
-      registerAgent({name,role,department,capabilities:caps,tools});
-      continue;
-    }
-    if(name==='Product Agent'){
-      const mergedTools=new Set(current.tools??[]); mergedTools.add('planning.execute');
-      const mergedCapabilities=new Set(current.capabilities??[]); mergedCapabilities.add('requirements'); mergedCapabilities.add('product-planning'); mergedCapabilities.add('planning');
-      const availabilityPatch={capabilities:[...mergedCapabilities],tools:[...mergedTools],heartbeatAt:now()};
-      // A persisted state is active only when its current task still exists and is
-      // genuinely in an execution state owned by this agent. Stale task IDs from
-      // previous runs must not make the Product Agent unavailable forever.
-      const currentTaskId=current.currentTaskId;
-      const currentTask=currentTaskId?store.get('tasks',currentTaskId):null;
-      const activeTask=Boolean(currentTask&&currentTask.agentId===current.id&&['assigned','working','verifying'].includes(currentTask.state));
-      if(!activeTask){
-        availabilityPatch.state='available';
-        availabilityPatch.currentTaskId=null;
-      }
-      updateAgent(current.id,availabilityPatch);
-    }
+    if(!current){registerAgent({name,role,department,capabilities:caps,tools});continue;}
+    const mergedCapabilities=[...new Set([...(current.capabilities??[]),...caps])];
+    const mergedTools=[...new Set([...(current.tools??[]),...tools])];
+    const patch={capabilities:mergedCapabilities,tools:mergedTools,heartbeatAt:now()};
+    // Persisted agent state must not block L1 scheduling after a restart/hydration.
+    // Keep assigned/working/verifying only when the referenced task is genuinely active.
+    if(!activeTaskOwnedBy(current)){patch.state='available';patch.currentTaskId=null;}
+    updateAgent(current.id,patch);
   }
   return listAgents();
 }
