@@ -1,36 +1,37 @@
 {
-  "command": "Flying car game for mobile",
-  "generatedAt": "2026-08-21T17:46:44.808Z",
+  "command": "Playing card game",
+  "generatedAt": "2026-08-21T18:21:18.970Z",
   "result": {
     "project": {
-      "id": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-      "name": "Project: Design a flying car game for mobile devices with engaging ga",
-      "objective": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
-      "founderCommand": "Flying car game for mobile",
+      "id": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+      "name": "Project: Design a playing card game software",
+      "objective": "Design a playing card game software",
+      "founderCommand": "Playing card game",
       "requirements": [
-        "User can control the flying car using touchscreen or accelerometer",
-        "Game includes multiple levels with increasing difficulty",
-        "Flying car can collect power-ups and coins to upgrade its speed and abilities",
-        "Game has a leaderboard to compare scores with other players"
+        "Implement card deck shuffling algorithm",
+        "Create user interface for players to interact with the game",
+        "Develop backend logic for game rules and scoring",
+        "Ensure secure data storage for player information and game history",
+        "Implement testing framework for game functionality and security"
       ],
       "priority": "normal",
       "state": "completed",
       "milestones": [],
-      "createdAt": "2026-08-21T17:46:04.490Z",
-      "updatedAt": "2026-08-21T17:46:44.808Z"
+      "createdAt": "2026-08-21T18:20:49.794Z",
+      "updatedAt": "2026-08-21T18:21:18.970Z"
     },
     "firstTask": {
-      "id": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
-      "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+      "id": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
+      "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
       "title": "Create testing and verification plan",
-      "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+      "description": "Design a playing card game software",
       "requiredCapabilities": [
         "testing",
         "verification"
       ],
       "risk": "normal",
       "dependsOn": [
-        "task_b752ca0e-e040-4dfa-9098-84389886c633"
+        "task_bcf52fc5-15e3-4148-8f70-74678febd143"
       ],
       "acceptance": [
         {
@@ -49,23 +50,23 @@
       ],
       "requiredTools": [],
       "sequence": 70,
-      "updatedAt": "2026-08-21T17:46:44.808Z",
-      "createdAt": "2026-08-21T17:46:04.490Z",
+      "updatedAt": "2026-08-21T18:21:18.970Z",
+      "createdAt": "2026-08-21T18:20:49.794Z",
       "blockedReason": "Dependencies incomplete",
-      "startedAt": "2026-08-21T17:46:44.808Z",
+      "startedAt": "2026-08-21T18:21:18.970Z",
       "memoryContext": [],
       "result": {
         "type": "plan",
-        "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+        "taskId": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
         "output": "Execution plan generated.",
         "diagnostics": {
           "healthy": true,
-          "at": "2026-08-21T17:46:44.808Z"
+          "at": "2026-08-21T18:21:18.970Z"
         },
         "summary": "Execution plan generated. Verification complete."
       },
-      "verificationId": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce",
-      "completedAt": "2026-08-21T17:46:44.808Z"
+      "verificationId": "verification_2fa8640e-a89a-42c8-98e1-df5b1337bead",
+      "completedAt": "2026-08-21T18:21:18.970Z"
     },
     "selectedAgent": {
       "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
@@ -81,28 +82,47 @@
         "code.execute"
       ],
       "state": "available",
-      "heartbeatAt": "2026-08-21T17:46:41.121Z",
-      "metadata": {},
-      "updatedAt": "2026-08-21T17:46:41.121Z",
+      "heartbeatAt": "2026-08-21T18:21:15.000Z",
+      "metadata": {
+        "outcomeCount": 1,
+        "successCount": 1,
+        "failureCount": 0,
+        "successRate": 1,
+        "lastOutcomeAt": "2026-08-21T17:46:44.808Z",
+        "lastOutcome": "success",
+        "reliabilityScore": 100,
+        "consecutiveFailures": 0,
+        "learning": {
+          "testing|verification": {
+            "attempts": 2,
+            "successes": 2,
+            "failures": 0,
+            "successRate": 1,
+            "confidence": 0.2,
+            "lastOutcomeAt": "2026-08-21T18:21:18.970Z"
+          }
+        }
+      },
+      "updatedAt": "2026-08-21T18:21:15.000Z",
       "createdAt": "2026-08-20T08:12:51.655Z",
       "currentTaskId": null
     },
     "execution": {
-      "id": "run_60466d7b-67de-4b08-9f7c-1d41fcb9270e",
-      "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+      "id": "run_c7b8150a-6083-4609-a1a5-7669159de81e",
+      "taskId": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
       "executor": "internal.plan",
       "state": "completed",
-      "startedAt": "2026-08-21T17:46:44.808Z",
+      "startedAt": "2026-08-21T18:21:18.970Z",
       "attempt": 1,
       "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
       "recoverable": false,
       "result": {
         "type": "plan",
-        "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+        "taskId": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
         "output": "Execution plan generated.",
         "diagnostics": {
           "healthy": true,
-          "at": "2026-08-21T17:46:44.808Z"
+          "at": "2026-08-21T18:21:18.970Z"
         },
         "summary": "Execution plan generated. Verification complete."
       },
@@ -112,19 +132,19 @@
           "authorization": {
             "tool": "test.run",
             "status": "available",
-            "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+            "taskId": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
             "summary": "Test runtime is available for L1 verification."
           }
         }
       ],
-      "completedAt": "2026-08-21T17:46:44.808Z",
+      "completedAt": "2026-08-21T18:21:18.970Z",
       "status": "completed",
-      "executionId": "run_60466d7b-67de-4b08-9f7c-1d41fcb9270e"
+      "executionId": "run_c7b8150a-6083-4609-a1a5-7669159de81e"
     },
     "verification": {
-      "id": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce",
-      "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
-      "executionId": "run_60466d7b-67de-4b08-9f7c-1d41fcb9270e",
+      "id": "verification_2fa8640e-a89a-42c8-98e1-df5b1337bead",
+      "taskId": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
+      "executionId": "run_c7b8150a-6083-4609-a1a5-7669159de81e",
       "passed": true,
       "checks": [
         {
@@ -159,15 +179,15 @@
           ]
         }
       ],
-      "verifiedAt": "2026-08-21T17:46:44.808Z"
+      "verifiedAt": "2026-08-21T18:21:18.970Z"
     },
     "status": "completed",
     "tasks": [
       {
-        "id": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
-        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-        "title": "Research and validate requirements: User can control the flying car using touchscreen or accelerometer",
-        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+        "id": "task_ca0df75e-3a5a-4a53-a6e2-11ca6bd1afee",
+        "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+        "title": "Research and validate requirements: Implement card deck shuffling algorithm",
+        "description": "Design a playing card game software",
         "requiredCapabilities": [
           "research",
           "analysis"
@@ -189,10 +209,10 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 10,
-        "updatedAt": "2026-08-21T17:46:04.490Z",
-        "createdAt": "2026-08-21T17:46:04.490Z",
-        "assignedAt": "2026-08-21T17:46:04.490Z",
-        "startedAt": "2026-08-21T17:46:04.490Z",
+        "updatedAt": "2026-08-21T18:20:49.794Z",
+        "createdAt": "2026-08-21T18:20:49.794Z",
+        "assignedAt": "2026-08-21T18:20:49.794Z",
+        "startedAt": "2026-08-21T18:20:49.794Z",
         "memoryContext": [
           {
             "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
@@ -207,21 +227,21 @@
         ],
         "result": {
           "type": "plan",
-          "taskId": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
+          "taskId": "task_ca0df75e-3a5a-4a53-a6e2-11ca6bd1afee",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T17:46:04.490Z"
+            "at": "2026-08-21T18:20:49.794Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_6ffd967d-429e-47a9-b78f-7998bfc11227",
-        "completedAt": "2026-08-21T17:46:04.490Z",
+        "verificationId": "verification_d7e0df0a-bee7-4313-99cf-e1dc8570ff0c",
+        "completedAt": "2026-08-21T18:20:49.794Z",
         "task": {
-          "id": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
-          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-          "title": "Research and validate requirements: User can control the flying car using touchscreen or accelerometer",
-          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+          "id": "task_ca0df75e-3a5a-4a53-a6e2-11ca6bd1afee",
+          "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+          "title": "Research and validate requirements: Implement card deck shuffling algorithm",
+          "description": "Design a playing card game software",
           "requiredCapabilities": [
             "research",
             "analysis"
@@ -243,10 +263,10 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 10,
-          "updatedAt": "2026-08-21T17:46:04.490Z",
-          "createdAt": "2026-08-21T17:46:04.490Z",
-          "assignedAt": "2026-08-21T17:46:04.490Z",
-          "startedAt": "2026-08-21T17:46:04.490Z",
+          "updatedAt": "2026-08-21T18:20:49.794Z",
+          "createdAt": "2026-08-21T18:20:49.794Z",
+          "assignedAt": "2026-08-21T18:20:49.794Z",
+          "startedAt": "2026-08-21T18:20:49.794Z",
           "memoryContext": [
             {
               "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
@@ -261,16 +281,16 @@
           ],
           "result": {
             "type": "plan",
-            "taskId": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
+            "taskId": "task_ca0df75e-3a5a-4a53-a6e2-11ca6bd1afee",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T17:46:04.490Z"
+              "at": "2026-08-21T18:20:49.794Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_6ffd967d-429e-47a9-b78f-7998bfc11227",
-          "completedAt": "2026-08-21T17:46:04.490Z"
+          "verificationId": "verification_d7e0df0a-bee7-4313-99cf-e1dc8570ff0c",
+          "completedAt": "2026-08-21T18:20:49.794Z"
         },
         "selectedAgent": {
           "id": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
@@ -285,44 +305,44 @@
             "web.search"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:46:41.121Z",
+          "heartbeatAt": "2026-08-21T18:21:15.000Z",
           "metadata": {
-            "outcomeCount": 1,
-            "successCount": 1,
+            "outcomeCount": 2,
+            "successCount": 2,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:46:04.490Z",
+            "lastOutcomeAt": "2026-08-21T18:20:49.794Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 1,
-                "successes": 1,
+                "attempts": 2,
+                "successes": 2,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.1,
-                "lastOutcomeAt": "2026-08-21T17:46:04.490Z"
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T18:20:49.794Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:46:41.121Z",
+          "updatedAt": "2026-08-21T18:21:15.000Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
-        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-        "title": "Define product and architecture plan: Game includes multiple levels with increasing difficulty",
-        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+        "id": "task_76916102-98df-438e-98bf-5f63c853a586",
+        "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+        "title": "Define product and architecture plan: Create user interface for players to interact with the game",
+        "description": "Design a playing card game software",
         "requiredCapabilities": [
           "product-planning",
           "planning"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_22301a89-f202-4f31-aea7-eb7ab68161f5"
+          "task_ca0df75e-3a5a-4a53-a6e2-11ca6bd1afee"
         ],
         "acceptance": [
           {
@@ -341,10 +361,10 @@
         ],
         "requiredTools": [],
         "sequence": 20,
-        "updatedAt": "2026-08-21T17:46:04.490Z",
-        "createdAt": "2026-08-21T17:46:04.490Z",
+        "updatedAt": "2026-08-21T18:20:49.794Z",
+        "createdAt": "2026-08-21T18:20:49.794Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:46:04.490Z",
+        "startedAt": "2026-08-21T18:20:49.794Z",
         "memoryContext": [
           {
             "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
@@ -359,28 +379,28 @@
         ],
         "result": {
           "type": "plan",
-          "taskId": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
+          "taskId": "task_76916102-98df-438e-98bf-5f63c853a586",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T17:46:04.490Z"
+            "at": "2026-08-21T18:20:49.794Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_e0a219a9-ae29-44ac-b26f-3819ce2c5fcf",
-        "completedAt": "2026-08-21T17:46:04.490Z",
+        "verificationId": "verification_ca5df088-cb49-448d-8800-563e382e3f19",
+        "completedAt": "2026-08-21T18:20:49.794Z",
         "task": {
-          "id": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
-          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-          "title": "Define product and architecture plan: Game includes multiple levels with increasing difficulty",
-          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+          "id": "task_76916102-98df-438e-98bf-5f63c853a586",
+          "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+          "title": "Define product and architecture plan: Create user interface for players to interact with the game",
+          "description": "Design a playing card game software",
           "requiredCapabilities": [
             "product-planning",
             "planning"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_22301a89-f202-4f31-aea7-eb7ab68161f5"
+            "task_ca0df75e-3a5a-4a53-a6e2-11ca6bd1afee"
           ],
           "acceptance": [
             {
@@ -399,10 +419,10 @@
           ],
           "requiredTools": [],
           "sequence": 20,
-          "updatedAt": "2026-08-21T17:46:04.490Z",
-          "createdAt": "2026-08-21T17:46:04.490Z",
+          "updatedAt": "2026-08-21T18:20:49.794Z",
+          "createdAt": "2026-08-21T18:20:49.794Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:46:04.490Z",
+          "startedAt": "2026-08-21T18:20:49.794Z",
           "memoryContext": [
             {
               "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
@@ -417,16 +437,16 @@
           ],
           "result": {
             "type": "plan",
-            "taskId": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
+            "taskId": "task_76916102-98df-438e-98bf-5f63c853a586",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T17:46:04.490Z"
+              "at": "2026-08-21T18:20:49.794Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_e0a219a9-ae29-44ac-b26f-3819ce2c5fcf",
-          "completedAt": "2026-08-21T17:46:04.490Z"
+          "verificationId": "verification_ca5df088-cb49-448d-8800-563e382e3f19",
+          "completedAt": "2026-08-21T18:20:49.794Z"
         },
         "selectedAgent": {
           "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -442,13 +462,13 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:46:41.121Z",
+          "heartbeatAt": "2026-08-21T18:21:15.000Z",
           "metadata": {
-            "outcomeCount": 22,
-            "successCount": 22,
+            "outcomeCount": 23,
+            "successCount": 23,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:46:04.490Z",
+            "lastOutcomeAt": "2026-08-21T18:20:49.794Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
@@ -462,12 +482,12 @@
                 "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
               },
               "planning|product-planning": {
-                "attempts": 11,
-                "successes": 11,
+                "attempts": 12,
+                "successes": 12,
                 "failures": 0,
                 "successRate": 1,
                 "confidence": 1,
-                "lastOutcomeAt": "2026-08-21T17:46:04.490Z"
+                "lastOutcomeAt": "2026-08-21T18:20:49.794Z"
               },
               "testing|verification": {
                 "attempts": 1,
@@ -479,23 +499,23 @@
               }
             }
           },
-          "updatedAt": "2026-08-21T17:46:41.121Z",
+          "updatedAt": "2026-08-21T18:21:15.000Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_6b0ece7d-73de-4762-9206-d56d66b482e5",
-        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-        "title": "Implement backend code and API: Game has a leaderboard to compare scores with other players",
-        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+        "id": "task_cac75197-64c6-4e79-805b-bee49772faf0",
+        "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+        "title": "Implement backend code and API: Develop backend logic for game rules and scoring",
+        "description": "Design a playing card game software",
         "requiredCapabilities": [
           "backend",
           "api"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_5de5c799-31d1-49d6-aede-e442e5624a11"
+          "task_76916102-98df-438e-98bf-5f63c853a586"
         ],
         "acceptance": [
           {
@@ -512,19 +532,19 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 30,
-        "updatedAt": "2026-08-21T17:46:10.070Z",
-        "createdAt": "2026-08-21T17:46:04.490Z",
+        "updatedAt": "2026-08-21T18:20:55.285Z",
+        "createdAt": "2026-08-21T18:20:49.794Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:46:04.490Z",
+        "startedAt": "2026-08-21T18:20:49.794Z",
         "memoryContext": [],
         "result": {
           "type": "code",
-          "artifactId": "artifact_4736e7df-50c0-4def-bb25-0399f4f33651",
+          "artifactId": "artifact_e7e69a47-4ab5-4640-b1a4-7e5a3340cf67",
           "summary": "Code artifact generated without paid/cloud services. [object Object]",
           "files": [
             {
               "path": "generated/README.md",
-              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: Game has a leaderboard to compare scores with other players\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
+              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: Develop backend logic for game rules and scoring\nObjective: Design a playing card game software\nAcceptance: [object Object]"
             }
           ],
           "tests": [
@@ -540,20 +560,20 @@
             }
           ]
         },
-        "verificationId": "verification_85000551-1ba4-4ac4-9928-7439fe9344aa",
-        "completedAt": "2026-08-21T17:46:10.070Z",
+        "verificationId": "verification_8911f9ce-9945-48fa-8261-5557cc02a43d",
+        "completedAt": "2026-08-21T18:20:55.285Z",
         "task": {
-          "id": "task_6b0ece7d-73de-4762-9206-d56d66b482e5",
-          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-          "title": "Implement backend code and API: Game has a leaderboard to compare scores with other players",
-          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+          "id": "task_cac75197-64c6-4e79-805b-bee49772faf0",
+          "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+          "title": "Implement backend code and API: Develop backend logic for game rules and scoring",
+          "description": "Design a playing card game software",
           "requiredCapabilities": [
             "backend",
             "api"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_5de5c799-31d1-49d6-aede-e442e5624a11"
+            "task_76916102-98df-438e-98bf-5f63c853a586"
           ],
           "acceptance": [
             {
@@ -570,19 +590,19 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 30,
-          "updatedAt": "2026-08-21T17:46:10.070Z",
-          "createdAt": "2026-08-21T17:46:04.490Z",
+          "updatedAt": "2026-08-21T18:20:55.285Z",
+          "createdAt": "2026-08-21T18:20:49.794Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:46:04.490Z",
+          "startedAt": "2026-08-21T18:20:49.794Z",
           "memoryContext": [],
           "result": {
             "type": "code",
-            "artifactId": "artifact_4736e7df-50c0-4def-bb25-0399f4f33651",
+            "artifactId": "artifact_e7e69a47-4ab5-4640-b1a4-7e5a3340cf67",
             "summary": "Code artifact generated without paid/cloud services. [object Object]",
             "files": [
               {
                 "path": "generated/README.md",
-                "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: Game has a leaderboard to compare scores with other players\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
+                "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: Develop backend logic for game rules and scoring\nObjective: Design a playing card game software\nAcceptance: [object Object]"
               }
             ],
             "tests": [
@@ -598,8 +618,8 @@
               }
             ]
           },
-          "verificationId": "verification_85000551-1ba4-4ac4-9928-7439fe9344aa",
-          "completedAt": "2026-08-21T17:46:10.070Z"
+          "verificationId": "verification_8911f9ce-9945-48fa-8261-5557cc02a43d",
+          "completedAt": "2026-08-21T18:20:55.285Z"
         },
         "selectedAgent": {
           "id": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
@@ -616,37 +636,37 @@
             "test.run"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:46:41.121Z",
+          "heartbeatAt": "2026-08-21T18:21:15.000Z",
           "metadata": {
-            "outcomeCount": 2,
-            "successCount": 2,
+            "outcomeCount": 3,
+            "successCount": 3,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:46:10.070Z",
+            "lastOutcomeAt": "2026-08-21T18:20:55.285Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "api|backend": {
-                "attempts": 2,
-                "successes": 2,
+                "attempts": 3,
+                "successes": 3,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.2,
-                "lastOutcomeAt": "2026-08-21T17:46:10.070Z"
+                "confidence": 0.3,
+                "lastOutcomeAt": "2026-08-21T18:20:55.285Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:46:41.121Z",
+          "updatedAt": "2026-08-21T18:21:15.000Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_bae44dbd-3341-45b4-908c-85af49106162",
-        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-        "title": "Implement database and persistence schema",
-        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+        "id": "task_0b928421-6415-426d-81a2-015a0d87398d",
+        "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+        "title": "Implement database and persistence schema: Ensure secure data storage for player information and game history",
+        "description": "Design a playing card game software",
         "requiredCapabilities": [
           "database",
           "schema",
@@ -654,7 +674,7 @@
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_6b0ece7d-73de-4762-9206-d56d66b482e5"
+          "task_cac75197-64c6-4e79-805b-bee49772faf0"
         ],
         "acceptance": [
           {
@@ -671,19 +691,19 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 40,
-        "updatedAt": "2026-08-21T17:46:23.623Z",
-        "createdAt": "2026-08-21T17:46:04.490Z",
+        "updatedAt": "2026-08-21T18:21:08.134Z",
+        "createdAt": "2026-08-21T18:20:49.794Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:46:10.070Z",
+        "startedAt": "2026-08-21T18:20:55.285Z",
         "memoryContext": [],
         "result": {
           "type": "code",
-          "artifactId": "artifact_d89f2afe-ffb4-4144-b929-b5982b004efa",
+          "artifactId": "artifact_8373a8a4-d274-469c-ae4b-238be4541704",
           "summary": "Code artifact generated without paid/cloud services. [object Object]",
           "files": [
             {
               "path": "generated/README.md",
-              "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
+              "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: Ensure secure data storage for player information and game history\nObjective: Design a playing card game software\nAcceptance: [object Object]"
             }
           ],
           "tests": [
@@ -699,13 +719,13 @@
             }
           ]
         },
-        "verificationId": "verification_18d93c74-0492-406b-8458-a158547f723c",
-        "completedAt": "2026-08-21T17:46:23.623Z",
+        "verificationId": "verification_20ac1bff-0532-4fec-92c7-5f585fe7cf15",
+        "completedAt": "2026-08-21T18:21:08.134Z",
         "task": {
-          "id": "task_bae44dbd-3341-45b4-908c-85af49106162",
-          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-          "title": "Implement database and persistence schema",
-          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+          "id": "task_0b928421-6415-426d-81a2-015a0d87398d",
+          "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+          "title": "Implement database and persistence schema: Ensure secure data storage for player information and game history",
+          "description": "Design a playing card game software",
           "requiredCapabilities": [
             "database",
             "schema",
@@ -713,7 +733,7 @@
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_6b0ece7d-73de-4762-9206-d56d66b482e5"
+            "task_cac75197-64c6-4e79-805b-bee49772faf0"
           ],
           "acceptance": [
             {
@@ -730,19 +750,19 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 40,
-          "updatedAt": "2026-08-21T17:46:23.623Z",
-          "createdAt": "2026-08-21T17:46:04.490Z",
+          "updatedAt": "2026-08-21T18:21:08.134Z",
+          "createdAt": "2026-08-21T18:20:49.794Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:46:10.070Z",
+          "startedAt": "2026-08-21T18:20:55.285Z",
           "memoryContext": [],
           "result": {
             "type": "code",
-            "artifactId": "artifact_d89f2afe-ffb4-4144-b929-b5982b004efa",
+            "artifactId": "artifact_8373a8a4-d274-469c-ae4b-238be4541704",
             "summary": "Code artifact generated without paid/cloud services. [object Object]",
             "files": [
               {
                 "path": "generated/README.md",
-                "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
+                "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: Ensure secure data storage for player information and game history\nObjective: Design a playing card game software\nAcceptance: [object Object]"
               }
             ],
             "tests": [
@@ -758,8 +778,8 @@
               }
             ]
           },
-          "verificationId": "verification_18d93c74-0492-406b-8458-a158547f723c",
-          "completedAt": "2026-08-21T17:46:23.623Z"
+          "verificationId": "verification_20ac1bff-0532-4fec-92c7-5f585fe7cf15",
+          "completedAt": "2026-08-21T18:21:08.134Z"
         },
         "selectedAgent": {
           "id": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
@@ -776,44 +796,44 @@
             "code.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:46:41.121Z",
+          "heartbeatAt": "2026-08-21T18:21:15.000Z",
           "metadata": {
-            "outcomeCount": 2,
-            "successCount": 2,
+            "outcomeCount": 3,
+            "successCount": 3,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:46:23.623Z",
+            "lastOutcomeAt": "2026-08-21T18:21:08.134Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "database|schema|sql": {
-                "attempts": 2,
-                "successes": 2,
+                "attempts": 3,
+                "successes": 3,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.2,
-                "lastOutcomeAt": "2026-08-21T17:46:23.623Z"
+                "confidence": 0.3,
+                "lastOutcomeAt": "2026-08-21T18:21:08.134Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:46:41.121Z",
+          "updatedAt": "2026-08-21T18:21:15.000Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182",
-        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-        "title": "Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities",
-        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+        "id": "task_fdbb0463-6e17-44b2-9dde-4e741f594cf9",
+        "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+        "title": "Implement frontend code and user experience: Implement testing framework for game functionality and security",
+        "description": "Design a playing card game software",
         "requiredCapabilities": [
           "frontend",
           "ui"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_bae44dbd-3341-45b4-908c-85af49106162"
+          "task_0b928421-6415-426d-81a2-015a0d87398d"
         ],
         "acceptance": [
           {
@@ -830,19 +850,19 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 50,
-        "updatedAt": "2026-08-21T17:46:39.269Z",
-        "createdAt": "2026-08-21T17:46:04.490Z",
+        "updatedAt": "2026-08-21T18:21:14.951Z",
+        "createdAt": "2026-08-21T18:20:49.794Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:46:23.623Z",
+        "startedAt": "2026-08-21T18:21:08.134Z",
         "memoryContext": [],
         "result": {
           "type": "code",
-          "artifactId": "artifact_6523791d-2ea0-4391-9679-a7c3e6cdde0e",
+          "artifactId": "artifact_ee34ff61-31ad-4ad4-8f4a-42a4ab92bd09",
           "summary": "Code artifact generated without paid/cloud services. [object Object]",
           "files": [
             {
               "path": "generated/README.md",
-              "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
+              "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience: Implement testing framework for game functionality and security\nObjective: Design a playing card game software\nAcceptance: [object Object]"
             }
           ],
           "tests": [
@@ -858,20 +878,20 @@
             }
           ]
         },
-        "verificationId": "verification_57805c78-dd57-44b5-aca1-978d54ec7a0d",
-        "completedAt": "2026-08-21T17:46:39.269Z",
+        "verificationId": "verification_c400c2d0-985c-4f3e-8df2-3a4750965417",
+        "completedAt": "2026-08-21T18:21:14.951Z",
         "task": {
-          "id": "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182",
-          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-          "title": "Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities",
-          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+          "id": "task_fdbb0463-6e17-44b2-9dde-4e741f594cf9",
+          "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+          "title": "Implement frontend code and user experience: Implement testing framework for game functionality and security",
+          "description": "Design a playing card game software",
           "requiredCapabilities": [
             "frontend",
             "ui"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_bae44dbd-3341-45b4-908c-85af49106162"
+            "task_0b928421-6415-426d-81a2-015a0d87398d"
           ],
           "acceptance": [
             {
@@ -888,19 +908,19 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 50,
-          "updatedAt": "2026-08-21T17:46:39.269Z",
-          "createdAt": "2026-08-21T17:46:04.490Z",
+          "updatedAt": "2026-08-21T18:21:14.951Z",
+          "createdAt": "2026-08-21T18:20:49.794Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:46:23.623Z",
+          "startedAt": "2026-08-21T18:21:08.134Z",
           "memoryContext": [],
           "result": {
             "type": "code",
-            "artifactId": "artifact_6523791d-2ea0-4391-9679-a7c3e6cdde0e",
+            "artifactId": "artifact_ee34ff61-31ad-4ad4-8f4a-42a4ab92bd09",
             "summary": "Code artifact generated without paid/cloud services. [object Object]",
             "files": [
               {
                 "path": "generated/README.md",
-                "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
+                "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience: Implement testing framework for game functionality and security\nObjective: Design a playing card game software\nAcceptance: [object Object]"
               }
             ],
             "tests": [
@@ -916,8 +936,8 @@
               }
             ]
           },
-          "verificationId": "verification_57805c78-dd57-44b5-aca1-978d54ec7a0d",
-          "completedAt": "2026-08-21T17:46:39.269Z"
+          "verificationId": "verification_c400c2d0-985c-4f3e-8df2-3a4750965417",
+          "completedAt": "2026-08-21T18:21:14.951Z"
         },
         "selectedAgent": {
           "id": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
@@ -934,44 +954,44 @@
             "test.run"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:46:41.121Z",
+          "heartbeatAt": "2026-08-21T18:21:15.000Z",
           "metadata": {
-            "outcomeCount": 2,
-            "successCount": 2,
+            "outcomeCount": 3,
+            "successCount": 3,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:46:39.269Z",
+            "lastOutcomeAt": "2026-08-21T18:21:14.951Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "frontend|ui": {
-                "attempts": 2,
-                "successes": 2,
+                "attempts": 3,
+                "successes": 3,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.2,
-                "lastOutcomeAt": "2026-08-21T17:46:39.269Z"
+                "confidence": 0.3,
+                "lastOutcomeAt": "2026-08-21T18:21:14.951Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:46:41.121Z",
+          "updatedAt": "2026-08-21T18:21:15.000Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_b752ca0e-e040-4dfa-9098-84389886c633",
-        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+        "id": "task_bcf52fc5-15e3-4148-8f70-74678febd143",
+        "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
         "title": "Perform security review",
-        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+        "description": "Design a playing card game software",
         "requiredCapabilities": [
           "security",
           "audit"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182"
+          "task_fdbb0463-6e17-44b2-9dde-4e741f594cf9"
         ],
         "acceptance": [
           {
@@ -988,26 +1008,29 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 60,
-        "updatedAt": "2026-08-21T17:46:44.808Z",
-        "createdAt": "2026-08-21T17:46:04.490Z",
+        "updatedAt": "2026-08-21T18:21:18.970Z",
+        "createdAt": "2026-08-21T18:20:49.794Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:46:39.269Z",
+        "startedAt": "2026-08-21T18:21:14.951Z",
         "memoryContext": [],
         "result": {
           "type": "code",
-          "artifactId": "artifact_ad8b8e32-10d7-437f-ae50-fa174f8c60d4",
-          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "artifactId": "artifact_1904da8e-fff9-4afd-94eb-affb406294cf",
+          "summary": "Security review of playing card game software design",
           "files": [
             {
-              "path": "generated/README.md",
-              "content": "MAULI L1 generated workspace\nTask: Perform security review\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
+              "content": "# Security Review\n## Introduction\nThe playing card game software design requires a thorough security review to ensure the protection of user data and prevent potential vulnerabilities.\n## Threat Model\n* Unauthorized access to user accounts\n* Data breaches\n* Cheating mechanisms\n## Security Requirements\n* Implement secure authentication and authorization mechanisms\n* Use encryption for data storage and transmission\n* Regularly update and patch dependencies\n## Audit Log\n* Record all user actions and system events\n* Store logs securely for at least 6 months\n## Compliance\n* Adhere to relevant gaming regulations and standards\n* Ensure GDPR and CCPA compliance for user data protection",
+              "path": "security_review.md"
             }
           ],
           "tests": [
-            "node --test"
+            "Unit tests for authentication and authorization",
+            "Integration tests for encryption and data storage",
+            "Penetration testing for vulnerabilities"
           ],
           "notes": [
-            "Deterministic L1 fallback used because AI runtime is unavailable."
+            "Regular security audits and reviews are necessary to ensure the software's security posture",
+            "Collaborate with security experts to implement and maintain security measures"
           ],
           "acceptance": [
             {
@@ -1016,20 +1039,20 @@
             }
           ]
         },
-        "verificationId": "verification_bd52f869-5155-4079-8bff-a960ba56681f",
-        "completedAt": "2026-08-21T17:46:44.808Z",
+        "verificationId": "verification_c44cc83a-ccae-42e8-8d38-257256ef98f2",
+        "completedAt": "2026-08-21T18:21:18.970Z",
         "task": {
-          "id": "task_b752ca0e-e040-4dfa-9098-84389886c633",
-          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+          "id": "task_bcf52fc5-15e3-4148-8f70-74678febd143",
+          "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
           "title": "Perform security review",
-          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+          "description": "Design a playing card game software",
           "requiredCapabilities": [
             "security",
             "audit"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182"
+            "task_fdbb0463-6e17-44b2-9dde-4e741f594cf9"
           ],
           "acceptance": [
             {
@@ -1046,26 +1069,29 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 60,
-          "updatedAt": "2026-08-21T17:46:44.808Z",
-          "createdAt": "2026-08-21T17:46:04.490Z",
+          "updatedAt": "2026-08-21T18:21:18.970Z",
+          "createdAt": "2026-08-21T18:20:49.794Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:46:39.269Z",
+          "startedAt": "2026-08-21T18:21:14.951Z",
           "memoryContext": [],
           "result": {
             "type": "code",
-            "artifactId": "artifact_ad8b8e32-10d7-437f-ae50-fa174f8c60d4",
-            "summary": "Code artifact generated without paid/cloud services. [object Object]",
+            "artifactId": "artifact_1904da8e-fff9-4afd-94eb-affb406294cf",
+            "summary": "Security review of playing card game software design",
             "files": [
               {
-                "path": "generated/README.md",
-                "content": "MAULI L1 generated workspace\nTask: Perform security review\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
+                "content": "# Security Review\n## Introduction\nThe playing card game software design requires a thorough security review to ensure the protection of user data and prevent potential vulnerabilities.\n## Threat Model\n* Unauthorized access to user accounts\n* Data breaches\n* Cheating mechanisms\n## Security Requirements\n* Implement secure authentication and authorization mechanisms\n* Use encryption for data storage and transmission\n* Regularly update and patch dependencies\n## Audit Log\n* Record all user actions and system events\n* Store logs securely for at least 6 months\n## Compliance\n* Adhere to relevant gaming regulations and standards\n* Ensure GDPR and CCPA compliance for user data protection",
+                "path": "security_review.md"
               }
             ],
             "tests": [
-              "node --test"
+              "Unit tests for authentication and authorization",
+              "Integration tests for encryption and data storage",
+              "Penetration testing for vulnerabilities"
             ],
             "notes": [
-              "Deterministic L1 fallback used because AI runtime is unavailable."
+              "Regular security audits and reviews are necessary to ensure the software's security posture",
+              "Collaborate with security experts to implement and maintain security measures"
             ],
             "acceptance": [
               {
@@ -1074,8 +1100,8 @@
               }
             ]
           },
-          "verificationId": "verification_bd52f869-5155-4079-8bff-a960ba56681f",
-          "completedAt": "2026-08-21T17:46:44.808Z"
+          "verificationId": "verification_c44cc83a-ccae-42e8-8d38-257256ef98f2",
+          "completedAt": "2026-08-21T18:21:18.970Z"
         },
         "selectedAgent": {
           "id": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
@@ -1090,44 +1116,44 @@
             "security.scan"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:46:44.808Z",
+          "heartbeatAt": "2026-08-21T18:21:18.970Z",
           "metadata": {
-            "outcomeCount": 2,
-            "successCount": 2,
+            "outcomeCount": 3,
+            "successCount": 3,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:46:44.808Z",
+            "lastOutcomeAt": "2026-08-21T18:21:18.970Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "audit|security": {
-                "attempts": 2,
-                "successes": 2,
+                "attempts": 3,
+                "successes": 3,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.2,
-                "lastOutcomeAt": "2026-08-21T17:46:44.808Z"
+                "confidence": 0.3,
+                "lastOutcomeAt": "2026-08-21T18:21:18.970Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:46:44.808Z",
+          "updatedAt": "2026-08-21T18:21:18.970Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
-        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+        "id": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
+        "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
         "title": "Create testing and verification plan",
-        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+        "description": "Design a playing card game software",
         "requiredCapabilities": [
           "testing",
           "verification"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_b752ca0e-e040-4dfa-9098-84389886c633"
+          "task_bcf52fc5-15e3-4148-8f70-74678febd143"
         ],
         "acceptance": [
           {
@@ -1146,35 +1172,35 @@
         ],
         "requiredTools": [],
         "sequence": 70,
-        "updatedAt": "2026-08-21T17:46:44.808Z",
-        "createdAt": "2026-08-21T17:46:04.490Z",
+        "updatedAt": "2026-08-21T18:21:18.970Z",
+        "createdAt": "2026-08-21T18:20:49.794Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:46:44.808Z",
+        "startedAt": "2026-08-21T18:21:18.970Z",
         "memoryContext": [],
         "result": {
           "type": "plan",
-          "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+          "taskId": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T17:46:44.808Z"
+            "at": "2026-08-21T18:21:18.970Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce",
-        "completedAt": "2026-08-21T17:46:44.808Z",
+        "verificationId": "verification_2fa8640e-a89a-42c8-98e1-df5b1337bead",
+        "completedAt": "2026-08-21T18:21:18.970Z",
         "task": {
-          "id": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
-          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+          "id": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
+          "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
           "title": "Create testing and verification plan",
-          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+          "description": "Design a playing card game software",
           "requiredCapabilities": [
             "testing",
             "verification"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_b752ca0e-e040-4dfa-9098-84389886c633"
+            "task_bcf52fc5-15e3-4148-8f70-74678febd143"
           ],
           "acceptance": [
             {
@@ -1193,23 +1219,23 @@
           ],
           "requiredTools": [],
           "sequence": 70,
-          "updatedAt": "2026-08-21T17:46:44.808Z",
-          "createdAt": "2026-08-21T17:46:04.490Z",
+          "updatedAt": "2026-08-21T18:21:18.970Z",
+          "createdAt": "2026-08-21T18:20:49.794Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:46:44.808Z",
+          "startedAt": "2026-08-21T18:21:18.970Z",
           "memoryContext": [],
           "result": {
             "type": "plan",
-            "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+            "taskId": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T17:46:44.808Z"
+              "at": "2026-08-21T18:21:18.970Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce",
-          "completedAt": "2026-08-21T17:46:44.808Z"
+          "verificationId": "verification_2fa8640e-a89a-42c8-98e1-df5b1337bead",
+          "completedAt": "2026-08-21T18:21:18.970Z"
         },
         "selectedAgent": {
           "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
@@ -1225,45 +1251,45 @@
             "code.execute"
           ],
           "state": "assigned",
-          "heartbeatAt": "2026-08-21T17:46:44.808Z",
+          "heartbeatAt": "2026-08-21T18:21:18.970Z",
           "metadata": {
-            "outcomeCount": 1,
-            "successCount": 1,
+            "outcomeCount": 2,
+            "successCount": 2,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:46:44.808Z",
+            "lastOutcomeAt": "2026-08-21T18:21:18.970Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "testing|verification": {
-                "attempts": 1,
-                "successes": 1,
+                "attempts": 2,
+                "successes": 2,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.1,
-                "lastOutcomeAt": "2026-08-21T17:46:44.808Z"
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T18:21:18.970Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:46:44.808Z",
+          "updatedAt": "2026-08-21T18:21:18.970Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
-          "currentTaskId": "task_c343fff0-e140-4857-8386-51d7dc1b845d"
+          "currentTaskId": "task_aeb0e275-de0d-49ca-820d-12847841e1b0"
         }
       }
     ],
     "finalDelivery": {
-      "id": "artifact_3ca17aea-ee76-4fa3-8ab6-5057124ebc14",
-      "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+      "id": "artifact_e46ef2e4-b8dc-40ca-a6dd-fc3a2e7a2e00",
+      "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
       "taskId": null,
       "agentId": null,
       "type": "final-delivery",
       "content": {
-        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+        "projectId": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
         "project": {
-          "id": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
-          "name": "Project: Design a flying car game for mobile devices with engaging ga",
-          "objective": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+          "id": "project_078e3af5-efb1-4b5d-b432-7f72d5100959",
+          "name": "Project: Design a playing card game software",
+          "objective": "Design a playing card game software",
           "state": "completed"
         },
         "summary": {
@@ -1271,95 +1297,95 @@
           "completedTasks": 8,
           "failedTasks": 0,
           "artifactCount": 4,
-          "deliveredAt": "2026-08-21T17:46:44.808Z"
+          "deliveredAt": "2026-08-21T18:21:18.970Z"
         },
         "tasks": [
           {
-            "id": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
-            "title": "Research and validate requirements: User can control the flying car using touchscreen or accelerometer",
+            "id": "task_ca0df75e-3a5a-4a53-a6e2-11ca6bd1afee",
+            "title": "Research and validate requirements: Implement card deck shuffling algorithm",
             "state": "completed",
             "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
-            "verificationId": "verification_6ffd967d-429e-47a9-b78f-7998bfc11227"
+            "verificationId": "verification_d7e0df0a-bee7-4313-99cf-e1dc8570ff0c"
           },
           {
-            "id": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
-            "title": "Define product and architecture plan: Game includes multiple levels with increasing difficulty",
+            "id": "task_76916102-98df-438e-98bf-5f63c853a586",
+            "title": "Define product and architecture plan: Create user interface for players to interact with the game",
             "state": "completed",
             "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-            "verificationId": "verification_e0a219a9-ae29-44ac-b26f-3819ce2c5fcf"
+            "verificationId": "verification_ca5df088-cb49-448d-8800-563e382e3f19"
           },
           {
-            "id": "task_6b0ece7d-73de-4762-9206-d56d66b482e5",
-            "title": "Implement backend code and API: Game has a leaderboard to compare scores with other players",
+            "id": "task_cac75197-64c6-4e79-805b-bee49772faf0",
+            "title": "Implement backend code and API: Develop backend logic for game rules and scoring",
             "state": "completed",
             "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
-            "verificationId": "verification_85000551-1ba4-4ac4-9928-7439fe9344aa"
+            "verificationId": "verification_8911f9ce-9945-48fa-8261-5557cc02a43d"
           },
           {
-            "id": "task_bae44dbd-3341-45b4-908c-85af49106162",
-            "title": "Implement database and persistence schema",
+            "id": "task_0b928421-6415-426d-81a2-015a0d87398d",
+            "title": "Implement database and persistence schema: Ensure secure data storage for player information and game history",
             "state": "completed",
             "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
-            "verificationId": "verification_18d93c74-0492-406b-8458-a158547f723c"
+            "verificationId": "verification_20ac1bff-0532-4fec-92c7-5f585fe7cf15"
           },
           {
-            "id": "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182",
-            "title": "Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities",
+            "id": "task_fdbb0463-6e17-44b2-9dde-4e741f594cf9",
+            "title": "Implement frontend code and user experience: Implement testing framework for game functionality and security",
             "state": "completed",
             "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
-            "verificationId": "verification_57805c78-dd57-44b5-aca1-978d54ec7a0d"
+            "verificationId": "verification_c400c2d0-985c-4f3e-8df2-3a4750965417"
           },
           {
-            "id": "task_b752ca0e-e040-4dfa-9098-84389886c633",
+            "id": "task_bcf52fc5-15e3-4148-8f70-74678febd143",
             "title": "Perform security review",
             "state": "completed",
             "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
-            "verificationId": "verification_bd52f869-5155-4079-8bff-a960ba56681f"
+            "verificationId": "verification_c44cc83a-ccae-42e8-8d38-257256ef98f2"
           },
           {
-            "id": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+            "id": "task_9f0adcde-1aca-4813-b441-d7e06fcaa596",
             "title": "Create testing and verification plan",
             "state": "completed",
             "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-            "verificationId": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce"
+            "verificationId": "verification_2fa8640e-a89a-42c8-98e1-df5b1337bead"
           },
           {
-            "id": "task_c343fff0-e140-4857-8386-51d7dc1b845d",
+            "id": "task_aeb0e275-de0d-49ca-820d-12847841e1b0",
             "title": "Final project verification and QA",
             "state": "completed",
             "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-            "verificationId": "verification_d0ccd2a0-beb3-4045-9712-fc15e91df7bf"
+            "verificationId": null
           }
         ],
         "artifacts": [
           {
-            "id": "artifact_4736e7df-50c0-4def-bb25-0399f4f33651",
+            "id": "artifact_e7e69a47-4ab5-4640-b1a4-7e5a3340cf67",
             "type": "code-workspace",
-            "taskId": "task_6b0ece7d-73de-4762-9206-d56d66b482e5",
+            "taskId": "task_cac75197-64c6-4e79-805b-bee49772faf0",
             "metadata": {
               "generatedBy": "internal.code"
             }
           },
           {
-            "id": "artifact_d89f2afe-ffb4-4144-b929-b5982b004efa",
+            "id": "artifact_8373a8a4-d274-469c-ae4b-238be4541704",
             "type": "code-workspace",
-            "taskId": "task_bae44dbd-3341-45b4-908c-85af49106162",
+            "taskId": "task_0b928421-6415-426d-81a2-015a0d87398d",
             "metadata": {
               "generatedBy": "internal.code"
             }
           },
           {
-            "id": "artifact_6523791d-2ea0-4391-9679-a7c3e6cdde0e",
+            "id": "artifact_ee34ff61-31ad-4ad4-8f4a-42a4ab92bd09",
             "type": "code-workspace",
-            "taskId": "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182",
+            "taskId": "task_fdbb0463-6e17-44b2-9dde-4e741f594cf9",
             "metadata": {
               "generatedBy": "internal.code"
             }
           },
           {
-            "id": "artifact_ad8b8e32-10d7-437f-ae50-fa174f8c60d4",
+            "id": "artifact_1904da8e-fff9-4afd-94eb-affb406294cf",
             "type": "code-workspace",
-            "taskId": "task_b752ca0e-e040-4dfa-9098-84389886c633",
+            "taskId": "task_bcf52fc5-15e3-4148-8f70-74678febd143",
             "metadata": {
               "generatedBy": "internal.code"
             }
@@ -1370,8 +1396,8 @@
         "state": "completed",
         "generatedBy": "mauli-l1-delivery"
       },
-      "createdAt": "2026-08-21T17:46:44.808Z",
-      "updatedAt": "2026-08-21T17:46:44.808Z"
+      "createdAt": "2026-08-21T18:21:18.970Z",
+      "updatedAt": "2026-08-21T18:21:18.970Z"
     }
   }
 }
