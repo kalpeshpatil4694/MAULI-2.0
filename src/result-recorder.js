@@ -44,10 +44,11 @@ function normalizeResult(result) {
   if (result.finalDelivery?.id) return { ...result, artifact: result.finalDelivery.id, artifactType: result.finalDelivery.type ?? 'final-delivery' };
   if (result.execution?.result?.artifactId) return { ...result, artifact: result.execution.result.artifactId };
   const projectId = result.project?.id;
-  if (result.status === 'completed' && projectId) {
-    const finalDelivery = store.list('artifacts')
-      .filter(artifact => artifact.projectId === projectId && artifact.type === 'final-delivery')
-      .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0];
+  if (result.status === 'completed' && projectId && store?.list) {
+    const artifacts = store.list('artifacts') || [];
+    const finalDelivery = artifacts
+      .filter(artifact => artifact?.projectId === projectId && artifact?.type === 'final-delivery')
+      .sort((a, b) => String(b?.createdAt ?? '').localeCompare(String(a?.createdAt ?? '')))[0];
     if (finalDelivery?.id) return { ...result, artifact: finalDelivery.id, artifactType: finalDelivery.type };
   }
   return result;
