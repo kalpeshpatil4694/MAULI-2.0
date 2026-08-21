@@ -1,6 +1,8 @@
 const GITHUB_API = 'https://api.github.com';
 const DEFAULT_REPO = 'kalpeshpatil4694/MAULI-2.0';
 const DEFAULT_PATH = 'Result';
+const DEFAULT_BRANCH = 'main';
+const MAX_ATTEMPTS = 3;
 
 function utf8ToBase64(value) {
   const bytes = new TextEncoder().encode(value);
@@ -18,6 +20,26 @@ function base64ToUtf8(value) {
   return new TextDecoder().decode(bytes);
 }
 
+function headers(token) {
+  return {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'MAULI-2.0-result-recorder',
+    'Content-Type': 'application/json'
+  };
+}
+
+async function readCurrentSha(url, requestHeaders) {
+  const response = await fetch(url, { headers: requestHeaders });
+  if (response.ok) {
+    const data = await response.json();
+    return { ok: true, sha: data.sha || null };
+  }
+  if (response.status === 404) return { ok: true, sha: null };
+  return { ok: false, status: response.status };
+}
+
 export async function saveCommandResult(result, env) {
   const token = env?.GITHUB_TOKEN;
   if (!token) {
@@ -26,45 +48,60 @@ export async function saveCommandResult(result, env) {
 
   const repo = env.GITHUB_REPO || DEFAULT_REPO;
   const path = env.GITHUB_RESULT_PATH || DEFAULT_PATH;
-  const branch = env.GITHUB_RESULT_BRANCH || 'main';
+  const branch = env.GITHUB_RESULT_BRANCH || DEFAULT_BRANCH;
   const url = `${GITHUB_API}/repos/${repo}/contents/${encodeURIComponent(path)}`;
-  const headers = {
-    Accept: 'application/vnd.github+json',
-    Authorization: `Bearer ${token}`,
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent': 'MAULI-2.0-result-recorder',
-    'Content-Type': 'application/json'
-  };
-
-  let sha;
-  const existing = await fetch(`${url}?ref=${encodeURIComponent(branch)}`, { headers });
-  if (existing.ok) {
-    const data = await existing.json();
-    sha = data.sha;
-  } else if (existing.status !== 404) {
-    return { saved: false, reason: `GitHub read failed (${existing.status})` };
-  }
-
+  const requestHeaders = headers(token);
   const payload = JSON.stringify(result, null, 2) + '\n';
-  const body = {
-    message: `chore: save latest MAULI command result`,
-    content: utf8ToBase64(payload),
-    branch
-  };
-  if (sha) body.sha = sha;
 
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify(body)
-  });
+  // The GitHub Contents API replaces the complete file when PUT is given
+  // the current SHA. Nothing is appended: every command becomes the sole
+  // content of Result. Retry on 409 because another command may have updated
+  // Result between the SHA read and the write.
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const current = await readCurrentSha(
+      `${url}?ref=${encodeURIComponent(branch)}`,
+      requestHeaders
+    );
+    if (!current.ok) {
+      return { saved: false, reason: `GitHub read failed (${current.status})` };
+    }
 
-  if (!response.ok) {
-    return { saved: false, reason: `GitHub write failed (${response.status})` };
+    const body = {
+      message: 'chore: replace latest MAULI command result',
+      content: utf8ToBase64(payload),
+      branch
+    };
+    if (current.sha) body.sha = current.sha;
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: requestHeaders,
+      body: JSON.stringify(body)
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        saved: true,
+        replaced: Boolean(current.sha),
+        path,
+        branch,
+        commitSha: data.commit?.sha || null,
+        attempts: attempt
+      };
+    }
+
+    if (response.status !== 409 || attempt === MAX_ATTEMPTS) {
+      let detail = '';
+      try {
+        const error = await response.json();
+        detail = error?.message ? `: ${error.message}` : '';
+      } catch {}
+      return { saved: false, reason: `GitHub write failed (${response.status})${detail}` };
+    }
   }
 
-  const data = await response.json();
-  return { saved: true, path, branch, commitSha: data.commit?.sha || null };
+  return { saved: false, reason: 'GitHub write failed after retries' };
 }
 
 export function decodeStoredResult(content) {
