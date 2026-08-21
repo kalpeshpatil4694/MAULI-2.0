@@ -22,28 +22,25 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Ensure Result writer GitHub token
+      - name: Deploy Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          MAULI_GITHUB_TOKEN: ${{ secrets.MAULI_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          existing="$(npx wrangler secret list --format json)"
-          if echo "$existing" | jq -e '.[] | select(.name == "GITHUB_TOKEN")' >/dev/null; then
-            echo "GITHUB_TOKEN already configured on Worker"
-            exit 0
-          fi
-          if [ -z "${MAULI_GITHUB_TOKEN:-}" ]; then
-            echo "::error::Worker is missing GITHUB_TOKEN and GitHub Actions secret MAULI_GITHUB_TOKEN is not configured. Add MAULI_GITHUB_TOKEN as a repository secret, then rerun deployment."
-            exit 1
-          fi
-          printf '%s' "$MAULI_GITHUB_TOKEN" | npx wrangler secret put GITHUB_TOKEN
-
-      - name: Deploy Worker
-        run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          echo "Deploying MAULI 2.0 Worker..."
+          for attempt in 1 2 3; do
+            if npx wrangler deploy; then
+              echo "Deployment succeeded on attempt $attempt"
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              wait=$((attempt * 30))
+              echo "Cloudflare API may be throttling. Waiting ${wait}s before retry..."
+              sleep "$wait"
+            fi
+          done
+          echo "::error::Cloudflare deployment failed after 3 attempts."
+          exit 1
 
 # Direct Wrangler deployment is the source of truth; Cloudflare Workers Builds is intentionally disconnected.
