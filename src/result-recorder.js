@@ -42,9 +42,10 @@ async function verifyWrite(url, requestHeaders, expectedPayload) {
 
 export async function saveCommandResult(result, env) {
   const diagnostics=[];
-  const token=env?.GITHUB_TOKEN;
-  diagnostics.push(diag('start',{repo:DEFAULT_REPO,path:DEFAULT_PATH,branch:DEFAULT_BRANCH,tokenConfigured:Boolean(token)}));
-  if(!token) return {saved:false,reason:'GITHUB_TOKEN is not configured',diagnostics:diagnostics.concat(diag('missing-token'))};
+  const token=env?.GITHUB_TOKEN||env?.GITHUB_PAT||env?.MAULI_GITHUB_TOKEN;
+  const tokenSource=env?.GITHUB_TOKEN?'GITHUB_TOKEN':env?.GITHUB_PAT?'GITHUB_PAT':env?.MAULI_GITHUB_TOKEN?'MAULI_GITHUB_TOKEN':null;
+  diagnostics.push(diag('start',{repo:DEFAULT_REPO,path:DEFAULT_PATH,branch:DEFAULT_BRANCH,tokenConfigured:Boolean(token),tokenSource}));
+  if(!token) return {saved:false,reason:'GitHub token is not configured (expected GITHUB_TOKEN, GITHUB_PAT, or MAULI_GITHUB_TOKEN)',diagnostics:diagnostics.concat(diag('missing-token'))};
 
   const url=`${GITHUB_API}/repos/${DEFAULT_REPO}/contents/${encodeURIComponent(DEFAULT_PATH)}`;
   const requestHeaders=headers(token);
