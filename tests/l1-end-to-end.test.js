@@ -29,8 +29,8 @@ test('L1 end-to-end: founder command creates and executes a project flow', async
 
 test('L1 completion requires final project QA and returns only current project tasks', async () => {
   seedAgents();
-  const first = await planCommand('Build a chess game', {});
-  const second = await planCommand('Build a calculator app', {});
+  const first = await planCommand('Research a chess game product', {});
+  const second = await planCommand('Research a calculator product', {});
 
   assert.notEqual(first.project.id, second.project.id, 'each founder command must create a new project');
 
