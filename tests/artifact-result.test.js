@@ -6,13 +6,15 @@ test('Result persistence exposes final delivery artifact id', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   let writtenPayload = null;
+  let writtenPayloadText = null;
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url, options });
     if (options.method === 'PUT') {
-      writtenPayload = JSON.parse(Buffer.from(JSON.parse(options.body).content, 'base64').toString('utf8'));
+      writtenPayloadText = Buffer.from(JSON.parse(options.body).content, 'base64').toString('utf8');
+      writtenPayload = JSON.parse(writtenPayloadText);
       return new Response(JSON.stringify({ ok: true, commit: { sha: 'commit-test' }, content: { sha: 'content-test' } }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
-    const body = Buffer.from(JSON.stringify(writtenPayload ?? {})).toString('base64');
+    const body = Buffer.from(writtenPayloadText ?? JSON.stringify(writtenPayload ?? {})).toString('base64');
     return new Response(JSON.stringify({ sha: 'existing', content: body }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   try {
