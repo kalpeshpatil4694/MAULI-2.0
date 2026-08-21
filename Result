@@ -1,75 +1,186 @@
 {
-  "command": "Build Wifi signal treaser mobile application",
-  "generatedAt": "2026-08-21T20:46:43.292Z",
+  "command": "Calculator banva",
+  "generatedAt": "2026-08-21T21:18:50.864Z",
   "result": {
-    "intent": {
-      "id": "intent_2ad00631-0a59-4c53-b56e-f681c95b2230",
-      "command": "Build Wifi signal treaser mobile application",
-      "objective": "Build Wifi signal treaser mobile application",
-      "capabilities": [
-        "requirements"
-      ]
-    },
-    "aiPlan": {
-      "objective": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
-      "requirements": [
-        "Ability to scan and display nearby Wifi networks",
-        "Signal strength visualization",
-        "Network details display (SSID, channel, encryption method)",
-        "User-friendly interface",
-        "Support for multiple mobile platforms"
-      ],
-      "capabilities": [
-        "research",
-        "product-planning",
-        "frontend",
-        "backend",
-        "database",
-        "security",
-        "testing"
-      ],
-      "risks": [
-        "Difficulty in accessing device-level Wifi scanning capabilities on certain platforms",
-        "Potential issues with signal strength accuracy and consistency",
-        "Ensuring user privacy and security when accessing Wifi network information"
-      ],
-      "acceptanceCriteria": [
-        "The app successfully scans and displays at least 5 nearby Wifi networks",
-        "Signal strength is accurately visualized for each network",
-        "Network details are correctly displayed for each network",
-        "The app is usable on at least 2 major mobile platforms (Android, iOS)",
-        "The app passes security testing and verification"
-      ]
-    },
     "project": {
-      "id": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-      "name": "Project: Design and develop a mobile application to detect and visual",
-      "objective": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
-      "founderCommand": "Build Wifi signal treaser mobile application",
+      "id": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+      "name": "Project: Create a calculator software product",
+      "objective": "Create a calculator software product",
+      "founderCommand": "Calculator banva",
       "requirements": [
-        "Ability to scan and display nearby Wifi networks",
-        "Signal strength visualization",
-        "Network details display (SSID, channel, encryption method)",
-        "User-friendly interface",
-        "Support for multiple mobile platforms"
+        "User can input numbers and mathematical operators",
+        "User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+        "User can view calculation history",
+        "User can clear calculation history"
       ],
       "priority": "normal",
-      "state": "planning",
+      "state": "completed",
       "milestones": [],
-      "createdAt": "2026-08-21T20:46:43.292Z",
-      "updatedAt": "2026-08-21T20:46:43.292Z"
+      "createdAt": "2026-08-21T21:18:17.054Z",
+      "updatedAt": "2026-08-21T21:18:50.864Z"
     },
+    "firstTask": {
+      "id": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+      "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+      "title": "Final project verification and QA",
+      "description": "Verify completed project project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+      "requiredCapabilities": [
+        "testing",
+        "verification"
+      ],
+      "risk": "low",
+      "dependsOn": [
+        "task_8e67d094-1cb7-44af-98d9-543b3c5ccf65"
+      ],
+      "acceptance": [
+        {
+          "field": "type",
+          "equals": "plan"
+        }
+      ],
+      "state": "completed",
+      "attempts": 1,
+      "maxAttempts": 1,
+      "executor": "internal.plan",
+      "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+      "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+      "toolNames": [],
+      "requiredTools": [],
+      "sequence": 999,
+      "finalProjectVerification": true,
+      "updatedAt": "2026-08-21T21:18:50.864Z",
+      "createdAt": "2026-08-21T21:18:50.864Z",
+      "assignedAt": "2026-08-21T21:18:50.864Z",
+      "startedAt": "2026-08-21T21:18:50.864Z",
+      "memoryContext": [],
+      "result": {
+        "type": "plan",
+        "taskId": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+        "output": "Execution plan generated.",
+        "diagnostics": {
+          "healthy": true,
+          "at": "2026-08-21T21:18:50.864Z"
+        },
+        "summary": "Execution plan generated. Verification complete."
+      },
+      "verificationId": "verification_9483aab7-e16e-4d63-bd01-fd99f3884a47",
+      "completedAt": "2026-08-21T21:18:50.864Z"
+    },
+    "selectedAgent": {
+      "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+      "name": "QA Agent",
+      "role": "Tester",
+      "department": "Quality",
+      "capabilities": [
+        "testing",
+        "verification"
+      ],
+      "tools": [
+        "test.run",
+        "code.execute"
+      ],
+      "state": "available",
+      "heartbeatAt": "2026-08-21T21:18:50.864Z",
+      "metadata": {
+        "outcomeCount": 16,
+        "successCount": 16,
+        "failureCount": 0,
+        "successRate": 1,
+        "lastOutcomeAt": "2026-08-21T21:18:50.864Z",
+        "lastOutcome": "success",
+        "reliabilityScore": 100,
+        "consecutiveFailures": 0,
+        "learning": {
+          "testing|verification": {
+            "attempts": 16,
+            "successes": 16,
+            "failures": 0,
+            "successRate": 1,
+            "confidence": 1,
+            "lastOutcomeAt": "2026-08-21T21:18:50.864Z"
+          }
+        }
+      },
+      "updatedAt": "2026-08-21T21:18:50.864Z",
+      "createdAt": "2026-08-20T08:12:51.655Z",
+      "currentTaskId": null
+    },
+    "execution": {
+      "id": "run_a7165094-4c14-4b9e-b80f-229fbfb80da7",
+      "taskId": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+      "executor": "internal.plan",
+      "state": "completed",
+      "startedAt": "2026-08-21T21:18:50.864Z",
+      "attempt": 1,
+      "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+      "recoverable": false,
+      "result": {
+        "type": "plan",
+        "taskId": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+        "output": "Execution plan generated.",
+        "diagnostics": {
+          "healthy": true,
+          "at": "2026-08-21T21:18:50.864Z"
+        },
+        "summary": "Execution plan generated. Verification complete."
+      },
+      "requiredTools": [],
+      "completedAt": "2026-08-21T21:18:50.864Z",
+      "status": "completed",
+      "executionId": "run_a7165094-4c14-4b9e-b80f-229fbfb80da7"
+    },
+    "verification": {
+      "id": "verification_9483aab7-e16e-4d63-bd01-fd99f3884a47",
+      "taskId": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+      "executionId": "run_a7165094-4c14-4b9e-b80f-229fbfb80da7",
+      "passed": true,
+      "checks": [
+        {
+          "name": "execution_completed",
+          "passed": true
+        },
+        {
+          "name": "has_result",
+          "passed": true
+        },
+        {
+          "name": "task_identity",
+          "passed": true
+        },
+        {
+          "name": "agent_identity",
+          "passed": true
+        },
+        {
+          "name": "acceptance_criteria",
+          "passed": true,
+          "details": [
+            {
+              "rule": {
+                "field": "type",
+                "equals": "plan"
+              },
+              "passed": true,
+              "actual": "plan",
+              "mode": "equals"
+            }
+          ]
+        }
+      ],
+      "verifiedAt": "2026-08-21T21:18:50.864Z"
+    },
+    "status": "completed",
     "tasks": [
       {
-        "id": "task_c9f8356c-5f8c-4358-8bb8-461c496eae6e",
-        "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-        "title": "Research and validate requirements: Ability to scan and display nearby Wifi networks",
-        "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+        "id": "task_b56dad9c-89ed-4df8-a896-7ded0e5847a6",
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+        "title": "Research and validate requirements: User can input numbers and mathematical operators",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "research",
           "analysis"
         ],
-        "risk": "high",
+        "risk": "normal",
         "dependsOn": [],
         "acceptance": [
           {
@@ -77,8 +188,8 @@
             "equals": "plan"
           }
         ],
-        "state": "assigned",
-        "attempts": 0,
+        "state": "completed",
+        "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.plan",
         "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
@@ -86,19 +197,33 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 10,
-        "updatedAt": "2026-08-21T20:46:43.292Z",
-        "createdAt": "2026-08-21T20:46:43.292Z",
-        "assignedAt": "2026-08-21T20:46:43.292Z",
+        "updatedAt": "2026-08-21T21:18:17.054Z",
+        "createdAt": "2026-08-21T21:18:17.054Z",
+        "assignedAt": "2026-08-21T21:18:17.054Z",
+        "startedAt": "2026-08-21T21:18:17.054Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_b56dad9c-89ed-4df8-a896-7ded0e5847a6",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-21T21:18:17.054Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_798218e2-1067-4d91-8a71-e46c214ec68c",
+        "completedAt": "2026-08-21T21:18:17.054Z",
         "task": {
-          "id": "task_c9f8356c-5f8c-4358-8bb8-461c496eae6e",
-          "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-          "title": "Research and validate requirements: Ability to scan and display nearby Wifi networks",
-          "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+          "id": "task_b56dad9c-89ed-4df8-a896-7ded0e5847a6",
+          "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+          "title": "Research and validate requirements: User can input numbers and mathematical operators",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "research",
             "analysis"
           ],
-          "risk": "high",
+          "risk": "normal",
           "dependsOn": [],
           "acceptance": [
             {
@@ -106,8 +231,8 @@
               "equals": "plan"
             }
           ],
-          "state": "assigned",
-          "attempts": 0,
+          "state": "completed",
+          "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.plan",
           "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
@@ -115,9 +240,23 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 10,
-          "updatedAt": "2026-08-21T20:46:43.292Z",
-          "createdAt": "2026-08-21T20:46:43.292Z",
-          "assignedAt": "2026-08-21T20:46:43.292Z"
+          "updatedAt": "2026-08-21T21:18:17.054Z",
+          "createdAt": "2026-08-21T21:18:17.054Z",
+          "assignedAt": "2026-08-21T21:18:17.054Z",
+          "startedAt": "2026-08-21T21:18:17.054Z",
+          "memoryContext": [],
+          "result": {
+            "type": "plan",
+            "taskId": "task_b56dad9c-89ed-4df8-a896-7ded0e5847a6",
+            "output": "Execution plan generated.",
+            "diagnostics": {
+              "healthy": true,
+              "at": "2026-08-21T21:18:17.054Z"
+            },
+            "summary": "Execution plan generated. Verification complete."
+          },
+          "verificationId": "verification_798218e2-1067-4d91-8a71-e46c214ec68c",
+          "completedAt": "2026-08-21T21:18:17.054Z"
         },
         "selectedAgent": {
           "id": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
@@ -132,44 +271,44 @@
             "web.search"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T20:46:43.292Z",
+          "heartbeatAt": "2026-08-21T21:18:47.510Z",
           "metadata": {
-            "outcomeCount": 8,
-            "successCount": 8,
+            "outcomeCount": 10,
+            "successCount": 10,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T20:35:21.398Z",
+            "lastOutcomeAt": "2026-08-21T21:18:17.054Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 8,
-                "successes": 8,
+                "attempts": 10,
+                "successes": 10,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.8,
-                "lastOutcomeAt": "2026-08-21T20:35:21.398Z"
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-21T21:18:17.054Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T20:46:43.292Z",
+          "updatedAt": "2026-08-21T21:18:47.510Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_9ebcab60-c369-4b3f-b9c1-080e88d48b73",
-        "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-        "title": "Define product and architecture plan: Signal strength visualization",
-        "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+        "id": "task_0246838b-b0e8-4bfd-89df-1a9f8fc360e6",
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+        "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "product-planning",
           "planning"
         ],
-        "risk": "high",
+        "risk": "normal",
         "dependsOn": [
-          "task_c9f8356c-5f8c-4358-8bb8-461c496eae6e"
+          "task_b56dad9c-89ed-4df8-a896-7ded0e5847a6"
         ],
         "acceptance": [
           {
@@ -177,8 +316,8 @@
             "equals": "plan"
           }
         ],
-        "state": "blocked",
-        "attempts": 0,
+        "state": "completed",
+        "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.plan",
         "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -188,21 +327,35 @@
         ],
         "requiredTools": [],
         "sequence": 20,
-        "updatedAt": "2026-08-21T20:46:43.292Z",
-        "createdAt": "2026-08-21T20:46:43.292Z",
+        "updatedAt": "2026-08-21T21:18:17.054Z",
+        "createdAt": "2026-08-21T21:18:17.054Z",
         "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-21T21:18:17.054Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_0246838b-b0e8-4bfd-89df-1a9f8fc360e6",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-21T21:18:17.054Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_86717de4-3f93-40f5-947d-c1439d5b5aac",
+        "completedAt": "2026-08-21T21:18:17.054Z",
         "task": {
-          "id": "task_9ebcab60-c369-4b3f-b9c1-080e88d48b73",
-          "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-          "title": "Define product and architecture plan: Signal strength visualization",
-          "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+          "id": "task_0246838b-b0e8-4bfd-89df-1a9f8fc360e6",
+          "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+          "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "product-planning",
             "planning"
           ],
-          "risk": "high",
+          "risk": "normal",
           "dependsOn": [
-            "task_c9f8356c-5f8c-4358-8bb8-461c496eae6e"
+            "task_b56dad9c-89ed-4df8-a896-7ded0e5847a6"
           ],
           "acceptance": [
             {
@@ -210,8 +363,8 @@
               "equals": "plan"
             }
           ],
-          "state": "blocked",
-          "attempts": 0,
+          "state": "completed",
+          "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.plan",
           "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -221,9 +374,23 @@
           ],
           "requiredTools": [],
           "sequence": 20,
-          "updatedAt": "2026-08-21T20:46:43.292Z",
-          "createdAt": "2026-08-21T20:46:43.292Z",
-          "blockedReason": "Dependencies incomplete"
+          "updatedAt": "2026-08-21T21:18:17.054Z",
+          "createdAt": "2026-08-21T21:18:17.054Z",
+          "blockedReason": "Dependencies incomplete",
+          "startedAt": "2026-08-21T21:18:17.054Z",
+          "memoryContext": [],
+          "result": {
+            "type": "plan",
+            "taskId": "task_0246838b-b0e8-4bfd-89df-1a9f8fc360e6",
+            "output": "Execution plan generated.",
+            "diagnostics": {
+              "healthy": true,
+              "at": "2026-08-21T21:18:17.054Z"
+            },
+            "summary": "Execution plan generated. Verification complete."
+          },
+          "verificationId": "verification_86717de4-3f93-40f5-947d-c1439d5b5aac",
+          "completedAt": "2026-08-21T21:18:17.054Z"
         },
         "selectedAgent": {
           "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -239,13 +406,13 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T20:46:43.292Z",
+          "heartbeatAt": "2026-08-21T21:18:47.510Z",
           "metadata": {
-            "outcomeCount": 29,
-            "successCount": 29,
+            "outcomeCount": 31,
+            "successCount": 31,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T20:35:21.398Z",
+            "lastOutcomeAt": "2026-08-21T21:18:17.054Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
@@ -259,12 +426,12 @@
                 "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
               },
               "planning|product-planning": {
-                "attempts": 18,
-                "successes": 18,
+                "attempts": 20,
+                "successes": 20,
                 "failures": 0,
                 "successRate": 1,
                 "confidence": 1,
-                "lastOutcomeAt": "2026-08-21T20:35:21.398Z"
+                "lastOutcomeAt": "2026-08-21T21:18:17.054Z"
               },
               "testing|verification": {
                 "attempts": 1,
@@ -276,23 +443,23 @@
               }
             }
           },
-          "updatedAt": "2026-08-21T20:46:43.292Z",
+          "updatedAt": "2026-08-21T21:18:47.510Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_67020d9c-e854-4add-a1dc-a6f4f07f8dc5",
-        "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-        "title": "Implement backend code and API: Network details display (SSID, channel, encryption method)",
-        "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+        "id": "task_b655046e-6819-43b0-9a19-cacbe73e49f3",
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+        "title": "Implement backend code and API: User can view calculation history",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "backend",
           "api"
         ],
-        "risk": "high",
+        "risk": "normal",
         "dependsOn": [
-          "task_9ebcab60-c369-4b3f-b9c1-080e88d48b73"
+          "task_0246838b-b0e8-4bfd-89df-1a9f8fc360e6"
         ],
         "acceptance": [
           {
@@ -300,8 +467,8 @@
             "equals": "code"
           }
         ],
-        "state": "blocked",
-        "attempts": 0,
+        "state": "completed",
+        "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.code",
         "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
@@ -309,21 +476,48 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 30,
-        "updatedAt": "2026-08-21T20:46:43.292Z",
-        "createdAt": "2026-08-21T20:46:43.292Z",
+        "updatedAt": "2026-08-21T21:18:22.888Z",
+        "createdAt": "2026-08-21T21:18:17.054Z",
         "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-21T21:18:17.054Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_ab1be5e4-056b-4b02-b12e-5f6f480a103d",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: User can view calculation history\nObjective: Create a calculator software product\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime is unavailable."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_b55f17ef-6162-4d4d-aed8-67c8a621a232",
+        "completedAt": "2026-08-21T21:18:22.888Z",
         "task": {
-          "id": "task_67020d9c-e854-4add-a1dc-a6f4f07f8dc5",
-          "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-          "title": "Implement backend code and API: Network details display (SSID, channel, encryption method)",
-          "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+          "id": "task_b655046e-6819-43b0-9a19-cacbe73e49f3",
+          "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+          "title": "Implement backend code and API: User can view calculation history",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "backend",
             "api"
           ],
-          "risk": "high",
+          "risk": "normal",
           "dependsOn": [
-            "task_9ebcab60-c369-4b3f-b9c1-080e88d48b73"
+            "task_0246838b-b0e8-4bfd-89df-1a9f8fc360e6"
           ],
           "acceptance": [
             {
@@ -331,8 +525,8 @@
               "equals": "code"
             }
           ],
-          "state": "blocked",
-          "attempts": 0,
+          "state": "completed",
+          "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.code",
           "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
@@ -340,9 +534,36 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 30,
-          "updatedAt": "2026-08-21T20:46:43.292Z",
-          "createdAt": "2026-08-21T20:46:43.292Z",
-          "blockedReason": "Dependencies incomplete"
+          "updatedAt": "2026-08-21T21:18:22.888Z",
+          "createdAt": "2026-08-21T21:18:17.054Z",
+          "blockedReason": "Dependencies incomplete",
+          "startedAt": "2026-08-21T21:18:17.054Z",
+          "memoryContext": [],
+          "result": {
+            "type": "code",
+            "artifactId": "artifact_ab1be5e4-056b-4b02-b12e-5f6f480a103d",
+            "summary": "Code artifact generated without paid/cloud services. [object Object]",
+            "files": [
+              {
+                "path": "generated/README.md",
+                "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: User can view calculation history\nObjective: Create a calculator software product\nAcceptance: [object Object]"
+              }
+            ],
+            "tests": [
+              "node --test"
+            ],
+            "notes": [
+              "Deterministic L1 fallback used because AI runtime is unavailable."
+            ],
+            "acceptance": [
+              {
+                "field": "type",
+                "equals": "code"
+              }
+            ]
+          },
+          "verificationId": "verification_b55f17ef-6162-4d4d-aed8-67c8a621a232",
+          "completedAt": "2026-08-21T21:18:22.888Z"
         },
         "selectedAgent": {
           "id": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
@@ -359,45 +580,45 @@
             "test.run"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T20:46:43.292Z",
+          "heartbeatAt": "2026-08-21T21:18:47.510Z",
           "metadata": {
-            "outcomeCount": 9,
-            "successCount": 9,
+            "outcomeCount": 11,
+            "successCount": 11,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T20:35:30.381Z",
+            "lastOutcomeAt": "2026-08-21T21:18:22.888Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "api|backend": {
-                "attempts": 9,
-                "successes": 9,
+                "attempts": 11,
+                "successes": 11,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.9,
-                "lastOutcomeAt": "2026-08-21T20:35:30.381Z"
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-21T21:18:22.888Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T20:46:43.292Z",
+          "updatedAt": "2026-08-21T21:18:47.510Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_1998a5e7-3fcc-4e17-aa8b-45e7718ca7e5",
-        "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-        "title": "Implement database and persistence schema: User-friendly interface",
-        "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+        "id": "task_8d1168e0-94a8-4f6e-a486-6971ea6add5d",
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+        "title": "Implement database and persistence schema: User can clear calculation history",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "database",
           "schema",
           "sql"
         ],
-        "risk": "high",
+        "risk": "normal",
         "dependsOn": [
-          "task_67020d9c-e854-4add-a1dc-a6f4f07f8dc5"
+          "task_b655046e-6819-43b0-9a19-cacbe73e49f3"
         ],
         "acceptance": [
           {
@@ -405,8 +626,8 @@
             "equals": "code"
           }
         ],
-        "state": "blocked",
-        "attempts": 0,
+        "state": "completed",
+        "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.code",
         "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
@@ -414,22 +635,49 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 40,
-        "updatedAt": "2026-08-21T20:46:43.292Z",
-        "createdAt": "2026-08-21T20:46:43.292Z",
+        "updatedAt": "2026-08-21T21:18:30.313Z",
+        "createdAt": "2026-08-21T21:18:17.054Z",
         "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-21T21:18:22.888Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_670dab87-58bc-45ff-aa5f-b49c203098b7",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: User can clear calculation history\nObjective: Create a calculator software product\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime is unavailable."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_6c12f274-c7cf-4789-81b5-745168ed2eb2",
+        "completedAt": "2026-08-21T21:18:30.313Z",
         "task": {
-          "id": "task_1998a5e7-3fcc-4e17-aa8b-45e7718ca7e5",
-          "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-          "title": "Implement database and persistence schema: User-friendly interface",
-          "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+          "id": "task_8d1168e0-94a8-4f6e-a486-6971ea6add5d",
+          "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+          "title": "Implement database and persistence schema: User can clear calculation history",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "database",
             "schema",
             "sql"
           ],
-          "risk": "high",
+          "risk": "normal",
           "dependsOn": [
-            "task_67020d9c-e854-4add-a1dc-a6f4f07f8dc5"
+            "task_b655046e-6819-43b0-9a19-cacbe73e49f3"
           ],
           "acceptance": [
             {
@@ -437,8 +685,8 @@
               "equals": "code"
             }
           ],
-          "state": "blocked",
-          "attempts": 0,
+          "state": "completed",
+          "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.code",
           "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
@@ -446,9 +694,36 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 40,
-          "updatedAt": "2026-08-21T20:46:43.292Z",
-          "createdAt": "2026-08-21T20:46:43.292Z",
-          "blockedReason": "Dependencies incomplete"
+          "updatedAt": "2026-08-21T21:18:30.313Z",
+          "createdAt": "2026-08-21T21:18:17.054Z",
+          "blockedReason": "Dependencies incomplete",
+          "startedAt": "2026-08-21T21:18:22.888Z",
+          "memoryContext": [],
+          "result": {
+            "type": "code",
+            "artifactId": "artifact_670dab87-58bc-45ff-aa5f-b49c203098b7",
+            "summary": "Code artifact generated without paid/cloud services. [object Object]",
+            "files": [
+              {
+                "path": "generated/README.md",
+                "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: User can clear calculation history\nObjective: Create a calculator software product\nAcceptance: [object Object]"
+              }
+            ],
+            "tests": [
+              "node --test"
+            ],
+            "notes": [
+              "Deterministic L1 fallback used because AI runtime is unavailable."
+            ],
+            "acceptance": [
+              {
+                "field": "type",
+                "equals": "code"
+              }
+            ]
+          },
+          "verificationId": "verification_6c12f274-c7cf-4789-81b5-745168ed2eb2",
+          "completedAt": "2026-08-21T21:18:30.313Z"
         },
         "selectedAgent": {
           "id": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
@@ -465,44 +740,44 @@
             "code.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T20:46:43.292Z",
+          "heartbeatAt": "2026-08-21T21:18:47.510Z",
           "metadata": {
-            "outcomeCount": 9,
-            "successCount": 9,
+            "outcomeCount": 11,
+            "successCount": 11,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T20:35:36.890Z",
+            "lastOutcomeAt": "2026-08-21T21:18:30.313Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "database|schema|sql": {
-                "attempts": 9,
-                "successes": 9,
+                "attempts": 11,
+                "successes": 11,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.9,
-                "lastOutcomeAt": "2026-08-21T20:35:36.890Z"
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-21T21:18:30.313Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T20:46:43.292Z",
+          "updatedAt": "2026-08-21T21:18:47.510Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_adabeee2-c9e4-42e3-b524-42b421ac437f",
-        "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-        "title": "Implement frontend code and user experience: Support for multiple mobile platforms",
-        "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+        "id": "task_3a7c9774-a1c5-4197-8b60-9262756e7c38",
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+        "title": "Implement frontend code and user experience",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "frontend",
           "ui"
         ],
-        "risk": "high",
+        "risk": "normal",
         "dependsOn": [
-          "task_1998a5e7-3fcc-4e17-aa8b-45e7718ca7e5"
+          "task_8d1168e0-94a8-4f6e-a486-6971ea6add5d"
         ],
         "acceptance": [
           {
@@ -510,8 +785,8 @@
             "equals": "code"
           }
         ],
-        "state": "blocked",
-        "attempts": 0,
+        "state": "completed",
+        "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.code",
         "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
@@ -519,21 +794,60 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 50,
-        "updatedAt": "2026-08-21T20:46:43.292Z",
-        "createdAt": "2026-08-21T20:46:43.292Z",
+        "updatedAt": "2026-08-21T21:18:48.088Z",
+        "createdAt": "2026-08-21T21:18:17.054Z",
         "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-21T21:18:30.313Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_e88f186d-e96f-4544-94d2-919c1db3edce",
+          "summary": "Calculator frontend code and user experience implementation",
+          "files": [
+            {
+              "content": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Calculator</title>\n    <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n    <div class=\"calculator\">\n        <input type=\"text\" id=\"display\" disabled>\n        <div class=\"buttons\">\n            <button id=\"clear\">C</button>\n            <button id=\"backspace\">DEL</button>\n            <button id=\"equals\">=</button>\n            <button id=\"add\">+</button>\n            <button id=\"subtract\">-</button>\n            <button id=\"multiply\">*</button>\n            <button id=\"divide\">/</button>\n            <button id=\"zero\">0</button>\n            <button id=\"one\">1</button>\n            <button id=\"two\">2</button>\n            <button id=\"three\">3</button>\n            <button id=\"four\">4</button>\n            <button id=\"five\">5</button>\n            <button id=\"six\">6</button>\n            <button id=\"seven\">7</button>\n            <button id=\"eight\">8</button>\n            <button id=\"nine\">9</button>\n        </div>\n    </div>\n    <script src=\"script.js\"></script>\n</body>\n</html>",
+              "path": "index.html"
+            },
+            {
+              "content": "body {\n    font-family: Arial, sans-serif;\n}\n\n.calculator {\n    width: 300px;\n    margin: 50px auto;\n    padding: 20px;\n    background-color: #f0f0f0;\n    border: 1px solid #ccc;\n    border-radius: 10px;\n    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);\n}\n\n#display {\n    width: 100%;\n    height: 40px;\n    margin-bottom: 20px;\n    padding: 10px;\n    font-size: 24px;\n    text-align: right;\n    border: none;\n}\n\n.buttons {\n    display: grid;\n    grid-template-columns: repeat(4, 1fr);\n    grid-gap: 10px;\n}\n\nbutton {\n    height: 40px;\n    font-size: 18px;\n    border: none;\n    border-radius: 10px;\n    background-color: #fff;\n    cursor: pointer;\n}\n\nbutton:hover {\n    background-color: #ccc;\n}",
+              "path": "styles.css"
+            },
+            {
+              "content": "let display = document.getElementById('display');\nlet clearButton = document.getElementById('clear');\nlet backspaceButton = document.getElementById('backspace');\nlet equalsButton = document.getElementById('equals');\nlet addButton = document.getElementById('add');\nlet subtractButton = document.getElementById('subtract');\nlet multiplyButton = document.getElementById('multiply');\nlet divideButton = document.getElementById('divide');\nlet numberButtons = document.querySelectorAll('#zero, #one, #two, #three, #four, #five, #six, #seven, #eight, #nine');\n\nlet currentNumber = '';\nlet previousNumber = '';\nlet operation = '';\n\nnumberButtons.forEach(button => {\n    button.addEventListener('click', () => {\n        currentNumber += button.textContent;\n        display.value = currentNumber;\n    });\n});\n\nclearButton.addEventListener('click', () => {\n    currentNumber = '';\n    previousNumber = '';\n    operation = '';\n    display.value = '';\n});\n\nbackspaceButton.addEventListener('click', () => {\n    currentNumber = currentNumber.slice(0, -1);\n    display.value = currentNumber;\n});\n\naddButton.addEventListener('click', () => {\n    previousNumber = currentNumber;\n    operation = 'add';\n    currentNumber = '';\n    display.value = '';\n});\n\nsubtractButton.addEventListener('click', () => {\n    previousNumber = currentNumber;\n    operation = 'subtract';\n    currentNumber = '';\n    display.value = '';\n});\n\nmultiplyButton.addEventListener('click', () => {\n    previousNumber = currentNumber;\n    operation = 'multiply';\n    currentNumber = '';\n    display.value = '';\n});\n\ndivideButton.addEventListener('click', () => {\n    previousNumber = currentNumber;\n    operation = 'divide';\n    currentNumber = '';\n    display.value = '';\n});\n\nequalsButton.addEventListener('click', () => {\n    let result;\n    switch (operation) {\n        case 'add':\n            result = parseFloat(previousNumber) + parseFloat(currentNumber);\n            break;\n        case 'subtract':\n            result = parseFloat(previousNumber) - parseFloat(currentNumber);\n            break;\n        case 'multiply':\n            result = parseFloat(previousNumber) * parseFloat(currentNumber);\n            break;\n        case 'divide':\n            result = parseFloat(previousNumber) / parseFloat(currentNumber);\n            break;\n        default:\n            result = '';\n    }\n    display.value = result;\n    currentNumber = result.toString();\n    previousNumber = '';\n    operation = '';\n});",
+              "path": "script.js"
+            }
+          ],
+          "tests": [
+            "Open the calculator in a web browser and verify that the layout and design match the expected user experience.",
+            "Enter a series of numbers and operations, and verify that the calculator performs the calculations correctly and displays the results as expected.",
+            "Test the clear, backspace, and equals buttons to ensure they function as expected."
+          ],
+          "notes": [
+            "This implementation provides a basic calculator with addition, subtraction, multiplication, and division operations.",
+            "The calculator uses a simple grid layout for the buttons and display, and basic CSS styling for a clean and minimalistic design.",
+            "The JavaScript code uses event listeners to handle button clicks and perform the calculations, and updates the display value accordingly."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_9b78670f-4326-4632-9e46-791043d9600a",
+        "completedAt": "2026-08-21T21:18:48.088Z",
         "task": {
-          "id": "task_adabeee2-c9e4-42e3-b524-42b421ac437f",
-          "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
-          "title": "Implement frontend code and user experience: Support for multiple mobile platforms",
-          "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+          "id": "task_3a7c9774-a1c5-4197-8b60-9262756e7c38",
+          "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+          "title": "Implement frontend code and user experience",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "frontend",
             "ui"
           ],
-          "risk": "high",
+          "risk": "normal",
           "dependsOn": [
-            "task_1998a5e7-3fcc-4e17-aa8b-45e7718ca7e5"
+            "task_8d1168e0-94a8-4f6e-a486-6971ea6add5d"
           ],
           "acceptance": [
             {
@@ -541,8 +855,8 @@
               "equals": "code"
             }
           ],
-          "state": "blocked",
-          "attempts": 0,
+          "state": "completed",
+          "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.code",
           "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
@@ -550,9 +864,48 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 50,
-          "updatedAt": "2026-08-21T20:46:43.292Z",
-          "createdAt": "2026-08-21T20:46:43.292Z",
-          "blockedReason": "Dependencies incomplete"
+          "updatedAt": "2026-08-21T21:18:48.088Z",
+          "createdAt": "2026-08-21T21:18:17.054Z",
+          "blockedReason": "Dependencies incomplete",
+          "startedAt": "2026-08-21T21:18:30.313Z",
+          "memoryContext": [],
+          "result": {
+            "type": "code",
+            "artifactId": "artifact_e88f186d-e96f-4544-94d2-919c1db3edce",
+            "summary": "Calculator frontend code and user experience implementation",
+            "files": [
+              {
+                "content": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Calculator</title>\n    <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n    <div class=\"calculator\">\n        <input type=\"text\" id=\"display\" disabled>\n        <div class=\"buttons\">\n            <button id=\"clear\">C</button>\n            <button id=\"backspace\">DEL</button>\n            <button id=\"equals\">=</button>\n            <button id=\"add\">+</button>\n            <button id=\"subtract\">-</button>\n            <button id=\"multiply\">*</button>\n            <button id=\"divide\">/</button>\n            <button id=\"zero\">0</button>\n            <button id=\"one\">1</button>\n            <button id=\"two\">2</button>\n            <button id=\"three\">3</button>\n            <button id=\"four\">4</button>\n            <button id=\"five\">5</button>\n            <button id=\"six\">6</button>\n            <button id=\"seven\">7</button>\n            <button id=\"eight\">8</button>\n            <button id=\"nine\">9</button>\n        </div>\n    </div>\n    <script src=\"script.js\"></script>\n</body>\n</html>",
+                "path": "index.html"
+              },
+              {
+                "content": "body {\n    font-family: Arial, sans-serif;\n}\n\n.calculator {\n    width: 300px;\n    margin: 50px auto;\n    padding: 20px;\n    background-color: #f0f0f0;\n    border: 1px solid #ccc;\n    border-radius: 10px;\n    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);\n}\n\n#display {\n    width: 100%;\n    height: 40px;\n    margin-bottom: 20px;\n    padding: 10px;\n    font-size: 24px;\n    text-align: right;\n    border: none;\n}\n\n.buttons {\n    display: grid;\n    grid-template-columns: repeat(4, 1fr);\n    grid-gap: 10px;\n}\n\nbutton {\n    height: 40px;\n    font-size: 18px;\n    border: none;\n    border-radius: 10px;\n    background-color: #fff;\n    cursor: pointer;\n}\n\nbutton:hover {\n    background-color: #ccc;\n}",
+                "path": "styles.css"
+              },
+              {
+                "content": "let display = document.getElementById('display');\nlet clearButton = document.getElementById('clear');\nlet backspaceButton = document.getElementById('backspace');\nlet equalsButton = document.getElementById('equals');\nlet addButton = document.getElementById('add');\nlet subtractButton = document.getElementById('subtract');\nlet multiplyButton = document.getElementById('multiply');\nlet divideButton = document.getElementById('divide');\nlet numberButtons = document.querySelectorAll('#zero, #one, #two, #three, #four, #five, #six, #seven, #eight, #nine');\n\nlet currentNumber = '';\nlet previousNumber = '';\nlet operation = '';\n\nnumberButtons.forEach(button => {\n    button.addEventListener('click', () => {\n        currentNumber += button.textContent;\n        display.value = currentNumber;\n    });\n});\n\nclearButton.addEventListener('click', () => {\n    currentNumber = '';\n    previousNumber = '';\n    operation = '';\n    display.value = '';\n});\n\nbackspaceButton.addEventListener('click', () => {\n    currentNumber = currentNumber.slice(0, -1);\n    display.value = currentNumber;\n});\n\naddButton.addEventListener('click', () => {\n    previousNumber = currentNumber;\n    operation = 'add';\n    currentNumber = '';\n    display.value = '';\n});\n\nsubtractButton.addEventListener('click', () => {\n    previousNumber = currentNumber;\n    operation = 'subtract';\n    currentNumber = '';\n    display.value = '';\n});\n\nmultiplyButton.addEventListener('click', () => {\n    previousNumber = currentNumber;\n    operation = 'multiply';\n    currentNumber = '';\n    display.value = '';\n});\n\ndivideButton.addEventListener('click', () => {\n    previousNumber = currentNumber;\n    operation = 'divide';\n    currentNumber = '';\n    display.value = '';\n});\n\nequalsButton.addEventListener('click', () => {\n    let result;\n    switch (operation) {\n        case 'add':\n            result = parseFloat(previousNumber) + parseFloat(currentNumber);\n            break;\n        case 'subtract':\n            result = parseFloat(previousNumber) - parseFloat(currentNumber);\n            break;\n        case 'multiply':\n            result = parseFloat(previousNumber) * parseFloat(currentNumber);\n            break;\n        case 'divide':\n            result = parseFloat(previousNumber) / parseFloat(currentNumber);\n            break;\n        default:\n            result = '';\n    }\n    display.value = result;\n    currentNumber = result.toString();\n    previousNumber = '';\n    operation = '';\n});",
+                "path": "script.js"
+              }
+            ],
+            "tests": [
+              "Open the calculator in a web browser and verify that the layout and design match the expected user experience.",
+              "Enter a series of numbers and operations, and verify that the calculator performs the calculations correctly and displays the results as expected.",
+              "Test the clear, backspace, and equals buttons to ensure they function as expected."
+            ],
+            "notes": [
+              "This implementation provides a basic calculator with addition, subtraction, multiplication, and division operations.",
+              "The calculator uses a simple grid layout for the buttons and display, and basic CSS styling for a clean and minimalistic design.",
+              "The JavaScript code uses event listeners to handle button clicks and perform the calculations, and updates the display value accordingly."
+            ],
+            "acceptance": [
+              {
+                "field": "type",
+                "equals": "code"
+              }
+            ]
+          },
+          "verificationId": "verification_9b78670f-4326-4632-9e46-791043d9600a",
+          "completedAt": "2026-08-21T21:18:48.088Z"
         },
         "selectedAgent": {
           "id": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
@@ -569,44 +922,44 @@
             "test.run"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T20:46:43.292Z",
+          "heartbeatAt": "2026-08-21T21:18:48.088Z",
           "metadata": {
-            "outcomeCount": 9,
-            "successCount": 9,
+            "outcomeCount": 11,
+            "successCount": 11,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T20:35:44.285Z",
+            "lastOutcomeAt": "2026-08-21T21:18:48.088Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "frontend|ui": {
-                "attempts": 9,
-                "successes": 9,
+                "attempts": 11,
+                "successes": 11,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.9,
-                "lastOutcomeAt": "2026-08-21T20:35:44.285Z"
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-21T21:18:48.088Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T20:46:43.292Z",
+          "updatedAt": "2026-08-21T21:18:48.088Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_b3e09825-e845-451b-b9f8-02c8ba64bf98",
-        "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
+        "id": "task_2620974a-99f1-498d-a4f1-31c758a0120b",
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
         "title": "Perform security review",
-        "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "security",
           "audit"
         ],
-        "risk": "high",
+        "risk": "normal",
         "dependsOn": [
-          "task_adabeee2-c9e4-42e3-b524-42b421ac437f"
+          "task_3a7c9774-a1c5-4197-8b60-9262756e7c38"
         ],
         "acceptance": [
           {
@@ -614,8 +967,8 @@
             "equals": "code"
           }
         ],
-        "state": "blocked",
-        "attempts": 0,
+        "state": "completed",
+        "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.code",
         "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
@@ -623,21 +976,53 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 60,
-        "updatedAt": "2026-08-21T20:46:43.292Z",
-        "createdAt": "2026-08-21T20:46:43.292Z",
+        "updatedAt": "2026-08-21T21:18:50.864Z",
+        "createdAt": "2026-08-21T21:18:17.054Z",
         "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-21T21:18:48.088Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_c3415b3f-452d-4d85-aea6-8280b07f11e2",
+          "summary": "Security review for calculator software product",
+          "files": [
+            {
+              "content": "# Security Review\n## Introduction\nThe calculator software product requires a thorough security review to ensure it meets the necessary security standards.\n## Security Requirements\n* Input validation and sanitization\n* Error handling and logging\n* Secure data storage\n* Access control and authentication\n## Audit Capabilities\n* Logging and monitoring\n* Vulnerability scanning\n* Penetration testing\n* Compliance scanning",
+              "path": "security_review.md"
+            }
+          ],
+          "tests": [
+            "Input validation test",
+            "Error handling test",
+            "Secure data storage test",
+            "Access control test"
+          ],
+          "notes": [
+            "Review security protocols regularly",
+            "Implement secure coding practices",
+            "Use secure communication protocols"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_59890cea-54e3-4de5-90bc-8ffaa0113898",
+        "completedAt": "2026-08-21T21:18:50.864Z",
         "task": {
-          "id": "task_b3e09825-e845-451b-b9f8-02c8ba64bf98",
-          "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
+          "id": "task_2620974a-99f1-498d-a4f1-31c758a0120b",
+          "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
           "title": "Perform security review",
-          "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "security",
             "audit"
           ],
-          "risk": "high",
+          "risk": "normal",
           "dependsOn": [
-            "task_adabeee2-c9e4-42e3-b524-42b421ac437f"
+            "task_3a7c9774-a1c5-4197-8b60-9262756e7c38"
           ],
           "acceptance": [
             {
@@ -645,8 +1030,8 @@
               "equals": "code"
             }
           ],
-          "state": "blocked",
-          "attempts": 0,
+          "state": "completed",
+          "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.code",
           "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
@@ -654,9 +1039,41 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 60,
-          "updatedAt": "2026-08-21T20:46:43.292Z",
-          "createdAt": "2026-08-21T20:46:43.292Z",
-          "blockedReason": "Dependencies incomplete"
+          "updatedAt": "2026-08-21T21:18:50.864Z",
+          "createdAt": "2026-08-21T21:18:17.054Z",
+          "blockedReason": "Dependencies incomplete",
+          "startedAt": "2026-08-21T21:18:48.088Z",
+          "memoryContext": [],
+          "result": {
+            "type": "code",
+            "artifactId": "artifact_c3415b3f-452d-4d85-aea6-8280b07f11e2",
+            "summary": "Security review for calculator software product",
+            "files": [
+              {
+                "content": "# Security Review\n## Introduction\nThe calculator software product requires a thorough security review to ensure it meets the necessary security standards.\n## Security Requirements\n* Input validation and sanitization\n* Error handling and logging\n* Secure data storage\n* Access control and authentication\n## Audit Capabilities\n* Logging and monitoring\n* Vulnerability scanning\n* Penetration testing\n* Compliance scanning",
+                "path": "security_review.md"
+              }
+            ],
+            "tests": [
+              "Input validation test",
+              "Error handling test",
+              "Secure data storage test",
+              "Access control test"
+            ],
+            "notes": [
+              "Review security protocols regularly",
+              "Implement secure coding practices",
+              "Use secure communication protocols"
+            ],
+            "acceptance": [
+              {
+                "field": "type",
+                "equals": "code"
+              }
+            ]
+          },
+          "verificationId": "verification_59890cea-54e3-4de5-90bc-8ffaa0113898",
+          "completedAt": "2026-08-21T21:18:50.864Z"
         },
         "selectedAgent": {
           "id": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
@@ -671,44 +1088,44 @@
             "security.scan"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T20:46:43.292Z",
+          "heartbeatAt": "2026-08-21T21:18:50.864Z",
           "metadata": {
-            "outcomeCount": 9,
-            "successCount": 9,
+            "outcomeCount": 11,
+            "successCount": 11,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T20:35:47.763Z",
+            "lastOutcomeAt": "2026-08-21T21:18:50.864Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "audit|security": {
-                "attempts": 9,
-                "successes": 9,
+                "attempts": 11,
+                "successes": 11,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.9,
-                "lastOutcomeAt": "2026-08-21T20:35:47.763Z"
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-21T21:18:50.864Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T20:46:43.292Z",
+          "updatedAt": "2026-08-21T21:18:50.864Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_74eef0e7-070b-4759-8afb-7592271a61b7",
-        "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
+        "id": "task_8e67d094-1cb7-44af-98d9-543b3c5ccf65",
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
         "title": "Create testing and verification plan",
-        "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+        "description": "Create a calculator software product",
         "requiredCapabilities": [
           "testing",
           "verification"
         ],
-        "risk": "high",
+        "risk": "normal",
         "dependsOn": [
-          "task_b3e09825-e845-451b-b9f8-02c8ba64bf98"
+          "task_2620974a-99f1-498d-a4f1-31c758a0120b"
         ],
         "acceptance": [
           {
@@ -716,8 +1133,8 @@
             "equals": "plan"
           }
         ],
-        "state": "blocked",
-        "attempts": 0,
+        "state": "completed",
+        "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.plan",
         "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
@@ -727,21 +1144,35 @@
         ],
         "requiredTools": [],
         "sequence": 70,
-        "updatedAt": "2026-08-21T20:46:43.292Z",
-        "createdAt": "2026-08-21T20:46:43.292Z",
+        "updatedAt": "2026-08-21T21:18:50.864Z",
+        "createdAt": "2026-08-21T21:18:17.054Z",
         "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-21T21:18:50.864Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_8e67d094-1cb7-44af-98d9-543b3c5ccf65",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-21T21:18:50.864Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_86efde85-5cb7-46ea-b646-e4ccd9836404",
+        "completedAt": "2026-08-21T21:18:50.864Z",
         "task": {
-          "id": "task_74eef0e7-070b-4759-8afb-7592271a61b7",
-          "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
+          "id": "task_8e67d094-1cb7-44af-98d9-543b3c5ccf65",
+          "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
           "title": "Create testing and verification plan",
-          "description": "Design and develop a mobile application to detect and visualize nearby Wifi signals",
+          "description": "Create a calculator software product",
           "requiredCapabilities": [
             "testing",
             "verification"
           ],
-          "risk": "high",
+          "risk": "normal",
           "dependsOn": [
-            "task_b3e09825-e845-451b-b9f8-02c8ba64bf98"
+            "task_2620974a-99f1-498d-a4f1-31c758a0120b"
           ],
           "acceptance": [
             {
@@ -749,8 +1180,8 @@
               "equals": "plan"
             }
           ],
-          "state": "blocked",
-          "attempts": 0,
+          "state": "completed",
+          "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.plan",
           "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
@@ -760,9 +1191,23 @@
           ],
           "requiredTools": [],
           "sequence": 70,
-          "updatedAt": "2026-08-21T20:46:43.292Z",
-          "createdAt": "2026-08-21T20:46:43.292Z",
-          "blockedReason": "Dependencies incomplete"
+          "updatedAt": "2026-08-21T21:18:50.864Z",
+          "createdAt": "2026-08-21T21:18:17.054Z",
+          "blockedReason": "Dependencies incomplete",
+          "startedAt": "2026-08-21T21:18:50.864Z",
+          "memoryContext": [],
+          "result": {
+            "type": "plan",
+            "taskId": "task_8e67d094-1cb7-44af-98d9-543b3c5ccf65",
+            "output": "Execution plan generated.",
+            "diagnostics": {
+              "healthy": true,
+              "at": "2026-08-21T21:18:50.864Z"
+            },
+            "summary": "Execution plan generated. Verification complete."
+          },
+          "verificationId": "verification_86efde85-5cb7-46ea-b646-e4ccd9836404",
+          "completedAt": "2026-08-21T21:18:50.864Z"
         },
         "selectedAgent": {
           "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
@@ -778,44 +1223,291 @@
             "code.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T20:46:43.292Z",
+          "heartbeatAt": "2026-08-21T21:18:50.864Z",
           "metadata": {
-            "outcomeCount": 12,
-            "successCount": 12,
+            "outcomeCount": 16,
+            "successCount": 16,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T20:35:47.763Z",
+            "lastOutcomeAt": "2026-08-21T21:18:50.864Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "testing|verification": {
-                "attempts": 12,
-                "successes": 12,
+                "attempts": 16,
+                "successes": 16,
                 "failures": 0,
                 "successRate": 1,
                 "confidence": 1,
-                "lastOutcomeAt": "2026-08-21T20:35:47.763Z"
+                "lastOutcomeAt": "2026-08-21T21:18:50.864Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T20:46:43.292Z",
+          "updatedAt": "2026-08-21T21:18:50.864Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+        "title": "Final project verification and QA",
+        "description": "Verify completed project project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "low",
+        "dependsOn": [
+          "task_8e67d094-1cb7-44af-98d9-543b3c5ccf65"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 1,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 999,
+        "finalProjectVerification": true,
+        "updatedAt": "2026-08-21T21:18:50.864Z",
+        "createdAt": "2026-08-21T21:18:50.864Z",
+        "assignedAt": "2026-08-21T21:18:50.864Z",
+        "startedAt": "2026-08-21T21:18:50.864Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-21T21:18:50.864Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_9483aab7-e16e-4d63-bd01-fd99f3884a47",
+        "completedAt": "2026-08-21T21:18:50.864Z",
+        "task": {
+          "id": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+          "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+          "title": "Final project verification and QA",
+          "description": "Verify completed project project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+          "requiredCapabilities": [
+            "testing",
+            "verification"
+          ],
+          "risk": "low",
+          "dependsOn": [
+            "task_8e67d094-1cb7-44af-98d9-543b3c5ccf65"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "plan"
+            }
+          ],
+          "state": "completed",
+          "attempts": 1,
+          "maxAttempts": 1,
+          "executor": "internal.plan",
+          "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 999,
+          "finalProjectVerification": true,
+          "updatedAt": "2026-08-21T21:18:50.864Z",
+          "createdAt": "2026-08-21T21:18:50.864Z",
+          "assignedAt": "2026-08-21T21:18:50.864Z",
+          "startedAt": "2026-08-21T21:18:50.864Z",
+          "memoryContext": [],
+          "result": {
+            "type": "plan",
+            "taskId": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+            "output": "Execution plan generated.",
+            "diagnostics": {
+              "healthy": true,
+              "at": "2026-08-21T21:18:50.864Z"
+            },
+            "summary": "Execution plan generated. Verification complete."
+          },
+          "verificationId": "verification_9483aab7-e16e-4d63-bd01-fd99f3884a47",
+          "completedAt": "2026-08-21T21:18:50.864Z"
+        },
+        "selectedAgent": {
+          "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "name": "QA Agent",
+          "role": "Tester",
+          "department": "Quality",
+          "capabilities": [
+            "testing",
+            "verification"
+          ],
+          "tools": [
+            "test.run",
+            "code.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-21T21:18:50.864Z",
+          "metadata": {
+            "outcomeCount": 16,
+            "successCount": 16,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-21T21:18:50.864Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "testing|verification": {
+                "attempts": 16,
+                "successes": 16,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-21T21:18:50.864Z"
+              }
+            }
+          },
+          "updatedAt": "2026-08-21T21:18:50.864Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       }
     ],
-    "status": "awaiting_approval",
-    "approval": {
-      "id": "approval_183da2f6-a398-4f61-a7cd-468a30a869fc",
-      "action": "Execute founder command: Build Wifi signal treaser mobile application",
-      "risk": "high",
-      "projectId": "project_7e2430f9-b271-475c-b23a-68c35f063e55",
+    "finalDelivery": {
+      "id": "artifact_2a3e2039-fcf3-4c13-b0ec-4df89253677f",
+      "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
       "taskId": null,
-      "state": "pending",
-      "requestedAt": "2026-08-21T20:46:43.292Z",
-      "updatedAt": "2026-08-21T20:46:43.292Z",
-      "createdAt": "2026-08-21T20:46:43.292Z"
-    }
+      "agentId": null,
+      "type": "final-delivery",
+      "content": {
+        "projectId": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+        "project": {
+          "id": "project_aff0a68e-e426-49e9-aeb9-0ff9adb76eb1",
+          "name": "Project: Create a calculator software product",
+          "objective": "Create a calculator software product",
+          "state": "completed"
+        },
+        "summary": {
+          "totalTasks": 8,
+          "completedTasks": 8,
+          "failedTasks": 0,
+          "artifactCount": 4,
+          "deliveredAt": "2026-08-21T21:18:50.864Z"
+        },
+        "tasks": [
+          {
+            "id": "task_b56dad9c-89ed-4df8-a896-7ded0e5847a6",
+            "title": "Research and validate requirements: User can input numbers and mathematical operators",
+            "state": "completed",
+            "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+            "verificationId": "verification_798218e2-1067-4d91-8a71-e46c214ec68c"
+          },
+          {
+            "id": "task_0246838b-b0e8-4bfd-89df-1a9f8fc360e6",
+            "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+            "state": "completed",
+            "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+            "verificationId": "verification_86717de4-3f93-40f5-947d-c1439d5b5aac"
+          },
+          {
+            "id": "task_b655046e-6819-43b0-9a19-cacbe73e49f3",
+            "title": "Implement backend code and API: User can view calculation history",
+            "state": "completed",
+            "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+            "verificationId": "verification_b55f17ef-6162-4d4d-aed8-67c8a621a232"
+          },
+          {
+            "id": "task_8d1168e0-94a8-4f6e-a486-6971ea6add5d",
+            "title": "Implement database and persistence schema: User can clear calculation history",
+            "state": "completed",
+            "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+            "verificationId": "verification_6c12f274-c7cf-4789-81b5-745168ed2eb2"
+          },
+          {
+            "id": "task_3a7c9774-a1c5-4197-8b60-9262756e7c38",
+            "title": "Implement frontend code and user experience",
+            "state": "completed",
+            "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+            "verificationId": "verification_9b78670f-4326-4632-9e46-791043d9600a"
+          },
+          {
+            "id": "task_2620974a-99f1-498d-a4f1-31c758a0120b",
+            "title": "Perform security review",
+            "state": "completed",
+            "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+            "verificationId": "verification_59890cea-54e3-4de5-90bc-8ffaa0113898"
+          },
+          {
+            "id": "task_8e67d094-1cb7-44af-98d9-543b3c5ccf65",
+            "title": "Create testing and verification plan",
+            "state": "completed",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_86efde85-5cb7-46ea-b646-e4ccd9836404"
+          },
+          {
+            "id": "task_7d5f6518-cd21-40b6-bd94-97f258ffe29d",
+            "title": "Final project verification and QA",
+            "state": "completed",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_9483aab7-e16e-4d63-bd01-fd99f3884a47"
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "artifact_ab1be5e4-056b-4b02-b12e-5f6f480a103d",
+            "type": "code-workspace",
+            "taskId": "task_b655046e-6819-43b0-9a19-cacbe73e49f3",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          },
+          {
+            "id": "artifact_670dab87-58bc-45ff-aa5f-b49c203098b7",
+            "type": "code-workspace",
+            "taskId": "task_8d1168e0-94a8-4f6e-a486-6971ea6add5d",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          },
+          {
+            "id": "artifact_e88f186d-e96f-4544-94d2-919c1db3edce",
+            "type": "code-workspace",
+            "taskId": "task_3a7c9774-a1c5-4197-8b60-9262756e7c38",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          },
+          {
+            "id": "artifact_c3415b3f-452d-4d85-aea6-8280b07f11e2",
+            "type": "code-workspace",
+            "taskId": "task_2620974a-99f1-498d-a4f1-31c758a0120b",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          }
+        ],
+        "artifactId": "artifact_2a3e2039-fcf3-4c13-b0ec-4df89253677f",
+        "artifactType": "final-delivery"
+      },
+      "metadata": {
+        "state": "completed",
+        "generatedBy": "mauli-l1-delivery",
+        "downloadPath": "/api/artifacts/artifact_2a3e2039-fcf3-4c13-b0ec-4df89253677f/download"
+      },
+      "createdAt": "2026-08-21T21:18:50.864Z",
+      "updatedAt": "2026-08-21T21:18:50.864Z"
+    },
+    "artifact": "artifact_2a3e2039-fcf3-4c13-b0ec-4df89253677f",
+    "artifactType": "final-delivery"
   }
 }
