@@ -1,36 +1,37 @@
 {
-  "command": "Calculator banva",
-  "generatedAt": "2026-08-21T15:11:08.732Z",
+  "command": "E commerce website banva",
+  "generatedAt": "2026-08-21T15:18:21.981Z",
   "result": {
     "project": {
-      "id": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-      "name": "Project: Create a calculator software product",
-      "objective": "Create a calculator software product",
-      "founderCommand": "Calculator banva",
+      "id": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+      "name": "Project: Design and develop a fully functional e-commerce website for",
+      "objective": "Design and develop a fully functional e-commerce website for Banva",
+      "founderCommand": "E commerce website banva",
       "requirements": [
-        "User can input numbers and mathematical operators",
-        "User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
-        "User can view calculation history",
-        "User can clear calculation history"
+        "User registration and login functionality",
+        "Product catalog with search and filtering capabilities",
+        "Secure payment gateway integration",
+        "Order management system",
+        "Admin dashboard for product and order management"
       ],
       "priority": "normal",
       "state": "planning",
       "milestones": [],
-      "createdAt": "2026-08-21T15:11:08.732Z",
-      "updatedAt": "2026-08-21T15:11:08.732Z"
+      "createdAt": "2026-08-21T15:18:21.981Z",
+      "updatedAt": "2026-08-21T15:18:21.981Z"
     },
     "firstTask": {
-      "id": "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4",
-      "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-      "title": "Implement backend code and API: User can clear calculation history",
-      "description": "Create a calculator software product",
+      "id": "task_b725f39d-47b4-4e46-8cf7-b404e86f161b",
+      "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+      "title": "Implement backend code and API: Order management system",
+      "description": "Design and develop a fully functional e-commerce website for Banva",
       "requiredCapabilities": [
         "backend",
         "api"
       ],
       "risk": "normal",
       "dependsOn": [
-        "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c"
+        "task_71b7dc33-ca0e-4eeb-9776-70842092541e"
       ],
       "acceptance": [
         {
@@ -47,8 +48,8 @@
       "toolNames": [],
       "requiredTools": [],
       "sequence": 30,
-      "updatedAt": "2026-08-21T15:11:08.732Z",
-      "createdAt": "2026-08-21T15:11:08.732Z",
+      "updatedAt": "2026-08-21T15:18:21.981Z",
+      "createdAt": "2026-08-21T15:18:21.981Z",
       "blockedReason": "Dependencies incomplete"
     },
     "status": "blocked",
@@ -56,10 +57,10 @@
     "requiredTools": [],
     "tasks": [
       {
-        "id": "task_13da0ba5-6f23-4601-abd1-5fc0361daffd",
-        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-        "title": "Research and validate requirements: User can input numbers and mathematical operators",
-        "description": "Create a calculator software product",
+        "id": "task_b6c3101c-724c-463a-b86d-75f5f6154198",
+        "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+        "title": "Research and validate requirements: User registration and login functionality",
+        "description": "Design and develop a fully functional e-commerce website for Banva",
         "requiredCapabilities": [
           "research",
           "analysis"
@@ -81,10 +82,10 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 10,
-        "updatedAt": "2026-08-21T15:11:08.732Z",
-        "createdAt": "2026-08-21T15:11:08.732Z",
-        "assignedAt": "2026-08-21T15:11:08.732Z",
-        "startedAt": "2026-08-21T15:11:08.732Z",
+        "updatedAt": "2026-08-21T15:18:21.981Z",
+        "createdAt": "2026-08-21T15:18:21.981Z",
+        "assignedAt": "2026-08-21T15:18:21.981Z",
+        "startedAt": "2026-08-21T15:18:21.981Z",
         "memoryContext": [
           {
             "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
@@ -99,21 +100,21 @@
         ],
         "result": {
           "type": "plan",
-          "taskId": "task_13da0ba5-6f23-4601-abd1-5fc0361daffd",
+          "taskId": "task_b6c3101c-724c-463a-b86d-75f5f6154198",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T15:11:08.732Z"
+            "at": "2026-08-21T15:18:21.981Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_505d58c3-7b5d-4652-a165-2baf233c66af",
-        "completedAt": "2026-08-21T15:11:08.732Z",
+        "verificationId": "verification_eaf19861-a0e3-40e6-a64a-f6907d220287",
+        "completedAt": "2026-08-21T15:18:21.981Z",
         "task": {
-          "id": "task_13da0ba5-6f23-4601-abd1-5fc0361daffd",
-          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-          "title": "Research and validate requirements: User can input numbers and mathematical operators",
-          "description": "Create a calculator software product",
+          "id": "task_b6c3101c-724c-463a-b86d-75f5f6154198",
+          "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+          "title": "Research and validate requirements: User registration and login functionality",
+          "description": "Design and develop a fully functional e-commerce website for Banva",
           "requiredCapabilities": [
             "research",
             "analysis"
@@ -135,10 +136,10 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 10,
-          "updatedAt": "2026-08-21T15:11:08.732Z",
-          "createdAt": "2026-08-21T15:11:08.732Z",
-          "assignedAt": "2026-08-21T15:11:08.732Z",
-          "startedAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
+          "createdAt": "2026-08-21T15:18:21.981Z",
+          "assignedAt": "2026-08-21T15:18:21.981Z",
+          "startedAt": "2026-08-21T15:18:21.981Z",
           "memoryContext": [
             {
               "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
@@ -153,16 +154,16 @@
           ],
           "result": {
             "type": "plan",
-            "taskId": "task_13da0ba5-6f23-4601-abd1-5fc0361daffd",
+            "taskId": "task_b6c3101c-724c-463a-b86d-75f5f6154198",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T15:11:08.732Z"
+              "at": "2026-08-21T15:18:21.981Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_505d58c3-7b5d-4652-a165-2baf233c66af",
-          "completedAt": "2026-08-21T15:11:08.732Z"
+          "verificationId": "verification_eaf19861-a0e3-40e6-a64a-f6907d220287",
+          "completedAt": "2026-08-21T15:18:21.981Z"
         },
         "selectedAgent": {
           "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -178,52 +179,52 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:11:08.732Z",
+          "heartbeatAt": "2026-08-21T15:18:21.981Z",
           "metadata": {
-            "outcomeCount": 10,
-            "successCount": 10,
+            "outcomeCount": 12,
+            "successCount": 12,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T15:11:08.732Z",
+            "lastOutcomeAt": "2026-08-21T15:18:21.981Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 5,
-                "successes": 5,
+                "attempts": 6,
+                "successes": 6,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.5,
-                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
+                "confidence": 0.6,
+                "lastOutcomeAt": "2026-08-21T15:18:21.981Z"
               },
               "planning|product-planning": {
-                "attempts": 5,
-                "successes": 5,
+                "attempts": 6,
+                "successes": 6,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.5,
-                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
+                "confidence": 0.6,
+                "lastOutcomeAt": "2026-08-21T15:18:21.981Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c",
-        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-        "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
-        "description": "Create a calculator software product",
+        "id": "task_71b7dc33-ca0e-4eeb-9776-70842092541e",
+        "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+        "title": "Define product and architecture plan: Product catalog with search and filtering capabilities",
+        "description": "Design and develop a fully functional e-commerce website for Banva",
         "requiredCapabilities": [
           "product-planning",
           "planning"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_13da0ba5-6f23-4601-abd1-5fc0361daffd"
+          "task_b6c3101c-724c-463a-b86d-75f5f6154198"
         ],
         "acceptance": [
           {
@@ -242,10 +243,10 @@
         ],
         "requiredTools": [],
         "sequence": 20,
-        "updatedAt": "2026-08-21T15:11:08.732Z",
-        "createdAt": "2026-08-21T15:11:08.732Z",
+        "updatedAt": "2026-08-21T15:18:21.981Z",
+        "createdAt": "2026-08-21T15:18:21.981Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T15:11:08.732Z",
+        "startedAt": "2026-08-21T15:18:21.981Z",
         "memoryContext": [
           {
             "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
@@ -260,28 +261,28 @@
         ],
         "result": {
           "type": "plan",
-          "taskId": "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c",
+          "taskId": "task_71b7dc33-ca0e-4eeb-9776-70842092541e",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T15:11:08.732Z"
+            "at": "2026-08-21T15:18:21.981Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_b7a2679b-14af-4bdb-87f1-4eec45e21f5b",
-        "completedAt": "2026-08-21T15:11:08.732Z",
+        "verificationId": "verification_53a94807-83d9-4556-979f-942cc143d645",
+        "completedAt": "2026-08-21T15:18:21.981Z",
         "task": {
-          "id": "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c",
-          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-          "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
-          "description": "Create a calculator software product",
+          "id": "task_71b7dc33-ca0e-4eeb-9776-70842092541e",
+          "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+          "title": "Define product and architecture plan: Product catalog with search and filtering capabilities",
+          "description": "Design and develop a fully functional e-commerce website for Banva",
           "requiredCapabilities": [
             "product-planning",
             "planning"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_13da0ba5-6f23-4601-abd1-5fc0361daffd"
+            "task_b6c3101c-724c-463a-b86d-75f5f6154198"
           ],
           "acceptance": [
             {
@@ -300,10 +301,10 @@
           ],
           "requiredTools": [],
           "sequence": 20,
-          "updatedAt": "2026-08-21T15:11:08.732Z",
-          "createdAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
+          "createdAt": "2026-08-21T15:18:21.981Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T15:11:08.732Z",
+          "startedAt": "2026-08-21T15:18:21.981Z",
           "memoryContext": [
             {
               "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
@@ -318,16 +319,16 @@
           ],
           "result": {
             "type": "plan",
-            "taskId": "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c",
+            "taskId": "task_71b7dc33-ca0e-4eeb-9776-70842092541e",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T15:11:08.732Z"
+              "at": "2026-08-21T15:18:21.981Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_b7a2679b-14af-4bdb-87f1-4eec45e21f5b",
-          "completedAt": "2026-08-21T15:11:08.732Z"
+          "verificationId": "verification_53a94807-83d9-4556-979f-942cc143d645",
+          "completedAt": "2026-08-21T15:18:21.981Z"
         },
         "selectedAgent": {
           "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -343,52 +344,52 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:11:08.732Z",
+          "heartbeatAt": "2026-08-21T15:18:21.981Z",
           "metadata": {
-            "outcomeCount": 10,
-            "successCount": 10,
+            "outcomeCount": 12,
+            "successCount": 12,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T15:11:08.732Z",
+            "lastOutcomeAt": "2026-08-21T15:18:21.981Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 5,
-                "successes": 5,
+                "attempts": 6,
+                "successes": 6,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.5,
-                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
+                "confidence": 0.6,
+                "lastOutcomeAt": "2026-08-21T15:18:21.981Z"
               },
               "planning|product-planning": {
-                "attempts": 5,
-                "successes": 5,
+                "attempts": 6,
+                "successes": 6,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.5,
-                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
+                "confidence": 0.6,
+                "lastOutcomeAt": "2026-08-21T15:18:21.981Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4",
-        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-        "title": "Implement backend code and API: User can clear calculation history",
-        "description": "Create a calculator software product",
+        "id": "task_b725f39d-47b4-4e46-8cf7-b404e86f161b",
+        "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+        "title": "Implement backend code and API: Order management system",
+        "description": "Design and develop a fully functional e-commerce website for Banva",
         "requiredCapabilities": [
           "backend",
           "api"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c"
+          "task_71b7dc33-ca0e-4eeb-9776-70842092541e"
         ],
         "acceptance": [
           {
@@ -405,21 +406,21 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 30,
-        "updatedAt": "2026-08-21T15:11:08.732Z",
-        "createdAt": "2026-08-21T15:11:08.732Z",
+        "updatedAt": "2026-08-21T15:18:21.981Z",
+        "createdAt": "2026-08-21T15:18:21.981Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4",
-          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-          "title": "Implement backend code and API: User can clear calculation history",
-          "description": "Create a calculator software product",
+          "id": "task_b725f39d-47b4-4e46-8cf7-b404e86f161b",
+          "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+          "title": "Implement backend code and API: Order management system",
+          "description": "Design and develop a fully functional e-commerce website for Banva",
           "requiredCapabilities": [
             "backend",
             "api"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_a07ca5a6-01e9-4a82-988a-87582ed62b1c"
+            "task_71b7dc33-ca0e-4eeb-9776-70842092541e"
           ],
           "acceptance": [
             {
@@ -436,17 +437,17 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 30,
-          "updatedAt": "2026-08-21T15:11:08.732Z",
-          "createdAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
+          "createdAt": "2026-08-21T15:18:21.981Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": null
       },
       {
-        "id": "task_f3f875b3-c37b-445f-a6ab-9602f89b47c8",
-        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-        "title": "Implement database and persistence schema",
-        "description": "Create a calculator software product",
+        "id": "task_1ac3e1c3-1585-4853-8237-57c18df235e4",
+        "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+        "title": "Implement database and persistence schema: Admin dashboard for product and order management",
+        "description": "Design and develop a fully functional e-commerce website for Banva",
         "requiredCapabilities": [
           "database",
           "schema",
@@ -454,7 +455,7 @@
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4"
+          "task_b725f39d-47b4-4e46-8cf7-b404e86f161b"
         ],
         "acceptance": [
           {
@@ -471,14 +472,14 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 40,
-        "updatedAt": "2026-08-21T15:11:08.732Z",
-        "createdAt": "2026-08-21T15:11:08.732Z",
+        "updatedAt": "2026-08-21T15:18:21.981Z",
+        "createdAt": "2026-08-21T15:18:21.981Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_f3f875b3-c37b-445f-a6ab-9602f89b47c8",
-          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-          "title": "Implement database and persistence schema",
-          "description": "Create a calculator software product",
+          "id": "task_1ac3e1c3-1585-4853-8237-57c18df235e4",
+          "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+          "title": "Implement database and persistence schema: Admin dashboard for product and order management",
+          "description": "Design and develop a fully functional e-commerce website for Banva",
           "requiredCapabilities": [
             "database",
             "schema",
@@ -486,7 +487,7 @@
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_9e6cd51e-87be-41c4-963e-0fd90fb6bbb4"
+            "task_b725f39d-47b4-4e46-8cf7-b404e86f161b"
           ],
           "acceptance": [
             {
@@ -503,8 +504,8 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 40,
-          "updatedAt": "2026-08-21T15:11:08.732Z",
-          "createdAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
+          "createdAt": "2026-08-21T15:18:21.981Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": {
@@ -522,25 +523,25 @@
             "code.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:11:08.732Z",
+          "heartbeatAt": "2026-08-21T15:18:21.981Z",
           "metadata": {},
-          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_594437e8-8390-451b-9267-92f935718194",
-        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-        "title": "Implement frontend code and user experience: User can view calculation history",
-        "description": "Create a calculator software product",
+        "id": "task_64cfb4b6-102e-4911-9931-dcd726d9e349",
+        "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+        "title": "Implement frontend code and user experience: Secure payment gateway integration",
+        "description": "Design and develop a fully functional e-commerce website for Banva",
         "requiredCapabilities": [
           "frontend",
           "ui"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_f3f875b3-c37b-445f-a6ab-9602f89b47c8"
+          "task_1ac3e1c3-1585-4853-8237-57c18df235e4"
         ],
         "acceptance": [
           {
@@ -557,21 +558,21 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 50,
-        "updatedAt": "2026-08-21T15:11:08.732Z",
-        "createdAt": "2026-08-21T15:11:08.732Z",
+        "updatedAt": "2026-08-21T15:18:21.981Z",
+        "createdAt": "2026-08-21T15:18:21.981Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_594437e8-8390-451b-9267-92f935718194",
-          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
-          "title": "Implement frontend code and user experience: User can view calculation history",
-          "description": "Create a calculator software product",
+          "id": "task_64cfb4b6-102e-4911-9931-dcd726d9e349",
+          "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
+          "title": "Implement frontend code and user experience: Secure payment gateway integration",
+          "description": "Design and develop a fully functional e-commerce website for Banva",
           "requiredCapabilities": [
             "frontend",
             "ui"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_f3f875b3-c37b-445f-a6ab-9602f89b47c8"
+            "task_1ac3e1c3-1585-4853-8237-57c18df235e4"
           ],
           "acceptance": [
             {
@@ -588,8 +589,8 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 50,
-          "updatedAt": "2026-08-21T15:11:08.732Z",
-          "createdAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
+          "createdAt": "2026-08-21T15:18:21.981Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": {
@@ -607,25 +608,25 @@
             "test.run"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:11:08.732Z",
+          "heartbeatAt": "2026-08-21T15:18:21.981Z",
           "metadata": {},
-          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_b78ac420-ff6f-4e6e-b0c4-b71c2a08f107",
-        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+        "id": "task_78f99d1d-4e06-4219-a555-0b5d26649f73",
+        "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
         "title": "Perform security review",
-        "description": "Create a calculator software product",
+        "description": "Design and develop a fully functional e-commerce website for Banva",
         "requiredCapabilities": [
           "security",
           "audit"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_594437e8-8390-451b-9267-92f935718194"
+          "task_64cfb4b6-102e-4911-9931-dcd726d9e349"
         ],
         "acceptance": [
           {
@@ -642,21 +643,21 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 60,
-        "updatedAt": "2026-08-21T15:11:08.732Z",
-        "createdAt": "2026-08-21T15:11:08.732Z",
+        "updatedAt": "2026-08-21T15:18:21.981Z",
+        "createdAt": "2026-08-21T15:18:21.981Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_b78ac420-ff6f-4e6e-b0c4-b71c2a08f107",
-          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+          "id": "task_78f99d1d-4e06-4219-a555-0b5d26649f73",
+          "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
           "title": "Perform security review",
-          "description": "Create a calculator software product",
+          "description": "Design and develop a fully functional e-commerce website for Banva",
           "requiredCapabilities": [
             "security",
             "audit"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_594437e8-8390-451b-9267-92f935718194"
+            "task_64cfb4b6-102e-4911-9931-dcd726d9e349"
           ],
           "acceptance": [
             {
@@ -673,8 +674,8 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 60,
-          "updatedAt": "2026-08-21T15:11:08.732Z",
-          "createdAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
+          "createdAt": "2026-08-21T15:18:21.981Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": {
@@ -690,25 +691,25 @@
             "security.scan"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:11:08.732Z",
+          "heartbeatAt": "2026-08-21T15:18:21.981Z",
           "metadata": {},
-          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_7bf91530-89d3-4cbf-b445-ac12c606f325",
-        "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+        "id": "task_431755d9-e59b-43e1-8777-4f4991cfa469",
+        "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
         "title": "Create testing and verification plan",
-        "description": "Create a calculator software product",
+        "description": "Design and develop a fully functional e-commerce website for Banva",
         "requiredCapabilities": [
           "testing",
           "verification"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_b78ac420-ff6f-4e6e-b0c4-b71c2a08f107"
+          "task_78f99d1d-4e06-4219-a555-0b5d26649f73"
         ],
         "acceptance": [
           {
@@ -727,21 +728,21 @@
         ],
         "requiredTools": [],
         "sequence": 70,
-        "updatedAt": "2026-08-21T15:11:08.732Z",
-        "createdAt": "2026-08-21T15:11:08.732Z",
+        "updatedAt": "2026-08-21T15:18:21.981Z",
+        "createdAt": "2026-08-21T15:18:21.981Z",
         "blockedReason": "Dependencies incomplete",
         "task": {
-          "id": "task_7bf91530-89d3-4cbf-b445-ac12c606f325",
-          "projectId": "project_030938d7-b4d5-4804-b349-c67cf31a394b",
+          "id": "task_431755d9-e59b-43e1-8777-4f4991cfa469",
+          "projectId": "project_a812c82f-87fc-43ce-bbe3-bff8bd0f9c9e",
           "title": "Create testing and verification plan",
-          "description": "Create a calculator software product",
+          "description": "Design and develop a fully functional e-commerce website for Banva",
           "requiredCapabilities": [
             "testing",
             "verification"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_b78ac420-ff6f-4e6e-b0c4-b71c2a08f107"
+            "task_78f99d1d-4e06-4219-a555-0b5d26649f73"
           ],
           "acceptance": [
             {
@@ -760,8 +761,8 @@
           ],
           "requiredTools": [],
           "sequence": 70,
-          "updatedAt": "2026-08-21T15:11:08.732Z",
-          "createdAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
+          "createdAt": "2026-08-21T15:18:21.981Z",
           "blockedReason": "Dependencies incomplete"
         },
         "selectedAgent": {
@@ -778,36 +779,36 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T15:11:08.732Z",
+          "heartbeatAt": "2026-08-21T15:18:21.981Z",
           "metadata": {
-            "outcomeCount": 10,
-            "successCount": 10,
+            "outcomeCount": 12,
+            "successCount": 12,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T15:11:08.732Z",
+            "lastOutcomeAt": "2026-08-21T15:18:21.981Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 5,
-                "successes": 5,
+                "attempts": 6,
+                "successes": 6,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.5,
-                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
+                "confidence": 0.6,
+                "lastOutcomeAt": "2026-08-21T15:18:21.981Z"
               },
               "planning|product-planning": {
-                "attempts": 5,
-                "successes": 5,
+                "attempts": 6,
+                "successes": 6,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.5,
-                "lastOutcomeAt": "2026-08-21T15:11:08.732Z"
+                "confidence": 0.6,
+                "lastOutcomeAt": "2026-08-21T15:18:21.981Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T15:11:08.732Z",
+          "updatedAt": "2026-08-21T15:18:21.981Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
