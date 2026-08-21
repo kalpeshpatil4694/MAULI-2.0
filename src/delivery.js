@@ -37,7 +37,7 @@ export function buildFinalDelivery(project) {
       metadata: artifact.metadata ?? {}
     }))
   };
-  return registerArtifact({
+  const artifact = registerArtifact({
     projectId: project.id,
     taskId: null,
     agentId: null,
@@ -45,4 +45,15 @@ export function buildFinalDelivery(project) {
     content: delivery,
     metadata: { state: project.state, generatedBy: 'mauli-l1-delivery' }
   });
+  artifact.content = {
+    ...delivery,
+    artifactId: artifact.id,
+    artifactType: artifact.type
+  };
+  artifact.metadata = {
+    ...artifact.metadata,
+    downloadPath: `/api/artifacts/${artifact.id}/download`
+  };
+  store.put('artifacts', artifact);
+  return artifact;
 }
