@@ -1,36 +1,36 @@
 {
-  "command": "Mobile calculator banva",
-  "generatedAt": "2026-08-21T17:01:36.812Z",
+  "command": "Flying car game for mobile",
+  "generatedAt": "2026-08-21T17:46:44.808Z",
   "result": {
     "project": {
-      "id": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-      "name": "Project: Design and develop a mobile calculator application",
-      "objective": "Design and develop a mobile calculator application",
-      "founderCommand": "Mobile calculator banva",
+      "id": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+      "name": "Project: Design a flying car game for mobile devices with engaging ga",
+      "objective": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
+      "founderCommand": "Flying car game for mobile",
       "requirements": [
-        "User can enter numbers and mathematical operators",
-        "User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
-        "User can view calculation history",
-        "User can clear calculation history"
+        "User can control the flying car using touchscreen or accelerometer",
+        "Game includes multiple levels with increasing difficulty",
+        "Flying car can collect power-ups and coins to upgrade its speed and abilities",
+        "Game has a leaderboard to compare scores with other players"
       ],
       "priority": "normal",
       "state": "completed",
       "milestones": [],
-      "createdAt": "2026-08-21T17:01:01.714Z",
-      "updatedAt": "2026-08-21T17:01:36.812Z"
+      "createdAt": "2026-08-21T17:46:04.490Z",
+      "updatedAt": "2026-08-21T17:46:44.808Z"
     },
     "firstTask": {
-      "id": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
-      "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+      "id": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+      "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
       "title": "Create testing and verification plan",
-      "description": "Design and develop a mobile calculator application",
+      "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
       "requiredCapabilities": [
         "testing",
         "verification"
       ],
       "risk": "normal",
       "dependsOn": [
-        "task_1bbc8d2e-0a9f-459a-9d85-888469ce1343"
+        "task_b752ca0e-e040-4dfa-9098-84389886c633"
       ],
       "acceptance": [
         {
@@ -42,94 +42,67 @@
       "attempts": 1,
       "maxAttempts": 3,
       "executor": "internal.plan",
-      "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-      "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+      "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+      "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
       "toolNames": [
         "test.run"
       ],
       "requiredTools": [],
       "sequence": 70,
-      "updatedAt": "2026-08-21T17:01:36.812Z",
-      "createdAt": "2026-08-21T17:01:01.714Z",
+      "updatedAt": "2026-08-21T17:46:44.808Z",
+      "createdAt": "2026-08-21T17:46:04.490Z",
       "blockedReason": "Dependencies incomplete",
-      "startedAt": "2026-08-21T17:01:36.812Z",
+      "startedAt": "2026-08-21T17:46:44.808Z",
       "memoryContext": [],
       "result": {
         "type": "plan",
-        "taskId": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
+        "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
         "output": "Execution plan generated.",
         "diagnostics": {
           "healthy": true,
-          "at": "2026-08-21T17:01:36.812Z"
+          "at": "2026-08-21T17:46:44.808Z"
         },
         "summary": "Execution plan generated. Verification complete."
       },
-      "verificationId": "verification_77aa968a-976c-4b5d-b8c4-95854c4c46e5",
-      "completedAt": "2026-08-21T17:01:36.812Z"
+      "verificationId": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce",
+      "completedAt": "2026-08-21T17:46:44.808Z"
     },
     "selectedAgent": {
-      "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-      "name": "Product Agent",
-      "role": "Product",
-      "department": "Business",
+      "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+      "name": "QA Agent",
+      "role": "Tester",
+      "department": "Quality",
       "capabilities": [
-        "requirements",
-        "product-planning",
-        "planning"
+        "testing",
+        "verification"
       ],
       "tools": [
-        "planning.execute"
+        "test.run",
+        "code.execute"
       ],
       "state": "available",
-      "heartbeatAt": "2026-08-21T17:01:34.734Z",
-      "metadata": {
-        "outcomeCount": 20,
-        "successCount": 20,
-        "failureCount": 0,
-        "successRate": 1,
-        "lastOutcomeAt": "2026-08-21T17:01:01.714Z",
-        "lastOutcome": "success",
-        "reliabilityScore": 100,
-        "consecutiveFailures": 0,
-        "learning": {
-          "analysis|research": {
-            "attempts": 10,
-            "successes": 10,
-            "failures": 0,
-            "successRate": 1,
-            "confidence": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
-          },
-          "planning|product-planning": {
-            "attempts": 10,
-            "successes": 10,
-            "failures": 0,
-            "successRate": 1,
-            "confidence": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
-          }
-        }
-      },
-      "updatedAt": "2026-08-21T17:01:34.734Z",
+      "heartbeatAt": "2026-08-21T17:46:41.121Z",
+      "metadata": {},
+      "updatedAt": "2026-08-21T17:46:41.121Z",
       "createdAt": "2026-08-20T08:12:51.655Z",
       "currentTaskId": null
     },
     "execution": {
-      "id": "run_8ca91e1f-323a-432d-83a8-a0d982c7f449",
-      "taskId": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
+      "id": "run_60466d7b-67de-4b08-9f7c-1d41fcb9270e",
+      "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
       "executor": "internal.plan",
       "state": "completed",
-      "startedAt": "2026-08-21T17:01:36.812Z",
+      "startedAt": "2026-08-21T17:46:44.808Z",
       "attempt": 1,
-      "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+      "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
       "recoverable": false,
       "result": {
         "type": "plan",
-        "taskId": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
+        "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
         "output": "Execution plan generated.",
         "diagnostics": {
           "healthy": true,
-          "at": "2026-08-21T17:01:36.812Z"
+          "at": "2026-08-21T17:46:44.808Z"
         },
         "summary": "Execution plan generated. Verification complete."
       },
@@ -139,19 +112,19 @@
           "authorization": {
             "tool": "test.run",
             "status": "available",
-            "taskId": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
+            "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
             "summary": "Test runtime is available for L1 verification."
           }
         }
       ],
-      "completedAt": "2026-08-21T17:01:36.812Z",
+      "completedAt": "2026-08-21T17:46:44.808Z",
       "status": "completed",
-      "executionId": "run_8ca91e1f-323a-432d-83a8-a0d982c7f449"
+      "executionId": "run_60466d7b-67de-4b08-9f7c-1d41fcb9270e"
     },
     "verification": {
-      "id": "verification_77aa968a-976c-4b5d-b8c4-95854c4c46e5",
-      "taskId": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
-      "executionId": "run_8ca91e1f-323a-432d-83a8-a0d982c7f449",
+      "id": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce",
+      "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+      "executionId": "run_60466d7b-67de-4b08-9f7c-1d41fcb9270e",
       "passed": true,
       "checks": [
         {
@@ -186,15 +159,15 @@
           ]
         }
       ],
-      "verifiedAt": "2026-08-21T17:01:36.812Z"
+      "verifiedAt": "2026-08-21T17:46:44.808Z"
     },
     "status": "completed",
     "tasks": [
       {
-        "id": "task_b3e28565-e0ab-4073-a27f-f56cc66c27de",
-        "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-        "title": "Research and validate requirements: User can enter numbers and mathematical operators",
-        "description": "Design and develop a mobile calculator application",
+        "id": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
+        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+        "title": "Research and validate requirements: User can control the flying car using touchscreen or accelerometer",
+        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
         "requiredCapabilities": [
           "research",
           "analysis"
@@ -211,15 +184,15 @@
         "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.plan",
-        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
         "toolNames": [],
         "requiredTools": [],
         "sequence": 10,
-        "updatedAt": "2026-08-21T17:01:01.714Z",
-        "createdAt": "2026-08-21T17:01:01.714Z",
-        "assignedAt": "2026-08-21T17:01:01.714Z",
-        "startedAt": "2026-08-21T17:01:01.714Z",
+        "updatedAt": "2026-08-21T17:46:04.490Z",
+        "createdAt": "2026-08-21T17:46:04.490Z",
+        "assignedAt": "2026-08-21T17:46:04.490Z",
+        "startedAt": "2026-08-21T17:46:04.490Z",
         "memoryContext": [
           {
             "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
@@ -234,21 +207,21 @@
         ],
         "result": {
           "type": "plan",
-          "taskId": "task_b3e28565-e0ab-4073-a27f-f56cc66c27de",
+          "taskId": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T17:01:01.714Z"
+            "at": "2026-08-21T17:46:04.490Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_af2e7412-520b-4cf5-bea9-8a289212c8d5",
-        "completedAt": "2026-08-21T17:01:01.714Z",
+        "verificationId": "verification_6ffd967d-429e-47a9-b78f-7998bfc11227",
+        "completedAt": "2026-08-21T17:46:04.490Z",
         "task": {
-          "id": "task_b3e28565-e0ab-4073-a27f-f56cc66c27de",
-          "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-          "title": "Research and validate requirements: User can enter numbers and mathematical operators",
-          "description": "Design and develop a mobile calculator application",
+          "id": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
+          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+          "title": "Research and validate requirements: User can control the flying car using touchscreen or accelerometer",
+          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
           "requiredCapabilities": [
             "research",
             "analysis"
@@ -265,15 +238,15 @@
           "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.plan",
-          "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-          "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
           "toolNames": [],
           "requiredTools": [],
           "sequence": 10,
-          "updatedAt": "2026-08-21T17:01:01.714Z",
-          "createdAt": "2026-08-21T17:01:01.714Z",
-          "assignedAt": "2026-08-21T17:01:01.714Z",
-          "startedAt": "2026-08-21T17:01:01.714Z",
+          "updatedAt": "2026-08-21T17:46:04.490Z",
+          "createdAt": "2026-08-21T17:46:04.490Z",
+          "assignedAt": "2026-08-21T17:46:04.490Z",
+          "startedAt": "2026-08-21T17:46:04.490Z",
           "memoryContext": [
             {
               "taskId": "task_a2bb2f7e-a97b-4a39-b297-35494682e525",
@@ -288,85 +261,68 @@
           ],
           "result": {
             "type": "plan",
-            "taskId": "task_b3e28565-e0ab-4073-a27f-f56cc66c27de",
+            "taskId": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T17:01:01.714Z"
+              "at": "2026-08-21T17:46:04.490Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_af2e7412-520b-4cf5-bea9-8a289212c8d5",
-          "completedAt": "2026-08-21T17:01:01.714Z"
+          "verificationId": "verification_6ffd967d-429e-47a9-b78f-7998bfc11227",
+          "completedAt": "2026-08-21T17:46:04.490Z"
         },
         "selectedAgent": {
-          "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-          "name": "Product Agent",
-          "role": "Product",
-          "department": "Business",
+          "id": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "name": "Research Agent",
+          "role": "Research",
+          "department": "Research",
           "capabilities": [
-            "requirements",
-            "product-planning",
-            "planning"
+            "research",
+            "analysis"
           ],
           "tools": [
-            "planning.execute"
+            "web.search"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:01:36.812Z",
+          "heartbeatAt": "2026-08-21T17:46:41.121Z",
           "metadata": {
-            "outcomeCount": 21,
-            "successCount": 21,
+            "outcomeCount": 1,
+            "successCount": 1,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:36.812Z",
+            "lastOutcomeAt": "2026-08-21T17:46:04.490Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "analysis|research": {
-                "attempts": 10,
-                "successes": 10,
-                "failures": 0,
-                "successRate": 1,
-                "confidence": 1,
-                "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
-              },
-              "planning|product-planning": {
-                "attempts": 10,
-                "successes": 10,
-                "failures": 0,
-                "successRate": 1,
-                "confidence": 1,
-                "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
-              },
-              "testing|verification": {
                 "attempts": 1,
                 "successes": 1,
                 "failures": 0,
                 "successRate": 1,
                 "confidence": 0.1,
-                "lastOutcomeAt": "2026-08-21T17:01:36.812Z"
+                "lastOutcomeAt": "2026-08-21T17:46:04.490Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:01:36.812Z",
+          "updatedAt": "2026-08-21T17:46:41.121Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_237d5189-6cf1-4ca4-a628-bd516fdf3f64",
-        "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-        "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
-        "description": "Design and develop a mobile calculator application",
+        "id": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
+        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+        "title": "Define product and architecture plan: Game includes multiple levels with increasing difficulty",
+        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
         "requiredCapabilities": [
           "product-planning",
           "planning"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_b3e28565-e0ab-4073-a27f-f56cc66c27de"
+          "task_22301a89-f202-4f31-aea7-eb7ab68161f5"
         ],
         "acceptance": [
           {
@@ -385,10 +341,10 @@
         ],
         "requiredTools": [],
         "sequence": 20,
-        "updatedAt": "2026-08-21T17:01:01.714Z",
-        "createdAt": "2026-08-21T17:01:01.714Z",
+        "updatedAt": "2026-08-21T17:46:04.490Z",
+        "createdAt": "2026-08-21T17:46:04.490Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:01:01.714Z",
+        "startedAt": "2026-08-21T17:46:04.490Z",
         "memoryContext": [
           {
             "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
@@ -403,28 +359,28 @@
         ],
         "result": {
           "type": "plan",
-          "taskId": "task_237d5189-6cf1-4ca4-a628-bd516fdf3f64",
+          "taskId": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T17:01:01.714Z"
+            "at": "2026-08-21T17:46:04.490Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_ba503130-03d5-445d-907e-e22e3610e2fc",
-        "completedAt": "2026-08-21T17:01:01.714Z",
+        "verificationId": "verification_e0a219a9-ae29-44ac-b26f-3819ce2c5fcf",
+        "completedAt": "2026-08-21T17:46:04.490Z",
         "task": {
-          "id": "task_237d5189-6cf1-4ca4-a628-bd516fdf3f64",
-          "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-          "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
-          "description": "Design and develop a mobile calculator application",
+          "id": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
+          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+          "title": "Define product and architecture plan: Game includes multiple levels with increasing difficulty",
+          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
           "requiredCapabilities": [
             "product-planning",
             "planning"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_b3e28565-e0ab-4073-a27f-f56cc66c27de"
+            "task_22301a89-f202-4f31-aea7-eb7ab68161f5"
           ],
           "acceptance": [
             {
@@ -443,10 +399,10 @@
           ],
           "requiredTools": [],
           "sequence": 20,
-          "updatedAt": "2026-08-21T17:01:01.714Z",
-          "createdAt": "2026-08-21T17:01:01.714Z",
+          "updatedAt": "2026-08-21T17:46:04.490Z",
+          "createdAt": "2026-08-21T17:46:04.490Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:01:01.714Z",
+          "startedAt": "2026-08-21T17:46:04.490Z",
           "memoryContext": [
             {
               "taskId": "task_3a6fb3fa-ef1a-4337-b78e-625ad21da2be",
@@ -461,16 +417,16 @@
           ],
           "result": {
             "type": "plan",
-            "taskId": "task_237d5189-6cf1-4ca4-a628-bd516fdf3f64",
+            "taskId": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T17:01:01.714Z"
+              "at": "2026-08-21T17:46:04.490Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_ba503130-03d5-445d-907e-e22e3610e2fc",
-          "completedAt": "2026-08-21T17:01:01.714Z"
+          "verificationId": "verification_e0a219a9-ae29-44ac-b26f-3819ce2c5fcf",
+          "completedAt": "2026-08-21T17:46:04.490Z"
         },
         "selectedAgent": {
           "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
@@ -486,13 +442,13 @@
             "planning.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:01:36.812Z",
+          "heartbeatAt": "2026-08-21T17:46:41.121Z",
           "metadata": {
-            "outcomeCount": 21,
-            "successCount": 21,
+            "outcomeCount": 22,
+            "successCount": 22,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:36.812Z",
+            "lastOutcomeAt": "2026-08-21T17:46:04.490Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
@@ -506,12 +462,12 @@
                 "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
               },
               "planning|product-planning": {
-                "attempts": 10,
-                "successes": 10,
+                "attempts": 11,
+                "successes": 11,
                 "failures": 0,
                 "successRate": 1,
                 "confidence": 1,
-                "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
+                "lastOutcomeAt": "2026-08-21T17:46:04.490Z"
               },
               "testing|verification": {
                 "attempts": 1,
@@ -523,23 +479,23 @@
               }
             }
           },
-          "updatedAt": "2026-08-21T17:01:36.812Z",
+          "updatedAt": "2026-08-21T17:46:41.121Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_a4b9ba67-cf0b-4858-96c6-2e859c13d2bf",
-        "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-        "title": "Implement backend code and API: User can clear calculation history",
-        "description": "Design and develop a mobile calculator application",
+        "id": "task_6b0ece7d-73de-4762-9206-d56d66b482e5",
+        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+        "title": "Implement backend code and API: Game has a leaderboard to compare scores with other players",
+        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
         "requiredCapabilities": [
           "backend",
           "api"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_237d5189-6cf1-4ca4-a628-bd516fdf3f64"
+          "task_5de5c799-31d1-49d6-aede-e442e5624a11"
         ],
         "acceptance": [
           {
@@ -556,19 +512,19 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 30,
-        "updatedAt": "2026-08-21T17:01:10.723Z",
-        "createdAt": "2026-08-21T17:01:01.714Z",
+        "updatedAt": "2026-08-21T17:46:10.070Z",
+        "createdAt": "2026-08-21T17:46:04.490Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:01:01.714Z",
+        "startedAt": "2026-08-21T17:46:04.490Z",
         "memoryContext": [],
         "result": {
           "type": "code",
-          "artifactId": "artifact_61e55711-0558-4096-992b-220206341504",
+          "artifactId": "artifact_4736e7df-50c0-4def-bb25-0399f4f33651",
           "summary": "Code artifact generated without paid/cloud services. [object Object]",
           "files": [
             {
               "path": "generated/README.md",
-              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: User can clear calculation history\nObjective: Design and develop a mobile calculator application\nAcceptance: [object Object]"
+              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: Game has a leaderboard to compare scores with other players\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
             }
           ],
           "tests": [
@@ -584,20 +540,20 @@
             }
           ]
         },
-        "verificationId": "verification_9f7b8830-1ec9-4714-ac42-182f041e9a04",
-        "completedAt": "2026-08-21T17:01:10.723Z",
+        "verificationId": "verification_85000551-1ba4-4ac4-9928-7439fe9344aa",
+        "completedAt": "2026-08-21T17:46:10.070Z",
         "task": {
-          "id": "task_a4b9ba67-cf0b-4858-96c6-2e859c13d2bf",
-          "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-          "title": "Implement backend code and API: User can clear calculation history",
-          "description": "Design and develop a mobile calculator application",
+          "id": "task_6b0ece7d-73de-4762-9206-d56d66b482e5",
+          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+          "title": "Implement backend code and API: Game has a leaderboard to compare scores with other players",
+          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
           "requiredCapabilities": [
             "backend",
             "api"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_237d5189-6cf1-4ca4-a628-bd516fdf3f64"
+            "task_5de5c799-31d1-49d6-aede-e442e5624a11"
           ],
           "acceptance": [
             {
@@ -614,19 +570,19 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 30,
-          "updatedAt": "2026-08-21T17:01:10.723Z",
-          "createdAt": "2026-08-21T17:01:01.714Z",
+          "updatedAt": "2026-08-21T17:46:10.070Z",
+          "createdAt": "2026-08-21T17:46:04.490Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:01:01.714Z",
+          "startedAt": "2026-08-21T17:46:04.490Z",
           "memoryContext": [],
           "result": {
             "type": "code",
-            "artifactId": "artifact_61e55711-0558-4096-992b-220206341504",
+            "artifactId": "artifact_4736e7df-50c0-4def-bb25-0399f4f33651",
             "summary": "Code artifact generated without paid/cloud services. [object Object]",
             "files": [
               {
                 "path": "generated/README.md",
-                "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: User can clear calculation history\nObjective: Design and develop a mobile calculator application\nAcceptance: [object Object]"
+                "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: Game has a leaderboard to compare scores with other players\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
               }
             ],
             "tests": [
@@ -642,8 +598,8 @@
               }
             ]
           },
-          "verificationId": "verification_9f7b8830-1ec9-4714-ac42-182f041e9a04",
-          "completedAt": "2026-08-21T17:01:10.723Z"
+          "verificationId": "verification_85000551-1ba4-4ac4-9928-7439fe9344aa",
+          "completedAt": "2026-08-21T17:46:10.070Z"
         },
         "selectedAgent": {
           "id": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
@@ -660,37 +616,37 @@
             "test.run"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:01:34.734Z",
+          "heartbeatAt": "2026-08-21T17:46:41.121Z",
           "metadata": {
-            "outcomeCount": 1,
-            "successCount": 1,
+            "outcomeCount": 2,
+            "successCount": 2,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:10.723Z",
+            "lastOutcomeAt": "2026-08-21T17:46:10.070Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "api|backend": {
-                "attempts": 1,
-                "successes": 1,
+                "attempts": 2,
+                "successes": 2,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.1,
-                "lastOutcomeAt": "2026-08-21T17:01:10.723Z"
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T17:46:10.070Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:01:34.734Z",
+          "updatedAt": "2026-08-21T17:46:41.121Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_ffc20a1f-b82b-4e05-990b-aa5edb620910",
-        "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+        "id": "task_bae44dbd-3341-45b4-908c-85af49106162",
+        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
         "title": "Implement database and persistence schema",
-        "description": "Design and develop a mobile calculator application",
+        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
         "requiredCapabilities": [
           "database",
           "schema",
@@ -698,7 +654,7 @@
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_a4b9ba67-cf0b-4858-96c6-2e859c13d2bf"
+          "task_6b0ece7d-73de-4762-9206-d56d66b482e5"
         ],
         "acceptance": [
           {
@@ -715,19 +671,19 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 40,
-        "updatedAt": "2026-08-21T17:01:18.056Z",
-        "createdAt": "2026-08-21T17:01:01.714Z",
+        "updatedAt": "2026-08-21T17:46:23.623Z",
+        "createdAt": "2026-08-21T17:46:04.490Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:01:10.723Z",
+        "startedAt": "2026-08-21T17:46:10.070Z",
         "memoryContext": [],
         "result": {
           "type": "code",
-          "artifactId": "artifact_eb25f571-ff5e-4d7f-bbc2-244a08df2ee1",
+          "artifactId": "artifact_d89f2afe-ffb4-4144-b929-b5982b004efa",
           "summary": "Code artifact generated without paid/cloud services. [object Object]",
           "files": [
             {
               "path": "generated/README.md",
-              "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema\nObjective: Design and develop a mobile calculator application\nAcceptance: [object Object]"
+              "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
             }
           ],
           "tests": [
@@ -743,13 +699,13 @@
             }
           ]
         },
-        "verificationId": "verification_15ff490c-499c-4073-ac32-e4b6de32474e",
-        "completedAt": "2026-08-21T17:01:18.056Z",
+        "verificationId": "verification_18d93c74-0492-406b-8458-a158547f723c",
+        "completedAt": "2026-08-21T17:46:23.623Z",
         "task": {
-          "id": "task_ffc20a1f-b82b-4e05-990b-aa5edb620910",
-          "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+          "id": "task_bae44dbd-3341-45b4-908c-85af49106162",
+          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
           "title": "Implement database and persistence schema",
-          "description": "Design and develop a mobile calculator application",
+          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
           "requiredCapabilities": [
             "database",
             "schema",
@@ -757,7 +713,7 @@
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_a4b9ba67-cf0b-4858-96c6-2e859c13d2bf"
+            "task_6b0ece7d-73de-4762-9206-d56d66b482e5"
           ],
           "acceptance": [
             {
@@ -774,19 +730,19 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 40,
-          "updatedAt": "2026-08-21T17:01:18.056Z",
-          "createdAt": "2026-08-21T17:01:01.714Z",
+          "updatedAt": "2026-08-21T17:46:23.623Z",
+          "createdAt": "2026-08-21T17:46:04.490Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:01:10.723Z",
+          "startedAt": "2026-08-21T17:46:10.070Z",
           "memoryContext": [],
           "result": {
             "type": "code",
-            "artifactId": "artifact_eb25f571-ff5e-4d7f-bbc2-244a08df2ee1",
+            "artifactId": "artifact_d89f2afe-ffb4-4144-b929-b5982b004efa",
             "summary": "Code artifact generated without paid/cloud services. [object Object]",
             "files": [
               {
                 "path": "generated/README.md",
-                "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema\nObjective: Design and develop a mobile calculator application\nAcceptance: [object Object]"
+                "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
               }
             ],
             "tests": [
@@ -802,8 +758,8 @@
               }
             ]
           },
-          "verificationId": "verification_15ff490c-499c-4073-ac32-e4b6de32474e",
-          "completedAt": "2026-08-21T17:01:18.056Z"
+          "verificationId": "verification_18d93c74-0492-406b-8458-a158547f723c",
+          "completedAt": "2026-08-21T17:46:23.623Z"
         },
         "selectedAgent": {
           "id": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
@@ -820,44 +776,44 @@
             "code.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:01:34.734Z",
+          "heartbeatAt": "2026-08-21T17:46:41.121Z",
           "metadata": {
-            "outcomeCount": 1,
-            "successCount": 1,
+            "outcomeCount": 2,
+            "successCount": 2,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:18.056Z",
+            "lastOutcomeAt": "2026-08-21T17:46:23.623Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "database|schema|sql": {
-                "attempts": 1,
-                "successes": 1,
+                "attempts": 2,
+                "successes": 2,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.1,
-                "lastOutcomeAt": "2026-08-21T17:01:18.056Z"
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T17:46:23.623Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:01:34.734Z",
+          "updatedAt": "2026-08-21T17:46:41.121Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_8bfcf91e-060f-4c5f-a1c8-cb4c0dbefc38",
-        "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-        "title": "Implement frontend code and user experience: User can view calculation history",
-        "description": "Design and develop a mobile calculator application",
+        "id": "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182",
+        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+        "title": "Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities",
+        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
         "requiredCapabilities": [
           "frontend",
           "ui"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_ffc20a1f-b82b-4e05-990b-aa5edb620910"
+          "task_bae44dbd-3341-45b4-908c-85af49106162"
         ],
         "acceptance": [
           {
@@ -874,19 +830,19 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 50,
-        "updatedAt": "2026-08-21T17:01:31.809Z",
-        "createdAt": "2026-08-21T17:01:01.714Z",
+        "updatedAt": "2026-08-21T17:46:39.269Z",
+        "createdAt": "2026-08-21T17:46:04.490Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:01:18.056Z",
+        "startedAt": "2026-08-21T17:46:23.623Z",
         "memoryContext": [],
         "result": {
           "type": "code",
-          "artifactId": "artifact_cf1f01f3-14db-41b6-95fe-756649272815",
+          "artifactId": "artifact_6523791d-2ea0-4391-9679-a7c3e6cdde0e",
           "summary": "Code artifact generated without paid/cloud services. [object Object]",
           "files": [
             {
               "path": "generated/README.md",
-              "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience: User can view calculation history\nObjective: Design and develop a mobile calculator application\nAcceptance: [object Object]"
+              "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
             }
           ],
           "tests": [
@@ -902,20 +858,20 @@
             }
           ]
         },
-        "verificationId": "verification_da3d4ec3-65d6-4ffb-bd06-c40ca3f4d878",
-        "completedAt": "2026-08-21T17:01:31.809Z",
+        "verificationId": "verification_57805c78-dd57-44b5-aca1-978d54ec7a0d",
+        "completedAt": "2026-08-21T17:46:39.269Z",
         "task": {
-          "id": "task_8bfcf91e-060f-4c5f-a1c8-cb4c0dbefc38",
-          "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-          "title": "Implement frontend code and user experience: User can view calculation history",
-          "description": "Design and develop a mobile calculator application",
+          "id": "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182",
+          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+          "title": "Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities",
+          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
           "requiredCapabilities": [
             "frontend",
             "ui"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_ffc20a1f-b82b-4e05-990b-aa5edb620910"
+            "task_bae44dbd-3341-45b4-908c-85af49106162"
           ],
           "acceptance": [
             {
@@ -932,19 +888,19 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 50,
-          "updatedAt": "2026-08-21T17:01:31.809Z",
-          "createdAt": "2026-08-21T17:01:01.714Z",
+          "updatedAt": "2026-08-21T17:46:39.269Z",
+          "createdAt": "2026-08-21T17:46:04.490Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:01:18.056Z",
+          "startedAt": "2026-08-21T17:46:23.623Z",
           "memoryContext": [],
           "result": {
             "type": "code",
-            "artifactId": "artifact_cf1f01f3-14db-41b6-95fe-756649272815",
+            "artifactId": "artifact_6523791d-2ea0-4391-9679-a7c3e6cdde0e",
             "summary": "Code artifact generated without paid/cloud services. [object Object]",
             "files": [
               {
                 "path": "generated/README.md",
-                "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience: User can view calculation history\nObjective: Design and develop a mobile calculator application\nAcceptance: [object Object]"
+                "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
               }
             ],
             "tests": [
@@ -960,8 +916,8 @@
               }
             ]
           },
-          "verificationId": "verification_da3d4ec3-65d6-4ffb-bd06-c40ca3f4d878",
-          "completedAt": "2026-08-21T17:01:31.809Z"
+          "verificationId": "verification_57805c78-dd57-44b5-aca1-978d54ec7a0d",
+          "completedAt": "2026-08-21T17:46:39.269Z"
         },
         "selectedAgent": {
           "id": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
@@ -978,44 +934,44 @@
             "test.run"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:01:34.734Z",
+          "heartbeatAt": "2026-08-21T17:46:41.121Z",
           "metadata": {
-            "outcomeCount": 1,
-            "successCount": 1,
+            "outcomeCount": 2,
+            "successCount": 2,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:31.809Z",
+            "lastOutcomeAt": "2026-08-21T17:46:39.269Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "frontend|ui": {
-                "attempts": 1,
-                "successes": 1,
+                "attempts": 2,
+                "successes": 2,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.1,
-                "lastOutcomeAt": "2026-08-21T17:01:31.809Z"
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T17:46:39.269Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:01:34.734Z",
+          "updatedAt": "2026-08-21T17:46:41.121Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_1bbc8d2e-0a9f-459a-9d85-888469ce1343",
-        "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+        "id": "task_b752ca0e-e040-4dfa-9098-84389886c633",
+        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
         "title": "Perform security review",
-        "description": "Design and develop a mobile calculator application",
+        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
         "requiredCapabilities": [
           "security",
           "audit"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_8bfcf91e-060f-4c5f-a1c8-cb4c0dbefc38"
+          "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182"
         ],
         "acceptance": [
           {
@@ -1032,28 +988,26 @@
         "toolNames": [],
         "requiredTools": [],
         "sequence": 60,
-        "updatedAt": "2026-08-21T17:01:36.812Z",
-        "createdAt": "2026-08-21T17:01:01.714Z",
+        "updatedAt": "2026-08-21T17:46:44.808Z",
+        "createdAt": "2026-08-21T17:46:04.490Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:01:31.809Z",
+        "startedAt": "2026-08-21T17:46:39.269Z",
         "memoryContext": [],
         "result": {
           "type": "code",
-          "artifactId": "artifact_43b3b984-595d-4597-9c48-353ca4910bd9",
-          "summary": "Mobile Calculator Application Security Review",
+          "artifactId": "artifact_ad8b8e32-10d7-437f-ae50-fa174f8c60d4",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
           "files": [
             {
-              "content": "# Security Review\n## Introduction\nThe mobile calculator application is designed to perform basic arithmetic operations. To ensure the security of the application, a thorough review is necessary.\n## Threat Model\nThe application is vulnerable to the following threats:\n* Unauthorized access to user data\n* Malicious code injection\n* Data tampering\n## Security Requirements\nTo mitigate the identified threats, the following security requirements are specified:\n* Implement data encryption for user data\n* Validate and sanitize user input\n* Use secure communication protocols\n## Audit Logs\nAudit logs will be implemented to track user activity and detect potential security incidents.\n## Secure Coding Practices\nThe following secure coding practices will be followed:\n* Input validation and sanitization\n* Error handling and logging\n* Secure data storage",
-              "path": "security_review.md"
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Perform security review\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
             }
           ],
           "tests": [
-            "Unit tests for input validation and sanitization",
-            "Integration tests for secure communication protocols"
+            "node --test"
           ],
           "notes": [
-            "The security review will be performed regularly to ensure the application's security posture",
-            "The application will be designed with security in mind from the outset"
+            "Deterministic L1 fallback used because AI runtime is unavailable."
           ],
           "acceptance": [
             {
@@ -1062,20 +1016,20 @@
             }
           ]
         },
-        "verificationId": "verification_780461f1-3279-4492-9f7c-5ba3445545ad",
-        "completedAt": "2026-08-21T17:01:36.812Z",
+        "verificationId": "verification_bd52f869-5155-4079-8bff-a960ba56681f",
+        "completedAt": "2026-08-21T17:46:44.808Z",
         "task": {
-          "id": "task_1bbc8d2e-0a9f-459a-9d85-888469ce1343",
-          "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+          "id": "task_b752ca0e-e040-4dfa-9098-84389886c633",
+          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
           "title": "Perform security review",
-          "description": "Design and develop a mobile calculator application",
+          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
           "requiredCapabilities": [
             "security",
             "audit"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_8bfcf91e-060f-4c5f-a1c8-cb4c0dbefc38"
+            "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182"
           ],
           "acceptance": [
             {
@@ -1092,28 +1046,26 @@
           "toolNames": [],
           "requiredTools": [],
           "sequence": 60,
-          "updatedAt": "2026-08-21T17:01:36.812Z",
-          "createdAt": "2026-08-21T17:01:01.714Z",
+          "updatedAt": "2026-08-21T17:46:44.808Z",
+          "createdAt": "2026-08-21T17:46:04.490Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:01:31.809Z",
+          "startedAt": "2026-08-21T17:46:39.269Z",
           "memoryContext": [],
           "result": {
             "type": "code",
-            "artifactId": "artifact_43b3b984-595d-4597-9c48-353ca4910bd9",
-            "summary": "Mobile Calculator Application Security Review",
+            "artifactId": "artifact_ad8b8e32-10d7-437f-ae50-fa174f8c60d4",
+            "summary": "Code artifact generated without paid/cloud services. [object Object]",
             "files": [
               {
-                "content": "# Security Review\n## Introduction\nThe mobile calculator application is designed to perform basic arithmetic operations. To ensure the security of the application, a thorough review is necessary.\n## Threat Model\nThe application is vulnerable to the following threats:\n* Unauthorized access to user data\n* Malicious code injection\n* Data tampering\n## Security Requirements\nTo mitigate the identified threats, the following security requirements are specified:\n* Implement data encryption for user data\n* Validate and sanitize user input\n* Use secure communication protocols\n## Audit Logs\nAudit logs will be implemented to track user activity and detect potential security incidents.\n## Secure Coding Practices\nThe following secure coding practices will be followed:\n* Input validation and sanitization\n* Error handling and logging\n* Secure data storage",
-                "path": "security_review.md"
+                "path": "generated/README.md",
+                "content": "MAULI L1 generated workspace\nTask: Perform security review\nObjective: Design a flying car game for mobile devices with engaging gameplay and realistic graphics\nAcceptance: [object Object]"
               }
             ],
             "tests": [
-              "Unit tests for input validation and sanitization",
-              "Integration tests for secure communication protocols"
+              "node --test"
             ],
             "notes": [
-              "The security review will be performed regularly to ensure the application's security posture",
-              "The application will be designed with security in mind from the outset"
+              "Deterministic L1 fallback used because AI runtime is unavailable."
             ],
             "acceptance": [
               {
@@ -1122,8 +1074,8 @@
               }
             ]
           },
-          "verificationId": "verification_780461f1-3279-4492-9f7c-5ba3445545ad",
-          "completedAt": "2026-08-21T17:01:36.812Z"
+          "verificationId": "verification_bd52f869-5155-4079-8bff-a960ba56681f",
+          "completedAt": "2026-08-21T17:46:44.808Z"
         },
         "selectedAgent": {
           "id": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
@@ -1138,44 +1090,44 @@
             "security.scan"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-21T17:01:36.812Z",
+          "heartbeatAt": "2026-08-21T17:46:44.808Z",
           "metadata": {
-            "outcomeCount": 1,
-            "successCount": 1,
+            "outcomeCount": 2,
+            "successCount": 2,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:36.812Z",
+            "lastOutcomeAt": "2026-08-21T17:46:44.808Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "audit|security": {
-                "attempts": 1,
-                "successes": 1,
+                "attempts": 2,
+                "successes": 2,
                 "failures": 0,
                 "successRate": 1,
-                "confidence": 0.1,
-                "lastOutcomeAt": "2026-08-21T17:01:36.812Z"
+                "confidence": 0.2,
+                "lastOutcomeAt": "2026-08-21T17:46:44.808Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:01:36.812Z",
+          "updatedAt": "2026-08-21T17:46:44.808Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
-        "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+        "id": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
         "title": "Create testing and verification plan",
-        "description": "Design and develop a mobile calculator application",
+        "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
         "requiredCapabilities": [
           "testing",
           "verification"
         ],
         "risk": "normal",
         "dependsOn": [
-          "task_1bbc8d2e-0a9f-459a-9d85-888469ce1343"
+          "task_b752ca0e-e040-4dfa-9098-84389886c633"
         ],
         "acceptance": [
           {
@@ -1187,42 +1139,42 @@
         "attempts": 1,
         "maxAttempts": 3,
         "executor": "internal.plan",
-        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
         "toolNames": [
           "test.run"
         ],
         "requiredTools": [],
         "sequence": 70,
-        "updatedAt": "2026-08-21T17:01:36.812Z",
-        "createdAt": "2026-08-21T17:01:01.714Z",
+        "updatedAt": "2026-08-21T17:46:44.808Z",
+        "createdAt": "2026-08-21T17:46:04.490Z",
         "blockedReason": "Dependencies incomplete",
-        "startedAt": "2026-08-21T17:01:36.812Z",
+        "startedAt": "2026-08-21T17:46:44.808Z",
         "memoryContext": [],
         "result": {
           "type": "plan",
-          "taskId": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
+          "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-21T17:01:36.812Z"
+            "at": "2026-08-21T17:46:44.808Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_77aa968a-976c-4b5d-b8c4-95854c4c46e5",
-        "completedAt": "2026-08-21T17:01:36.812Z",
+        "verificationId": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce",
+        "completedAt": "2026-08-21T17:46:44.808Z",
         "task": {
-          "id": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
-          "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+          "id": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
+          "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
           "title": "Create testing and verification plan",
-          "description": "Design and develop a mobile calculator application",
+          "description": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
           "requiredCapabilities": [
             "testing",
             "verification"
           ],
           "risk": "normal",
           "dependsOn": [
-            "task_1bbc8d2e-0a9f-459a-9d85-888469ce1343"
+            "task_b752ca0e-e040-4dfa-9098-84389886c633"
           ],
           "acceptance": [
             {
@@ -1234,100 +1186,84 @@
           "attempts": 1,
           "maxAttempts": 3,
           "executor": "internal.plan",
-          "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-          "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
           "toolNames": [
             "test.run"
           ],
           "requiredTools": [],
           "sequence": 70,
-          "updatedAt": "2026-08-21T17:01:36.812Z",
-          "createdAt": "2026-08-21T17:01:01.714Z",
+          "updatedAt": "2026-08-21T17:46:44.808Z",
+          "createdAt": "2026-08-21T17:46:04.490Z",
           "blockedReason": "Dependencies incomplete",
-          "startedAt": "2026-08-21T17:01:36.812Z",
+          "startedAt": "2026-08-21T17:46:44.808Z",
           "memoryContext": [],
           "result": {
             "type": "plan",
-            "taskId": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
+            "taskId": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-21T17:01:36.812Z"
+              "at": "2026-08-21T17:46:44.808Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_77aa968a-976c-4b5d-b8c4-95854c4c46e5",
-          "completedAt": "2026-08-21T17:01:36.812Z"
+          "verificationId": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce",
+          "completedAt": "2026-08-21T17:46:44.808Z"
         },
         "selectedAgent": {
-          "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-          "name": "Product Agent",
-          "role": "Product",
-          "department": "Business",
+          "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "name": "QA Agent",
+          "role": "Tester",
+          "department": "Quality",
           "capabilities": [
-            "requirements",
-            "product-planning",
-            "planning"
+            "testing",
+            "verification"
           ],
           "tools": [
-            "planning.execute"
+            "test.run",
+            "code.execute"
           ],
-          "state": "available",
-          "heartbeatAt": "2026-08-21T17:01:36.812Z",
+          "state": "assigned",
+          "heartbeatAt": "2026-08-21T17:46:44.808Z",
           "metadata": {
-            "outcomeCount": 21,
-            "successCount": 21,
+            "outcomeCount": 1,
+            "successCount": 1,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-21T17:01:36.812Z",
+            "lastOutcomeAt": "2026-08-21T17:46:44.808Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
-              "analysis|research": {
-                "attempts": 10,
-                "successes": 10,
-                "failures": 0,
-                "successRate": 1,
-                "confidence": 1,
-                "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
-              },
-              "planning|product-planning": {
-                "attempts": 10,
-                "successes": 10,
-                "failures": 0,
-                "successRate": 1,
-                "confidence": 1,
-                "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
-              },
               "testing|verification": {
                 "attempts": 1,
                 "successes": 1,
                 "failures": 0,
                 "successRate": 1,
                 "confidence": 0.1,
-                "lastOutcomeAt": "2026-08-21T17:01:36.812Z"
+                "lastOutcomeAt": "2026-08-21T17:46:44.808Z"
               }
             }
           },
-          "updatedAt": "2026-08-21T17:01:36.812Z",
+          "updatedAt": "2026-08-21T17:46:44.808Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
-          "currentTaskId": null
+          "currentTaskId": "task_c343fff0-e140-4857-8386-51d7dc1b845d"
         }
       }
     ],
     "finalDelivery": {
-      "id": "artifact_7ea64376-1176-4137-b61f-74e015db8280",
-      "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+      "id": "artifact_3ca17aea-ee76-4fa3-8ab6-5057124ebc14",
+      "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
       "taskId": null,
       "agentId": null,
       "type": "final-delivery",
       "content": {
-        "projectId": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
+        "projectId": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
         "project": {
-          "id": "project_90c903ee-72d8-4afb-9fae-178d4050b784",
-          "name": "Project: Design and develop a mobile calculator application",
-          "objective": "Design and develop a mobile calculator application",
+          "id": "project_2edc3693-da36-478c-bad8-8dbf9dda3d2b",
+          "name": "Project: Design a flying car game for mobile devices with engaging ga",
+          "objective": "Design a flying car game for mobile devices with engaging gameplay and realistic graphics",
           "state": "completed"
         },
         "summary": {
@@ -1335,95 +1271,95 @@
           "completedTasks": 8,
           "failedTasks": 0,
           "artifactCount": 4,
-          "deliveredAt": "2026-08-21T17:01:36.812Z"
+          "deliveredAt": "2026-08-21T17:46:44.808Z"
         },
         "tasks": [
           {
-            "id": "task_b3e28565-e0ab-4073-a27f-f56cc66c27de",
-            "title": "Research and validate requirements: User can enter numbers and mathematical operators",
+            "id": "task_22301a89-f202-4f31-aea7-eb7ab68161f5",
+            "title": "Research and validate requirements: User can control the flying car using touchscreen or accelerometer",
             "state": "completed",
-            "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-            "verificationId": "verification_af2e7412-520b-4cf5-bea9-8a289212c8d5"
+            "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+            "verificationId": "verification_6ffd967d-429e-47a9-b78f-7998bfc11227"
           },
           {
-            "id": "task_237d5189-6cf1-4ca4-a628-bd516fdf3f64",
-            "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+            "id": "task_5de5c799-31d1-49d6-aede-e442e5624a11",
+            "title": "Define product and architecture plan: Game includes multiple levels with increasing difficulty",
             "state": "completed",
             "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-            "verificationId": "verification_ba503130-03d5-445d-907e-e22e3610e2fc"
+            "verificationId": "verification_e0a219a9-ae29-44ac-b26f-3819ce2c5fcf"
           },
           {
-            "id": "task_a4b9ba67-cf0b-4858-96c6-2e859c13d2bf",
-            "title": "Implement backend code and API: User can clear calculation history",
+            "id": "task_6b0ece7d-73de-4762-9206-d56d66b482e5",
+            "title": "Implement backend code and API: Game has a leaderboard to compare scores with other players",
             "state": "completed",
             "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
-            "verificationId": "verification_9f7b8830-1ec9-4714-ac42-182f041e9a04"
+            "verificationId": "verification_85000551-1ba4-4ac4-9928-7439fe9344aa"
           },
           {
-            "id": "task_ffc20a1f-b82b-4e05-990b-aa5edb620910",
+            "id": "task_bae44dbd-3341-45b4-908c-85af49106162",
             "title": "Implement database and persistence schema",
             "state": "completed",
             "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
-            "verificationId": "verification_15ff490c-499c-4073-ac32-e4b6de32474e"
+            "verificationId": "verification_18d93c74-0492-406b-8458-a158547f723c"
           },
           {
-            "id": "task_8bfcf91e-060f-4c5f-a1c8-cb4c0dbefc38",
-            "title": "Implement frontend code and user experience: User can view calculation history",
+            "id": "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182",
+            "title": "Implement frontend code and user experience: Flying car can collect power-ups and coins to upgrade its speed and abilities",
             "state": "completed",
             "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
-            "verificationId": "verification_da3d4ec3-65d6-4ffb-bd06-c40ca3f4d878"
+            "verificationId": "verification_57805c78-dd57-44b5-aca1-978d54ec7a0d"
           },
           {
-            "id": "task_1bbc8d2e-0a9f-459a-9d85-888469ce1343",
+            "id": "task_b752ca0e-e040-4dfa-9098-84389886c633",
             "title": "Perform security review",
             "state": "completed",
             "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
-            "verificationId": "verification_780461f1-3279-4492-9f7c-5ba3445545ad"
+            "verificationId": "verification_bd52f869-5155-4079-8bff-a960ba56681f"
           },
           {
-            "id": "task_8dc7d7ef-da91-4d42-a3d8-3500ea76fcf6",
+            "id": "task_a53cc06d-c0f8-41d5-9523-0fdf22527d56",
             "title": "Create testing and verification plan",
             "state": "completed",
-            "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
-            "verificationId": "verification_77aa968a-976c-4b5d-b8c4-95854c4c46e5"
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_6ced4770-07c4-4b6b-9e68-bc34f80889ce"
           },
           {
-            "id": "task_743027f0-b030-491a-a042-36b866acadcc",
+            "id": "task_c343fff0-e140-4857-8386-51d7dc1b845d",
             "title": "Final project verification and QA",
             "state": "completed",
             "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-            "verificationId": "verification_4730f541-f8a1-4ec5-90c5-e403ffb1d287"
+            "verificationId": "verification_d0ccd2a0-beb3-4045-9712-fc15e91df7bf"
           }
         ],
         "artifacts": [
           {
-            "id": "artifact_61e55711-0558-4096-992b-220206341504",
+            "id": "artifact_4736e7df-50c0-4def-bb25-0399f4f33651",
             "type": "code-workspace",
-            "taskId": "task_a4b9ba67-cf0b-4858-96c6-2e859c13d2bf",
+            "taskId": "task_6b0ece7d-73de-4762-9206-d56d66b482e5",
             "metadata": {
               "generatedBy": "internal.code"
             }
           },
           {
-            "id": "artifact_eb25f571-ff5e-4d7f-bbc2-244a08df2ee1",
+            "id": "artifact_d89f2afe-ffb4-4144-b929-b5982b004efa",
             "type": "code-workspace",
-            "taskId": "task_ffc20a1f-b82b-4e05-990b-aa5edb620910",
+            "taskId": "task_bae44dbd-3341-45b4-908c-85af49106162",
             "metadata": {
               "generatedBy": "internal.code"
             }
           },
           {
-            "id": "artifact_cf1f01f3-14db-41b6-95fe-756649272815",
+            "id": "artifact_6523791d-2ea0-4391-9679-a7c3e6cdde0e",
             "type": "code-workspace",
-            "taskId": "task_8bfcf91e-060f-4c5f-a1c8-cb4c0dbefc38",
+            "taskId": "task_6fb5267b-7bb1-4751-b1d2-9fedfb590182",
             "metadata": {
               "generatedBy": "internal.code"
             }
           },
           {
-            "id": "artifact_43b3b984-595d-4597-9c48-353ca4910bd9",
+            "id": "artifact_ad8b8e32-10d7-437f-ae50-fa174f8c60d4",
             "type": "code-workspace",
-            "taskId": "task_1bbc8d2e-0a9f-459a-9d85-888469ce1343",
+            "taskId": "task_b752ca0e-e040-4dfa-9098-84389886c633",
             "metadata": {
               "generatedBy": "internal.code"
             }
@@ -1434,8 +1370,8 @@
         "state": "completed",
         "generatedBy": "mauli-l1-delivery"
       },
-      "createdAt": "2026-08-21T17:01:36.812Z",
-      "updatedAt": "2026-08-21T17:01:36.812Z"
+      "createdAt": "2026-08-21T17:46:44.808Z",
+      "updatedAt": "2026-08-21T17:46:44.808Z"
     }
   }
 }
