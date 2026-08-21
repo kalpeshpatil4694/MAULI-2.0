@@ -1,1 +1,0 @@
-Temporary validation note for L1 test isolation. Production Result persistence remains unchanged; test mode prevents CI from writing to the production Result file.
