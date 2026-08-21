@@ -16,6 +16,8 @@ export async function executeTool(name,input={},context={}){const tool=listTools
 function registerBuiltinTools(){
   registerTool({name:'health.check',description:'Returns runtime health',risk:'read',capabilities:['diagnostics'],handler:()=>({healthy:true,at:now()})});
   registerTool({name:'planning.execute',description:'Generates a controlled L1 execution plan for planning tasks',risk:'read',capabilities:['planning','product-planning'],handler:(input={})=>({healthy:true,type:'plan',taskId:input.taskId??null,summary:'Planning execution completed.',at:now()})});
+  registerTool({name:'code.execute',description:'L1 code-generation runtime capability used by coding agents',risk:'read',capabilities:['coding','software-development','javascript'],handler:(input={})=>({tool:'code.execute',status:'available',taskId:input.taskId??null,summary:'Code generation runtime is available; generated files are returned as task artifacts.'})});
+  registerTool({name:'test.run',description:'L1 test runtime capability used by engineering and QA agents',risk:'read',capabilities:['testing','verification'],handler:(input={})=>({tool:'test.run',status:'available',taskId:input.taskId??null,summary:'Test runtime is available for L1 verification.'})});
 }
 
 // D1 hydration can contain stale copies of built-in tools. Re-registering the
