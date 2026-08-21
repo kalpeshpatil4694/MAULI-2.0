@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { store } from '../src/store.js';
 
 test('L1 store flush waits for pending persistence before Result snapshot', async () => {
+  // Isolate the regression test from asynchronous writes created by other tests.
+  await store.flush();
+  store.pendingWrites.clear();
+
   let persisted = false;
   let release;
   const pending = new Promise(resolve => { release = () => { persisted = true; resolve(); }; });
