@@ -1,0 +1,1 @@
+L1 API tests explicitly disable Result persistence to keep CI deterministic.
