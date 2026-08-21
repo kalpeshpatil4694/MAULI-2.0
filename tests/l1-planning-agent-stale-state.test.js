@@ -4,7 +4,8 @@ import { seedAgents, listAgents, registerAgent, updateAgent } from '../src/agent
 import { createTask } from '../src/tasks.js';
 
 test('L1 planning agent becomes available when its persisted task is stale', () => {
-  const agent = registerAgent({
+  const existing = listAgents().find(item => item.name === 'Product Agent');
+  const agent = existing ?? registerAgent({
     name: 'Product Agent',
     role: 'Product',
     department: 'Business',
