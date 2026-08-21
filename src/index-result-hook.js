@@ -1,1 +1,0 @@
-// Result recording hook module placeholder. Integration is performed in src/index.js.
