@@ -32,9 +32,11 @@ async function readCurrent(url, requestHeaders) {
   return {ok:false,status:response.status,detail:data?.message||''};
 }
 async function verifyWrite(url, requestHeaders, expectedPayload) {
-  const {response,data}=await github(`${url}?ref=${encodeURIComponent(DEFAULT_BRANCH)}`,{headers:requestHeaders});
+  const verifyUrl = `${url}?ref=${encodeURIComponent(DEFAULT_BRANCH)}`;
+  const {response,data}=await github(verifyUrl,{headers:requestHeaders});
   if(!response.ok) return {ok:false,reason:`GitHub verification failed (${response.status})${data?.message?`: ${data.message}`:''}`};
-  let actual=''; try { actual=base64ToUtf8(data?.content||''); } catch {}
+  let actual='';
+  try { actual=base64ToUtf8(data?.content||''); } catch {}
   return actual===expectedPayload ? {ok:true,sha:data?.sha||null} : {ok:false,reason:'GitHub verification failed: Result content does not match latest command result'};
 }
 
