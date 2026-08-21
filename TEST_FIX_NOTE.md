@@ -1,1 +1,0 @@
-L1 command API tests do not provide GITHUB_TOKEN. Result recording is performed only when the runtime has GITHUB_TOKEN; production Cloudflare requests keep Result replacement and verification enabled.
