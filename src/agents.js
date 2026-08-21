@@ -17,7 +17,13 @@ export function selectBestAgent(requiredCapabilities=[],options={}){return selec
 
 const DEFAULT_AGENTS=[['SK Executive','Executive','Executive',['planning','governance','delegation'],[]],['Research Agent','Research','Research',['research','analysis'],['web.search']],['Product Agent','Product','Business',['requirements','product-planning','planning'],['planning.execute']],['Frontend Agent','Engineer','Engineering',['frontend','javascript','ui'],['code.execute','test.run']],['Backend Agent','Engineer','Engineering',['backend','api','javascript'],['code.execute','test.run']],['Database Agent','Engineer','Engineering',['database','schema','sql'],['database.query','code.execute']],['Security Agent','Reviewer','Security',['security','audit'],['security.scan']],['QA Agent','Tester','Quality',['testing','verification'],['test.run','code.execute']]];
 
-function activeTaskOwnedBy(agent){const taskId=agent?.currentTaskId;if(!taskId)return false;const task=store.get('tasks',taskId);return Boolean(task&&task.agentId===agent.id&&['assigned','working','verifying'].includes(task.state));}
+function activeTaskOwnedBy(agent){
+  const taskId=agent?.currentTaskId;
+  if(!taskId)return false;
+  const task=store.get('tasks',taskId);
+  if(!task||task.agentId!==agent.id||!['assigned','working','verifying'].includes(task.state))return false;
+  return store.list('runs').some(run=>run.taskId===taskId&&run.state==='running');
+}
 
 export function seedAgents(){
   const existingByName=new Map(listAgents().map(agent=>[agent.name,agent]));
