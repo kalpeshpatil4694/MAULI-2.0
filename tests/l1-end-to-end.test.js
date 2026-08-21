@@ -26,3 +26,23 @@ test('L1 end-to-end: founder command creates and executes a project flow', async
   assert.ok(project, 'project must remain persisted after execution');
   assert.ok(['active', 'completed', 'escalated', 'awaiting_approval', 'blocked', 'error'].includes(project.state), 'project must have a valid lifecycle state');
 });
+
+test('L1 completion requires final project QA and returns only current project tasks', async () => {
+  seedAgents();
+  const first = await planCommand('Research a chess game product', {});
+  const second = await planCommand('Research a calculator product', {});
+
+  assert.notEqual(first.project.id, second.project.id, 'each founder command must create a new project');
+
+  const secondTasks = store.list('tasks').filter(task => task.projectId === second.project.id);
+  const finalQa = secondTasks.filter(task => task.finalProjectVerification);
+
+  assert.equal(finalQa.length, 1, 'exactly one final QA task must exist for the current project');
+  assert.equal(finalQa[0].state, 'completed', 'final QA must be completed before project completion');
+  assert.ok(finalQa[0].verificationId, 'final QA must have verification evidence');
+  assert.equal(second.project.state, 'completed', 'project may complete only after final QA');
+  assert.equal(second.status, 'completed', 'result may complete only after final QA');
+  assert.equal(second.tasks.length, secondTasks.length, 'result must contain every task from the current project');
+  assert.ok(second.tasks.every(entry => entry.task.projectId === second.project.id), 'result must not leak tasks from an older project');
+  assert.ok(second.tasks.some(entry => entry.task.finalProjectVerification), 'result must include final QA task');
+});
