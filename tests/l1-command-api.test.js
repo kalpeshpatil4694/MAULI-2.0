@@ -4,7 +4,8 @@ import worker from '../src/index.js';
 
 test('L1 API exposes founder command execution route', async () => {
   const env = {
-    FOUNDER_API_KEY: 'test-founder-key'
+    FOUNDER_API_KEY: 'test-founder-key',
+    MAULI_TEST_MODE: 'true'
   };
 
   const request = new Request('https://mauli.test/api/command', {
@@ -21,6 +22,7 @@ test('L1 API exposes founder command execution route', async () => {
 
   assert.ok([200, 201].includes(response.status), `unexpected status: ${response.status}`);
   assert.ok(body?.data?.result?.project?.id, 'API should return a created project');
+  assert.equal(body?.data?.resultFile?.testMode, true, 'test must not write production Result');
 });
 
 test('L1 API rejects founder command without authentication', async () => {
