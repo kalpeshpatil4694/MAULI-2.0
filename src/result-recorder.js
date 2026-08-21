@@ -64,14 +64,24 @@ async function verifyWrite(url, requestHeaders, expectedPayload) {
 }
 
 export async function saveCommandResult(result, env) {
+  // Unit/integration tests must never write to the production Result file.
+  // Production Worker calls do not set this flag, so real commands still
+  // require GITHUB_TOKEN and must successfully write + verify Result.
+  if (env?.MAULI_TEST_MODE === 'true') {
+    return {
+      saved: true,
+      testMode: true,
+      replaced: false,
+      path: DEFAULT_PATH,
+      branch: DEFAULT_BRANCH
+    };
+  }
+
   const token = env?.GITHUB_TOKEN;
   if (!token) {
     return { saved: false, reason: 'GITHUB_TOKEN is not configured' };
   }
 
-  // Result is intentionally fixed to the production repository/main branch.
-  // This prevents an accidental Worker variable from redirecting writes to a
-  // different branch or file.
   const repo = DEFAULT_REPO;
   const path = DEFAULT_PATH;
   const branch = DEFAULT_BRANCH;
