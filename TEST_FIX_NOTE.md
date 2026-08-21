@@ -1,0 +1,1 @@
+L1 command API tests do not provide GITHUB_TOKEN. The command endpoint now skips external Result recording only when the runtime has no GITHUB_TOKEN; production Cloudflare requests with GITHUB_TOKEN still replace and verify Result on main.
