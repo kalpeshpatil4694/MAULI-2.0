@@ -13,7 +13,7 @@ permissions:
 jobs:
   l1-test:
     name: L1 validation
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
       - name: JavaScript syntax check
         run: node --check src/index.js
       - name: Run test suite
