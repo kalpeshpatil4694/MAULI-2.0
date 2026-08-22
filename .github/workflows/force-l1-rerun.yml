@@ -1,11 +1,11 @@
 name: Force L1 CI Rerun
 
-on: [push, workflow_dispatch]
+on:
+  workflow_dispatch:
 
 jobs:
   trigger:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
     steps:
-      - uses: actions/checkout@v5
       - name: Trigger marker
         run: echo "L1 CI rerun trigger"
