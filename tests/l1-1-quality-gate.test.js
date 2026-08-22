@@ -12,7 +12,7 @@ function reset() {
 }
 
 const goodCalculator = [
-  { path: 'index.html', content: '<!doctype html><link rel="stylesheet" href="style.css"><main><input id="display"><button>+</button><button>-</button><button>*</button><button>/</button><button id="clearHistory">Clear History</button><div id="history"></div></main><script src="script.js"></script>' },
+  { path: 'index.html', content: '<!doctype html><html><head><link rel="stylesheet" href="style.css"></head><body><main><input id="display"><button>+</button><button>-</button><button>*</button><button>/</button><button id="clearHistory">Clear History</button><div id="history"></div></main><script src="script.js"></script></body></html>' },
   { path: 'script.js', content: 'const history=[]; function add(a,b){return a+b} function subtract(a,b){return a-b} function multiply(a,b){return a*b} function divide(a,b){return b===0?null:a/b} function clearHistory(){history.length=0}' },
   { path: 'style.css', content: 'body{font-family:system-ui}button{padding:8px}' },
   { path: 'README.md', content: '# Calculator\nBasic arithmetic, calculation history and clear history.' }
