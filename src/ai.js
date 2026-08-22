@@ -73,7 +73,7 @@ export function freePlanFromCommand(command) {
   } else if (/(e-commerce|ecommerce|online store|online shop|shop|store)/i.test(text)) {
     capabilities.push('product-planning','frontend','backend','database','security','testing');
     requirements.push('Product catalog and product details', 'Shopping cart and checkout flow', 'Order and customer data persistence', 'Basic authentication and security review', 'Responsive user interface');
-    acceptanceCriteria.splice(0, acceptanceCriteria.length, 'Product catalog is defined', 'Cart and checkout flow is defined', 'Order persistence is defined', 'Security review is included', 'Testing plan is included');
+    acceptanceCriteria.splice(0, acceptanceCriteria.length, 'Product catalog is defined', 'Cart and checkout flow is defined', 'Order and customer persistence is defined', 'Security review is included', 'Testing plan is included');
   } else if (/(website|web app|application|platform|software|app)/i.test(text)) {
     capabilities.push('product-planning','frontend','backend','testing');
     requirements.push('User interface', 'Application/API structure', 'Basic verification');
@@ -98,7 +98,7 @@ export async function interpretWithAI(env, command, options = {}) {
   ].join(' ');
   const raw = await reason(env, [{ role:'system', content:system }, { role:'user', content:String(command) }], options);
   const parsed = extractJson(raw);
-  if (!parsed) return freePlanFromCommand(command);
+  if (!parsed) return { objective:String(command ?? '').trim(), requirements:[], capabilities:[], risks:['AI model returned malformed planning output'], acceptanceCriteria:[], planningStatus:'invalid_model_output' };
   return normalizePlan(parsed, command);
 }
 
