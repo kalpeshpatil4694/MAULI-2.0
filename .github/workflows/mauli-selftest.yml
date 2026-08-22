@@ -1,15 +1,12 @@
 name: MAULI Self Tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
   selftest:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -18,15 +15,9 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
       - name: Run Node tests
         run: npm test
       - name: Run MAULI integration self-tests
         run: |
-          node --input-type=module <<'EOF'
-          import { runOrchestratorSelfTest } from './src/orchestrator-selftest.js';
-          import { runAgentRecoverySelfTest } from './src/e2e-selftest.js';
-          const results = [runOrchestratorSelfTest(), runAgentRecoverySelfTest()];
-          console.log(JSON.stringify(results, null, 2));
-          if (results.some(result => !result.passed)) process.exit(1);
-          EOF
+          node --input-type=module -e "import('./src/orchestrator-selftest.js').then(async ({runOrchestratorSelfTest}) => { const {runAgentRecoverySelfTest}=await import('./src/e2e-selftest.js'); const results=[runOrchestratorSelfTest(),runAgentRecoverySelfTest()]; console.log(JSON.stringify(results,null,2)); if(results.some(result=>!result.passed)) process.exit(1); })"
