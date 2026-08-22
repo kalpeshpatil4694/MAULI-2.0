@@ -1,5 +1,6 @@
 import { id, now } from './core.js';
 import { store } from './store.js';
+import { runQualityGate } from './quality-gate.js';
 
 function matchesAcceptance(task, result) {
   const acceptance = Array.isArray(task?.acceptance) ? task.acceptance : [];
@@ -18,7 +19,7 @@ function matchesAcceptance(task, result) {
     }
     if (!rule || typeof rule !== 'object') return { rule, passed: true, mode: 'ignored' };
     if (!rule.field) return { rule, passed: true, mode: 'ignored' };
-    const actual = result[rule.field];
+    const actual = rule.field.split('.').reduce((value, key) => value?.[key], result);
     if (Object.prototype.hasOwnProperty.call(rule, 'equals')) return { rule, passed: actual === rule.equals, actual, mode: 'equals' };
     if (Object.prototype.hasOwnProperty.call(rule, 'includes')) return { rule, passed: String(actual ?? '').toLowerCase().includes(String(rule.includes).toLowerCase()), actual, mode: 'includes' };
     return { rule, passed: actual !== undefined && actual !== null, actual, mode: 'exists' };
@@ -26,7 +27,7 @@ function matchesAcceptance(task, result) {
   return { passed: checks.every(x => x.passed), checks };
 }
 
-export function verifyResult(task, execution) {
+export async function verifyResult(task, execution) {
   const checks = [];
   checks.push({ name: 'execution_completed', passed: execution?.state === 'completed' });
   checks.push({ name: 'has_result', passed: execution?.result !== undefined && execution?.result !== null });
@@ -35,6 +36,13 @@ export function verifyResult(task, execution) {
   if (task?.agentId != null || task?.assignedAgentId != null) {
     const expectedAgent = task.agentId ?? task.assignedAgentId;
     checks.push({ name: 'agent_identity', passed: execution?.agentId === expectedAgent });
+  }
+
+  if (execution?.state === 'completed' && execution?.result?.type === 'code') {
+    const artifact = execution.result.artifactId ? store.get('artifacts', execution.result.artifactId) : null;
+    const qualityGate = await runQualityGate(task, artifact);
+    execution.result.qualityGate = qualityGate;
+    checks.push({ name: 'generated_project_quality_gate', passed: qualityGate.passed, details: qualityGate });
   }
 
   const acceptance = matchesAcceptance(task, execution?.result);
