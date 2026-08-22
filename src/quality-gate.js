@@ -61,7 +61,7 @@ function checkIntegration(files) {
   return { passed: checks.every(c => c.passed), checks };
 }
 
-export async function runQualityGate(task, artifact) {
+export function runQualityGate(task, artifact) {
   const files = Array.isArray(artifact?.content?.files) ? artifact.content.files : [];
   const requirementText = projectRequirements(task);
   const structure = checkStructure(files);
@@ -70,7 +70,7 @@ export async function runQualityGate(task, artifact) {
   const calculator = checkCalculator(files, requirementText);
   const checks = [...structure.checks, ...integration.checks, ...security.checks, ...calculator.checks];
   const passed = [structure, integration, security, calculator].every(x => x.passed);
-  const result = {
+  return {
     passed,
     gate: 'L1.1-generated-project-quality',
     status: passed ? 'PASS' : 'FAIL',
@@ -78,5 +78,4 @@ export async function runQualityGate(task, artifact) {
     requirementsDetected: calculator.required ? 'calculator' : 'general',
     checkedAt: new Date().toISOString()
   };
-  return result;
 }
