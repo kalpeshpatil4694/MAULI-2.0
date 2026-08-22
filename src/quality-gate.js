@@ -81,23 +81,61 @@ function checkAutomatedBuildTest(files) {
   return { passed: checks.every(c => c.passed), checks, mode: 'static-worker-safe' };
 }
 
-async function checkArtifactIntegrity(files) {
+function sha256Hex(input) {
+  const isPrime = n => { if (n < 2) return false; for (let i = 2; i * i <= n; i++) if (n % i === 0) return false; return true; };
+  const primes = [];
+  for (let n = 2; primes.length < 64; n++) if (isPrime(n)) primes.push(n);
+  const K = primes.map(p => Math.floor((Math.cbrt(p) % 1) * 0x100000000) >>> 0);
+  const H0 = primes.slice(0, 8).map(p => Math.floor((Math.sqrt(p) % 1) * 0x100000000) >>> 0);
+  const bytes = new TextEncoder().encode(input);
+  const bitLen = bytes.length * 8;
+  const padded = new Uint8Array(((bytes.length + 9 + 63) >> 6) << 6);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const hi = Math.floor(bitLen / 0x100000000), lo = bitLen >>> 0;
+  const off = padded.length - 8;
+  padded[off] = hi >>> 24; padded[off + 1] = hi >>> 16; padded[off + 2] = hi >>> 8; padded[off + 3] = hi;
+  padded[off + 4] = lo >>> 24; padded[off + 5] = lo >>> 16; padded[off + 6] = lo >>> 8; padded[off + 7] = lo;
+  let h = H0.slice();
+  const w = new Uint32Array(64);
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let o = 0; o < padded.length; o += 64) {
+    for (let i = 0; i < 16; i++) w[i] = ((padded[o + i * 4] << 24) | (padded[o + i * 4 + 1] << 16) | (padded[o + i * 4 + 2] << 8) | padded[o + i * 4 + 3]) >>> 0;
+    for (let i = 16; i < 64; i++) {
+      const s0 = (rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3)) >>> 0;
+      const s1 = (rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10)) >>> 0;
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+    let [a, b, c, d, e, f, g, hh] = h;
+    for (let i = 0; i < 64; i++) {
+      const S1 = (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) >>> 0;
+      const ch = ((e & f) ^ ((~e) & g)) >>> 0;
+      const t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0;
+      const S0 = (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) >>> 0;
+      const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+      const t2 = (S0 + maj) >>> 0;
+      hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    const round = [a, b, c, d, e, f, g, hh];
+    h = h.map((x, i) => (x + round[i]) >>> 0);
+  }
+  return h.map(x => x.toString(16).padStart(8, '0')).join('');
+}
+
+function checkArtifactIntegrity(files) {
   const checks = [
     { name: 'artifact_file_count', passed: files.length > 0 },
     { name: 'artifact_paths_unique', passed: new Set(files.map(f => f.path)).size === files.length },
     { name: 'artifact_content_utf8', passed: files.every(f => typeof f.content === 'string') }
   ];
-  const manifest = [];
-  for (const file of files) {
+  const manifest = files.map(file => {
     const bytes = new TextEncoder().encode(file.content);
-    const digest = await crypto.subtle.digest('SHA-256', bytes);
-    const hash = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
-    manifest.push({ path: file.path, bytes: bytes.length, sha256: hash });
-  }
+    return { path: file.path, bytes: bytes.length, sha256: sha256Hex(file.content) };
+  });
   return { passed: checks.every(c => c.passed), checks, manifest };
 }
 
-export async function runQualityGate(task, artifact) {
+export function runQualityGate(task, artifact) {
   const files = Array.isArray(artifact?.content?.files) ? artifact.content.files : [];
   const requirementText = projectRequirements(task);
   const structure = checkStructure(files);
@@ -105,20 +143,14 @@ export async function runQualityGate(task, artifact) {
   const security = checkSecurity(files);
   const calculator = checkCalculator(files, requirementText);
   const automatedBuildTest = checkAutomatedBuildTest(files);
-  const artifactIntegrity = await checkArtifactIntegrity(files);
+  const artifactIntegrity = checkArtifactIntegrity(files);
   const checks = [...structure.checks, ...automatedBuildTest.checks, ...integration.checks, ...security.checks, ...calculator.checks, ...artifactIntegrity.checks];
   const passed = [structure, automatedBuildTest, integration, security, calculator, artifactIntegrity].every(x => x.passed);
   const result = {
     passed,
     gate: 'L1.1-generated-project-quality',
     status: passed ? 'PASS' : 'FAIL',
-    stages: {
-      automatedBuildTest: automatedBuildTest.passed,
-      requirementVerification: calculator.passed,
-      securityCheck: security.passed,
-      artifactIntegrity: artifactIntegrity.passed,
-      integrationCheck: integration.passed
-    },
+    stages: { automatedBuildTest: automatedBuildTest.passed, requirementVerification: calculator.passed, securityCheck: security.passed, artifactIntegrity: artifactIntegrity.passed, integrationCheck: integration.passed },
     checks,
     requirementsDetected: calculator.required ? 'calculator' : 'general',
     artifactManifest: artifactIntegrity.manifest,
