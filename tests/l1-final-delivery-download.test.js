@@ -18,6 +18,11 @@ test('L1 final delivery exposes a downloadable artifact reference', () => {
     assignedAgentId: 'agent-test',
     verificationId: 'verification-test'
   });
+  store.put('verifications', {
+    id: 'verification-test',
+    taskId: 'delivery-download-task',
+    passed: true
+  });
 
   const artifact = buildFinalDelivery(project);
   assert.equal(artifact.type, 'final-delivery');

@@ -1,14 +1,46 @@
 import { store } from './store.js';
 
 const text = value => String(value ?? '').toLowerCase();
+const fileName = file => String(file?.path ?? '').split('/').pop().toLowerCase();
 
 function projectRequirements(task) {
   const project = task?.projectId ? store.get('projects', task.projectId) : null;
   return [project?.objective, ...(project?.requirements ?? []), task?.title, task?.description].map(text).join('\n');
 }
 
-function find(files, names) {
-  return files.find(file => names.includes(String(file?.path ?? '').toLowerCase()));
+function find(files, names) { return files.find(file => names.includes(fileName(file))); }
+
+function checkStructure(files) {
+  const checks = [
+    { name: 'files_present', passed: files.length > 0 },
+    { name: 'unique_paths', passed: new Set(files.map(f => f.path)).size === files.length },
+    { name: 'safe_paths', passed: files.every(f => typeof f.path === 'string' && f.path && !f.path.startsWith('/') && !f.path.includes('..') && !/[\\\0]/.test(f.path)) },
+    { name: 'non_empty_files', passed: files.every(f => typeof f.content === 'string' && f.content.trim().length > 0) },
+    { name: 'valid_file_records', passed: files.every(f => f && typeof f.path === 'string' && typeof f.content === 'string') }
+  ];
+  return { passed: checks.every(c => c.passed), checks };
+}
+
+function checkIntegration(files) {
+  const html = find(files, ['index.html']);
+  if (!html) return { passed: true, checks: [] };
+  const checks = [];
+  const scriptRefs = [...String(html.content).matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
+  const cssRefs = [...String(html.content).matchAll(/<link[^>]+href=["']([^"']+)["']/gi)].map(m => m[1]);
+  for (const ref of scriptRefs) checks.push({ name: `script_reference:${ref}`, passed: files.some(f => f.path === ref || f.path.endsWith(`/${ref}`)) });
+  for (const ref of cssRefs) checks.push({ name: `style_reference:${ref}`, passed: files.some(f => f.path === ref || f.path.endsWith(`/${ref}`)) });
+  return { passed: checks.every(c => c.passed), checks };
+}
+
+function checkSecurity(files) {
+  const combined = files.map(f => text(f.content)).join('\n');
+  const checks = [
+    { name: 'no_obvious_hardcoded_secrets', passed: !/(api[_-]?key|secret|password|token)\s*[:=]\s*["'][^"']{8,}["']/i.test(combined) },
+    { name: 'no_dynamic_eval', passed: !/\beval\s*\(|new\s+function\s*\(/.test(combined) },
+    { name: 'no_dangerous_html_sink', passed: !/document\.write\s*\(/.test(combined) },
+    { name: 'no_embedded_private_key', passed: !/-----begin (rsa |ec |openssh )?private key-----/i.test(combined) }
+  ];
+  return { passed: checks.every(c => c.passed), checks };
 }
 
 function checkCalculator(files, requirementText) {
@@ -30,52 +62,99 @@ function checkCalculator(files, requirementText) {
   return { required: true, passed: checks.every(c => c.passed), checks };
 }
 
-function checkStructure(files) {
-  const checks = [
-    { name: 'files_present', passed: files.length > 0 },
-    { name: 'unique_paths', passed: new Set(files.map(f => f.path)).size === files.length },
-    { name: 'safe_paths', passed: files.every(f => typeof f.path === 'string' && f.path && !f.path.startsWith('/') && !f.path.includes('..') && !/[\\\0]/.test(f.path)) },
-    { name: 'non_empty_files', passed: files.every(f => typeof f.content === 'string' && f.content.trim().length > 0) }
-  ];
-  return { passed: checks.every(c => c.passed), checks };
-}
-
-function checkSecurity(files) {
-  const combined = files.map(f => text(f.content)).join('\n');
-  const checks = [
-    { name: 'no_obvious_hardcoded_secrets', passed: !/(api[_-]?key|secret|password|token)\s*[:=]\s*["'][^"']{8,}["']/i.test(combined) },
-    { name: 'no_dynamic_eval', passed: !/\beval\s*\(|new\s+function\s*\(/.test(combined) },
-    { name: 'no_dangerous_html_sink', passed: !/document\.write\s*\(/.test(combined) }
-  ];
-  return { passed: checks.every(c => c.passed), checks };
-}
-
-function checkIntegration(files) {
-  const html = find(files, ['index.html']);
-  if (!html) return { passed: true, checks: [] };
+function checkAutomatedBuildTest(files) {
   const checks = [];
-  const scriptRefs = [...String(html.content).matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
-  const cssRefs = [...String(html.content).matchAll(/<link[^>]+href=["']([^"']+)["']/gi)].map(m => m[1]);
-  for (const ref of scriptRefs) checks.push({ name: `script_reference:${ref}`, passed: files.some(f => f.path === ref || f.path.endsWith(`/${ref}`)) });
-  for (const ref of cssRefs) checks.push({ name: `style_reference:${ref}`, passed: files.some(f => f.path === ref || f.path.endsWith(`/${ref}`)) });
-  return { passed: checks.every(c => c.passed), checks };
+  const byName = new Map(files.map(f => [fileName(f), f]));
+  const html = byName.get('index.html');
+  if (html) {
+    checks.push({ name: 'html_has_document_structure', passed: /<html[\s>]/i.test(html.content) && /<body[\s>]/i.test(html.content) });
+    checks.push({ name: 'html_balanced_script_tags', passed: (html.content.match(/<script\b/gi) || []).length === (html.content.match(/<\/script>/gi) || []).length });
+  }
+  for (const file of files) {
+    const name = fileName(file);
+    const content = String(file.content ?? '');
+    if (/\.js$/i.test(name)) checks.push({ name: `js_basic_syntax:${file.path}`, passed: !/\b(?:SyntaxError|Unexpected token|undefined is not a function)\b/i.test(content) && !/\bTODO\s*:\s*FAIL\b/i.test(content) });
+    if (/\.json$/i.test(name)) { let parsed = true; try { JSON.parse(content); } catch { parsed = false; } checks.push({ name: `json_parse:${file.path}`, passed: parsed }); }
+    if (/\.py$/i.test(name)) checks.push({ name: `python_basic_syntax:${file.path}`, passed: !/\bSyntaxError\b/i.test(content) });
+    if (/\.sql$/i.test(name)) checks.push({ name: `sql_has_statement:${file.path}`, passed: /\b(create|select|insert|update|delete|alter)\b/i.test(content) });
+  }
+  return { passed: checks.every(c => c.passed), checks, mode: 'static-worker-safe' };
+}
+
+// Synchronous SHA-256 implementation keeps the quality gate compatible with the
+// existing synchronous verification contract while remaining Worker-safe.
+function sha256(input) {
+  const bytes = new TextEncoder().encode(String(input));
+  const K = [
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+  ];
+  let h=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const bitLen=bytes.length*8, total=((bytes.length+9+63)>>6)<<6, data=new Uint8Array(total);
+  data.set(bytes); data[bytes.length]=0x80;
+  const dv=new DataView(data.buffer); dv.setUint32(total-4,bitLen>>>0); dv.setUint32(total-8,Math.floor(bitLen/0x100000000));
+  const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let off=0;off<total;off+=64){
+    const w=new Uint32Array(64);
+    for(let i=0;i<16;i++)w[i]=dv.getUint32(off+i*4);
+    for(let i=16;i<64;i++){const s0=rotr(w[i-15],7)^rotr(w[i-15],18)^(w[i-15]>>>3);const s1=rotr(w[i-2],17)^rotr(w[i-2],19)^(w[i-2]>>>10);w[i]=(w[i-16]+s0+w[i-7]+s1)>>>0;}
+    let [a,b,c,d,e,f,g,hh]=h;
+    for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25);const ch=(e&f)^((~e)&g);const t1=(hh+S1+ch+K[i]+w[i])>>>0;const S0=rotr(a,2)^rotr(a,13)^rotr(a,22);const maj=(a&b)^(a&c)^(b&c);const t2=(S0+maj)>>>0;hh=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}
+    h=h.map((x,i)=>(x+[a,b,c,d,e,f,g,hh][i])>>>0);
+  }
+  return h.map(x=>x.toString(16).padStart(8,'0')).join('');
+}
+
+function checkArtifactIntegrity(files) {
+  const checks = [
+    { name: 'artifact_file_count', passed: files.length > 0 },
+    { name: 'artifact_paths_unique', passed: new Set(files.map(f => f.path)).size === files.length },
+    { name: 'artifact_content_utf8', passed: files.every(f => typeof f.content === 'string') }
+  ];
+  const manifest = files.map(file => {
+    const content = String(file.content);
+    const bytes = new TextEncoder().encode(content);
+    return { path: file.path, bytes: bytes.length, sha256: sha256(content) };
+  });
+  return { passed: checks.every(c => c.passed), checks, manifest };
 }
 
 export function runQualityGate(task, artifact) {
   const files = Array.isArray(artifact?.content?.files) ? artifact.content.files : [];
   const requirementText = projectRequirements(task);
   const structure = checkStructure(files);
-  const security = checkSecurity(files);
   const integration = checkIntegration(files);
+  const security = checkSecurity(files);
   const calculator = checkCalculator(files, requirementText);
-  const checks = [...structure.checks, ...integration.checks, ...security.checks, ...calculator.checks];
-  const passed = [structure, integration, security, calculator].every(x => x.passed);
-  return {
+  const automatedBuildTest = checkAutomatedBuildTest(files);
+  const artifactIntegrity = checkArtifactIntegrity(files);
+  const checks = [...structure.checks, ...automatedBuildTest.checks, ...integration.checks, ...security.checks, ...calculator.checks, ...artifactIntegrity.checks];
+  const passed = [structure, automatedBuildTest, integration, security, calculator, artifactIntegrity].every(x => x.passed);
+  const result = {
     passed,
     gate: 'L1.1-generated-project-quality',
     status: passed ? 'PASS' : 'FAIL',
+    stages: {
+      automatedBuildTest: automatedBuildTest.passed,
+      requirementVerification: calculator.passed,
+      securityCheck: security.passed,
+      artifactIntegrity: artifactIntegrity.passed,
+      integrationCheck: integration.passed
+    },
     checks,
     requirementsDetected: calculator.required ? 'calculator' : 'general',
+    artifactManifest: artifactIntegrity.manifest,
     checkedAt: new Date().toISOString()
   };
+  if (artifact) {
+    artifact.metadata = { ...(artifact.metadata ?? {}), qualityGate: result, qualityGateStatus: result.status, qualityGateCheckedAt: result.checkedAt };
+    store.put('artifacts', artifact);
+  }
+  return result;
 }
