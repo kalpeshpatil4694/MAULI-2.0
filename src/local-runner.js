@@ -1,18 +1,24 @@
 import { execFile } from 'node:child_process';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve, relative, isAbsolute } from 'node:path';
 import { promisify } from 'node:util';
 import { registerExecutionAdapter } from './execution-adapter.js';
 
 const execFileAsync = promisify(execFile);
 
 function safePath(root, relativePath) {
-  const normalized = relativePath.replaceAll('\\', '/');
+  const normalized = String(relativePath ?? '').replaceAll('\\', '/');
   if (!normalized || normalized.startsWith('/') || normalized.includes('..')) throw new Error(`Unsafe artifact path: ${relativePath}`);
-  const full = join(root, normalized);
-  if (!full.startsWith(`${root}/`)) throw new Error(`Unsafe artifact path: ${relativePath}`);
+  const full = resolve(root, normalized);
+  const rootResolved = resolve(root);
+  const rel = relative(rootResolved, full);
+  if (!rel || isAbsolute(rel) || rel === '..' || rel.startsWith(`..${requireSeparator()}`)) throw new Error(`Unsafe artifact path: ${relativePath}`);
   return full;
+}
+
+function requireSeparator() {
+  return process.platform === 'win32' ? '\\' : '/';
 }
 
 export function localRunnerAvailable() {
