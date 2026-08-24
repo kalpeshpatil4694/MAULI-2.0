@@ -73,6 +73,14 @@ export function freePlanFromCommand(command) {
 
 export async function interpretWithAI(env, command, options = {}) {
   const system = ['You are MAULI Executive AI for a software company.','Analyze the Founder command before any execution.','Return one valid JSON object only. Do not use markdown fences or explanatory text.','Never claim work is completed. You are planning only.',`Allowed capabilities: ${CAPABILITIES.join(', ')}.`,'For explicit artifact E2E commands containing exact artifact file requirements, use the artifact-e2e capability and do not invent unrelated product tasks.','Requirements must be concrete and testable. Acceptance criteria must describe observable completion conditions.','Risks must mention meaningful execution or approval concerns, not generic filler.','Schema: {"objective":string,"requirements":string[],"capabilities":string[],"risks":string[],"acceptanceCriteria":string[]}'].join(' ');
-  const raw = await reason(env,[{role:'system',content:system},{role:'user',content:String(command)}],options); const parsed=extractJson(raw); if(!parsed)return freePlanFromCommand(command); return normalizePlan(parsed,command);
+  const raw = await reason(env,[{role:'system',content:system},{role:'user',content:String(command)}],options); const parsed=extractJson(raw);
+  if (!parsed) return {
+    objective: String(command).trim(),
+    requirements: [],
+    capabilities: [],
+    risks: ['AI planning output was malformed; no execution capabilities are claimed.'],
+    acceptanceCriteria: []
+  };
+  return normalizePlan(parsed,command);
 }
 export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'deterministic-free-planner' }; }

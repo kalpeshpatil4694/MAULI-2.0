@@ -2,8 +2,8 @@ import { now } from './core.js';
 import { store } from './store.js';
 import { registerArtifact, listProjectArtifacts } from './artifacts.js';
 
-const ARTIFACT_LINE = /(?:file|artifact file)\s+(?:named\s+)?([A-Za-z0-9._/-]+)\s+containing\s+exactly\s+["“]([^"”]+)["”]/i;
-const ARTIFACT_LINE_ALL = /(?:file|artifact file)\s+(?:named\s+)?([A-Za-z0-9._/-]+)\s+containing\s+exactly\s+["“]([^"”]+)["”]/gi;
+const ARTIFACT_LINE = /(?:file|artifact file|create)\s+(?:named\s+)?([A-Za-z0-9._/-]+)\s+containing\s+exactly\s+["“]([^"”]+)["”]/i;
+const ARTIFACT_LINE_ALL = /(?:file|artifact file|create)\s+(?:named\s+)?([A-Za-z0-9._/-]+)\s+containing\s+exactly\s+["“]([^"”]+)["”]/gi;
 
 function cleanPath(value) {
   const path = String(value ?? '').trim().replace(/^\/+/, '');
