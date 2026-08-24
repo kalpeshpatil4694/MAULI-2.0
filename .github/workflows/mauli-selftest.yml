@@ -1,23 +1,51 @@
 name: MAULI Self Tests
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   selftest:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Prepare isolated local workspace
+        shell: powershell
+        run: |
+          $ci = 'C:\mauli-ci\selftest'
+          if (Test-Path $ci) { Remove-Item -Recurse -Force $ci -ErrorAction SilentlyContinue }
+          New-Item -ItemType Directory -Force -Path $ci | Out-Null
+          robocopy "$env:GITHUB_WORKSPACE" $ci /E /XD node_modules .git /NFL /NDL /NJH /NJS /NP
+          if ($LASTEXITCODE -gt 7) { exit $LASTEXITCODE }
+
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 22
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies in local workspace
+        shell: powershell
+        working-directory: C:\mauli-ci\selftest
+        run: npm ci --no-audit --no-fund
+
       - name: Run Node tests
+        shell: powershell
+        working-directory: C:\mauli-ci\selftest
         run: npm test
+
       - name: Run MAULI integration self-tests
+        shell: powershell
+        working-directory: C:\mauli-ci\selftest
         run: |
           node --input-type=module -e "import('./src/orchestrator-selftest.js').then(async ({runOrchestratorSelfTest}) => { const {runAgentRecoverySelfTest}=await import('./src/e2e-selftest.js'); const results=[runOrchestratorSelfTest(),runAgentRecoverySelfTest()]; console.log(JSON.stringify(results,null,2)); if(results.some(result=>!result.passed)) process.exit(1); })"
+
+      - name: Cleanup isolated workspace
+        if: always()
+        shell: powershell
+        run: Remove-Item -Recurse -Force 'C:\mauli-ci\selftest' -ErrorAction SilentlyContinue
