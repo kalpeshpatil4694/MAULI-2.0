@@ -13,6 +13,13 @@ function assertDeliveryQuality(project, tasks, artifacts) {
   });
   if (failedVerification.length) throw new Error(`Final delivery blocked: ${failedVerification.length} task verification(s) failed or missing`);
 
+  const testArtifacts = artifacts.filter(artifact => artifact.type === 'test-artifact');
+  const badTestArtifacts = testArtifacts.filter(artifact => {
+    const files = Array.isArray(artifact.content?.files) ? artifact.content.files : [];
+    return artifact.metadata?.exactContent !== true || files.length !== 1 || !files[0]?.path || typeof files[0]?.content !== 'string';
+  });
+  if (testArtifacts.length && badTestArtifacts.length) throw new Error(`Final delivery blocked: ${badTestArtifacts.length} test artifact(s) failed artifact integrity`);
+
   const codeArtifacts = artifacts.filter(artifact => artifact.type === 'code-workspace');
   const failedQuality = codeArtifacts.filter(artifact => artifact.metadata?.qualityGateStatus !== 'PASS');
   if (codeArtifacts.length && failedQuality.length) {
@@ -28,58 +35,27 @@ export function buildFinalDelivery(project) {
   const completed = tasks.filter(task => task.state === 'completed');
   const failed = tasks.filter(task => task.state === 'failed');
   const qualityGateArtifacts = artifacts.filter(artifact => artifact.metadata?.qualityGateStatus === 'PASS');
+  const artifactFiles = artifacts.flatMap(artifact => (artifact.content?.files ?? []).map(file => ({
+    artifactId: artifact.id,
+    artifactType: artifact.type,
+    taskId: artifact.taskId ?? null,
+    path: file.path,
+    content: file.content,
+    verified: artifact.type === 'test-artifact' ? artifact.metadata?.exactContent === true : true
+  })));
   const delivery = {
     projectId: project.id,
-    project: {
-      id: project.id,
-      name: project.name,
-      objective: project.objective,
-      state: project.state
-    },
-    summary: {
-      totalTasks: tasks.length,
-      completedTasks: completed.length,
-      failedTasks: failed.length,
-      artifactCount: artifacts.length,
-      qualityGatePassedArtifacts: qualityGateArtifacts.length,
-      deliveredAt: now()
-    },
-    quality: {
-      required: true,
-      status: 'PASS',
-      stages: ['automatedBuildTest', 'requirementVerification', 'securityCheck', 'artifactIntegrity', 'integrationCheck', 'finalQA']
-    },
-    tasks: tasks.map(task => ({
-      id: task.id,
-      title: task.title,
-      state: task.state,
-      assignedAgentId: task.assignedAgentId ?? null,
-      verificationId: task.verificationId ?? null
-    })),
-    artifacts: artifacts.map(artifact => ({
-      id: artifact.id,
-      type: artifact.type,
-      taskId: artifact.taskId ?? null,
-      metadata: artifact.metadata ?? {}
-    }))
+    project: { id: project.id, name: project.name, objective: project.objective, state: project.state },
+    summary: { totalTasks: tasks.length, completedTasks: completed.length, failedTasks: failed.length, artifactCount: artifacts.length, qualityGatePassedArtifacts: qualityGateArtifacts.length, artifactFileCount: artifactFiles.length, deliveredAt: now() },
+    progress: project.progress ?? { percent: completed.length === tasks.length ? 100 : 0, completed: completed.length, total: tasks.length, currentTask: null },
+    quality: { required: true, status: 'PASS', stages: ['automatedBuildTest', 'requirementVerification', 'securityCheck', 'artifactIntegrity', 'integrationCheck', 'finalQA'] },
+    tasks: tasks.map(task => ({ id:task.id, title:task.title, state:task.state, executor:task.executor ?? null, assignedAgentId:task.assignedAgentId ?? null, verificationId:task.verificationId ?? null })),
+    artifacts: artifacts.map(artifact => ({ id:artifact.id, type:artifact.type, taskId:artifact.taskId ?? null, metadata:artifact.metadata ?? {}, files:(artifact.content?.files ?? []).map(file => ({path:file.path,content:file.content})) })),
+    artifactFiles
   };
-  const artifact = registerArtifact({
-    projectId: project.id,
-    taskId: null,
-    agentId: null,
-    type: 'final-delivery',
-    content: delivery,
-    metadata: { state: project.state, generatedBy: 'mauli-l1.1-delivery', qualityGateStatus: 'PASS' }
-  });
-  artifact.content = {
-    ...delivery,
-    artifactId: artifact.id,
-    artifactType: artifact.type
-  };
-  artifact.metadata = {
-    ...artifact.metadata,
-    downloadPath: `/api/artifacts/${artifact.id}/download`
-  };
-  store.put('artifacts', artifact);
+  const artifact = registerArtifact({ projectId:project.id, taskId:null, agentId:null, type:'final-delivery', content:delivery, metadata:{state:project.state,generatedBy:'mauli-l1.1-delivery',qualityGateStatus:'PASS'} });
+  artifact.content = {...delivery,artifactId:artifact.id,artifactType:artifact.type};
+  artifact.metadata = {...artifact.metadata,downloadPath:`/api/artifacts/${artifact.id}/download`};
+  store.put('artifacts',artifact);
   return artifact;
 }
