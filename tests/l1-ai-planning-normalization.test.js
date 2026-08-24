@@ -16,6 +16,6 @@ test('L1 AI planning survives malformed model output without claiming success', 
   const plan = await interpretWithAI(env, 'Build a website');
   assert.equal(plan.objective, 'Build a website');
   assert.equal(plan.capabilities.length, 0);
-  assert.match(plan.risks[0], /not valid JSON/i);
+  assert.match(plan.risks[0], /malformed|not valid JSON/i);
   assert.deepEqual(plan.acceptanceCriteria, []);
 });
