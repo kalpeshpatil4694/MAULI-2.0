@@ -26,6 +26,28 @@ function matchesAcceptance(task, result) {
   return { passed: checks.every(x => x.passed), checks };
 }
 
+function verifyArtifactResult(task, execution) {
+  const result = execution?.result;
+  const spec = task?.artifactSpec;
+  const checks = [
+    { name: 'artifact_result_type', passed: result?.type === 'artifact' },
+    { name: 'artifact_created', passed: Boolean(result?.artifactId && store.get('artifacts', result.artifactId)) },
+    { name: 'artifact_verification_passed', passed: result?.artifactVerification?.passed === true }
+  ];
+  if (spec?.artifact) {
+    const artifact = result?.artifactId ? store.get('artifacts', result.artifactId) : null;
+    const files = artifact?.content?.files ?? [];
+    const actual = files.find(file => file?.path === spec.artifact.path)?.content;
+    checks.push({ name: 'exact_artifact_path', passed: Boolean(actual !== undefined && actual !== null) && spec.artifact.path === files.find(file => file?.path === spec.artifact.path)?.path });
+    checks.push({ name: 'exact_artifact_content', passed: actual === spec.artifact.content, expected: spec.artifact.content, actual });
+  }
+  for (const expected of spec?.verifyBefore ?? []) {
+    const found = store.list('artifacts').flatMap(a => a?.content?.files ?? []).find(file => file?.path === expected.path);
+    checks.push({ name: `dependency_artifact:${expected.path}`, passed: found?.content === expected.content, expected: expected.content, actual: found?.content });
+  }
+  return { passed: checks.every(check => check.passed), checks };
+}
+
 export function verifyResult(task, execution) {
   const checks = [];
   checks.push({ name: 'execution_completed', passed: execution?.state === 'completed' });
@@ -40,6 +62,11 @@ export function verifyResult(task, execution) {
     const qualityGate = runQualityGate(task, artifact);
     execution.result.qualityGate = qualityGate;
     checks.push({ name: 'generated_project_quality_gate', passed: qualityGate.passed, details: qualityGate });
+  }
+  if (execution?.result?.type === 'artifact') {
+    const artifactVerification = verifyArtifactResult(task, execution);
+    execution.result.artifactVerification = { ...(execution.result.artifactVerification ?? {}), ...artifactVerification };
+    checks.push({ name: 'artifact_integrity_and_exact_content', passed: artifactVerification.passed, details: artifactVerification.checks });
   }
   const acceptance = matchesAcceptance(task, execution?.result);
   if (Array.isArray(task?.acceptance) && task.acceptance.length > 0) checks.push({ name: 'acceptance_criteria', passed: acceptance.passed, details: acceptance.checks });
