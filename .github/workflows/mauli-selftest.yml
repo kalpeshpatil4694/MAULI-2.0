@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies in local workspace
         shell: powershell
         working-directory: C:\mauli-ci\selftest
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
 
       - name: Run Node tests
         shell: powershell
