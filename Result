@@ -1,38 +1,42 @@
 {
-  "command": "Create a test project named MAULI ARTIFACT E2E RETEST with exactly 3 tasks executed in strict dependency order.\n\nTask 1: Create a real artifact file named task-1-output.txt containing exactly \"MAULI TASK 1 PASSED\". Verify that the file exists and its content exactly matches.\n\nTask 2: Verify Task 1 is completed and verify task-1-output.txt exists with exact content \"MAULI TASK 1 PASSED\". Then create task-2-output.txt containing exactly \"MAULI TASK 2 PASSED\" and verify it.\n\nTask 3: Verify Task 2 is completed and verify both previous artifact files exist with their exact expected contents. Then create task-3-output.txt containing exactly \"MAULI TASK 3 PASSED\" and verify it.\n\nExecute strictly Task 1 → Task 2 → Task 3. Show actual progress at 33%, 67%, and 100%.\n\nIf any task or artifact verification fails, stop immediately and mark the project completed_with_errors.\n\nComplete the project only when all 3 tasks and all artifact verifications succeed. At the end report the exact artifact files created, their contents, verification status, task results, dependency order, and final progress.",
-  "generatedAt": "2026-08-24T11:27:09.523Z",
+  "command": "Unit converter mobile application",
+  "generatedAt": "2026-08-24T12:20:44.878Z",
   "result": {
     "project": {
-      "id": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
-      "name": "Project: Create MAULI ARTIFACT E2E RETEST project with 3 dependent ta",
-      "objective": "Create MAULI ARTIFACT E2E RETEST project with 3 dependent tasks and verify artifact files",
-      "founderCommand": "Create a test project named MAULI ARTIFACT E2E RETEST with exactly 3 tasks executed in strict dependency order.\n\nTask 1: Create a real artifact file named task-1-output.txt containing exactly \"MAULI TASK 1 PASSED\". Verify that the file exists and its content exactly matches.\n\nTask 2: Verify Task 1 is completed and verify task-1-output.txt exists with exact content \"MAULI TASK 1 PASSED\". Then create task-2-output.txt containing exactly \"MAULI TASK 2 PASSED\" and verify it.\n\nTask 3: Verify Task 2 is completed and verify both previous artifact files exist with their exact expected contents. Then create task-3-output.txt containing exactly \"MAULI TASK 3 PASSED\" and verify it.\n\nExecute strictly Task 1 → Task 2 → Task 3. Show actual progress at 33%, 67%, and 100%.\n\nIf any task or artifact verification fails, stop immediately and mark the project completed_with_errors.\n\nComplete the project only when all 3 tasks and all artifact verifications succeed. At the end report the exact artifact files created, their contents, verification status, task results, dependency order, and final progress.",
+      "id": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+      "name": "Project: Design a unit converter mobile application",
+      "objective": "Design a unit converter mobile application",
+      "founderCommand": "Unit converter mobile application",
       "requirements": [
-        "Create task-1-output.txt with content 'MAULI TASK 1 PASSED'",
-        "Verify task-1-output.txt exists and content matches",
-        "Create task-2-output.txt with content 'MAULI TASK 2 PASSED' after Task 1 completion",
-        "Verify task-2-output.txt exists and content matches",
-        "Create task-3-output.txt with content 'MAULI TASK 3 PASSED' after Task 2 completion",
-        "Verify task-3-output.txt exists and content matches"
+        "Support conversion of length, weight, temperature, and time units",
+        "Implement intuitive user interface for easy unit selection and conversion",
+        "Ensure accuracy of conversion calculations",
+        "Store user conversion history"
       ],
       "priority": "normal",
       "state": "completed",
       "milestones": [],
-      "createdAt": "2026-08-24T11:27:09.523Z",
-      "updatedAt": "2026-08-24T11:27:09.523Z"
+      "createdAt": "2026-08-24T12:20:16.408Z",
+      "updatedAt": "2026-08-24T12:20:44.878Z",
+      "progress": {
+        "percent": 100,
+        "completed": 7,
+        "total": 7,
+        "currentTask": null
+      }
     },
     "firstTask": {
-      "id": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
-      "projectId": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
+      "id": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
+      "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
       "title": "Final project verification and QA",
-      "description": "Verify completed project project_39d62820-d777-44dd-ad49-9b3db157e4e5",
+      "description": "Verify completed project project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
       "requiredCapabilities": [
         "testing",
         "verification"
       ],
       "risk": "low",
       "dependsOn": [
-        "task_77159a67-6c8e-4f0e-9909-e13891cde3ac"
+        "task_6ff40aa9-3c0e-48ea-a786-e321fbf224f7"
       ],
       "acceptance": [
         {
@@ -50,23 +54,23 @@
       "requiredTools": [],
       "sequence": 999,
       "finalProjectVerification": true,
-      "updatedAt": "2026-08-24T11:27:09.523Z",
-      "createdAt": "2026-08-24T11:27:09.523Z",
-      "assignedAt": "2026-08-24T11:27:09.523Z",
-      "startedAt": "2026-08-24T11:27:09.523Z",
+      "updatedAt": "2026-08-24T12:20:44.878Z",
+      "createdAt": "2026-08-24T12:20:44.878Z",
+      "assignedAt": "2026-08-24T12:20:44.878Z",
+      "startedAt": "2026-08-24T12:20:44.878Z",
       "memoryContext": [],
       "result": {
         "type": "plan",
-        "taskId": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
+        "taskId": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
         "output": "Execution plan generated.",
         "diagnostics": {
           "healthy": true,
-          "at": "2026-08-24T11:27:09.523Z"
+          "at": "2026-08-24T12:20:44.878Z"
         },
         "summary": "Execution plan generated. Verification complete."
       },
-      "verificationId": "verification_c110a55a-a60c-4be9-bcc0-516b42ff1428",
-      "completedAt": "2026-08-24T11:27:09.523Z"
+      "verificationId": "verification_af3330a6-9a3b-4112-a63b-03ccb9108c9e",
+      "completedAt": "2026-08-24T12:20:44.878Z"
     },
     "selectedAgent": {
       "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
@@ -82,59 +86,59 @@
         "code.execute"
       ],
       "state": "available",
-      "heartbeatAt": "2026-08-24T11:27:09.523Z",
+      "heartbeatAt": "2026-08-24T12:20:44.878Z",
       "metadata": {
-        "outcomeCount": 22,
-        "successCount": 22,
+        "outcomeCount": 24,
+        "successCount": 24,
         "failureCount": 0,
         "successRate": 1,
-        "lastOutcomeAt": "2026-08-24T11:27:09.523Z",
+        "lastOutcomeAt": "2026-08-24T12:20:44.878Z",
         "lastOutcome": "success",
         "reliabilityScore": 100,
         "consecutiveFailures": 0,
         "learning": {
           "testing|verification": {
-            "attempts": 22,
-            "successes": 22,
+            "attempts": 24,
+            "successes": 24,
             "failures": 0,
             "successRate": 1,
             "confidence": 1,
-            "lastOutcomeAt": "2026-08-24T11:27:09.523Z"
+            "lastOutcomeAt": "2026-08-24T12:20:44.878Z"
           }
         }
       },
-      "updatedAt": "2026-08-24T11:27:09.523Z",
+      "updatedAt": "2026-08-24T12:20:44.878Z",
       "createdAt": "2026-08-20T08:12:51.655Z",
       "currentTaskId": null
     },
     "execution": {
-      "id": "run_c2c7ce14-6741-444f-895d-a3e61c877538",
-      "taskId": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
+      "id": "run_30447f67-99ef-4e1f-b1f3-b1c71ce5e581",
+      "taskId": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
       "executor": "internal.plan",
       "state": "completed",
-      "startedAt": "2026-08-24T11:27:09.523Z",
+      "startedAt": "2026-08-24T12:20:44.878Z",
       "attempt": 1,
       "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
       "recoverable": false,
       "result": {
         "type": "plan",
-        "taskId": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
+        "taskId": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
         "output": "Execution plan generated.",
         "diagnostics": {
           "healthy": true,
-          "at": "2026-08-24T11:27:09.523Z"
+          "at": "2026-08-24T12:20:44.878Z"
         },
         "summary": "Execution plan generated. Verification complete."
       },
       "requiredTools": [],
-      "completedAt": "2026-08-24T11:27:09.523Z",
+      "completedAt": "2026-08-24T12:20:44.878Z",
       "status": "completed",
-      "executionId": "run_c2c7ce14-6741-444f-895d-a3e61c877538"
+      "executionId": "run_30447f67-99ef-4e1f-b1f3-b1c71ce5e581"
     },
     "verification": {
-      "id": "verification_c110a55a-a60c-4be9-bcc0-516b42ff1428",
-      "taskId": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
-      "executionId": "run_c2c7ce14-6741-444f-895d-a3e61c877538",
+      "id": "verification_af3330a6-9a3b-4112-a63b-03ccb9108c9e",
+      "taskId": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
+      "executionId": "run_30447f67-99ef-4e1f-b1f3-b1c71ce5e581",
       "passed": true,
       "checks": [
         {
@@ -169,21 +173,1306 @@
           ]
         }
       ],
-      "verifiedAt": "2026-08-24T11:27:09.523Z"
+      "verifiedAt": "2026-08-24T12:20:44.878Z"
     },
     "status": "completed",
     "tasks": [
       {
-        "id": "task_77159a67-6c8e-4f0e-9909-e13891cde3ac",
-        "projectId": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
-        "title": "Create testing and verification plan: Create task-1-output.txt with content 'MAULI TASK 1 PASSED'",
-        "description": "Create MAULI ARTIFACT E2E RETEST project with 3 dependent tasks and verify artifact files",
+        "id": "task_f5a24d74-dc04-48e6-9a1c-52e364b2dd43",
+        "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+        "title": "Research and validate requirements: Support conversion of length, weight, temperature, and time units",
+        "description": "Design a unit converter mobile application",
+        "requiredCapabilities": [
+          "research",
+          "analysis"
+        ],
+        "risk": "normal",
+        "dependsOn": [],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 10,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-24T12:20:16.408Z",
+        "createdAt": "2026-08-24T12:20:16.408Z",
+        "assignedAt": "2026-08-24T12:20:16.408Z",
+        "startedAt": "2026-08-24T12:20:16.408Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_f5a24d74-dc04-48e6-9a1c-52e364b2dd43",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-24T12:20:16.408Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_edfb484a-7aeb-4872-8b3b-6f7b14e49b36",
+        "completedAt": "2026-08-24T12:20:16.408Z",
+        "task": {
+          "id": "task_f5a24d74-dc04-48e6-9a1c-52e364b2dd43",
+          "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+          "title": "Research and validate requirements: Support conversion of length, weight, temperature, and time units",
+          "description": "Design a unit converter mobile application",
+          "requiredCapabilities": [
+            "research",
+            "analysis"
+          ],
+          "risk": "normal",
+          "dependsOn": [],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "plan"
+            }
+          ],
+          "state": "completed",
+          "attempts": 1,
+          "maxAttempts": 3,
+          "executor": "internal.plan",
+          "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 10,
+          "artifactSpec": null,
+          "updatedAt": "2026-08-24T12:20:16.408Z",
+          "createdAt": "2026-08-24T12:20:16.408Z",
+          "assignedAt": "2026-08-24T12:20:16.408Z",
+          "startedAt": "2026-08-24T12:20:16.408Z",
+          "memoryContext": [],
+          "result": {
+            "type": "plan",
+            "taskId": "task_f5a24d74-dc04-48e6-9a1c-52e364b2dd43",
+            "output": "Execution plan generated.",
+            "diagnostics": {
+              "healthy": true,
+              "at": "2026-08-24T12:20:16.408Z"
+            },
+            "summary": "Execution plan generated. Verification complete."
+          },
+          "verificationId": "verification_edfb484a-7aeb-4872-8b3b-6f7b14e49b36",
+          "completedAt": "2026-08-24T12:20:16.408Z"
+        },
+        "selectedAgent": {
+          "id": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "name": "Research Agent",
+          "role": "Research",
+          "department": "Research",
+          "capabilities": [
+            "research",
+            "analysis"
+          ],
+          "tools": [
+            "web.search"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-24T12:20:42.806Z",
+          "metadata": {
+            "outcomeCount": 14,
+            "successCount": 14,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-24T12:20:16.408Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "analysis|research": {
+                "attempts": 14,
+                "successes": 14,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-24T12:20:16.408Z"
+              }
+            }
+          },
+          "updatedAt": "2026-08-24T12:20:42.806Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_637481d4-6926-44f1-b238-4f6809352b45",
+        "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+        "title": "Define product and architecture plan: Implement intuitive user interface for easy unit selection and conversion",
+        "description": "Design a unit converter mobile application",
+        "requiredCapabilities": [
+          "product-planning",
+          "planning"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_f5a24d74-dc04-48e6-9a1c-52e364b2dd43"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [
+          "planning.execute"
+        ],
+        "requiredTools": [],
+        "sequence": 20,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-24T12:20:16.408Z",
+        "createdAt": "2026-08-24T12:20:16.408Z",
+        "startedAt": "2026-08-24T12:20:16.408Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_637481d4-6926-44f1-b238-4f6809352b45",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-24T12:20:16.408Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_35deef6a-9e71-4a80-9fcf-1eaff0450e31",
+        "completedAt": "2026-08-24T12:20:16.408Z",
+        "task": {
+          "id": "task_637481d4-6926-44f1-b238-4f6809352b45",
+          "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+          "title": "Define product and architecture plan: Implement intuitive user interface for easy unit selection and conversion",
+          "description": "Design a unit converter mobile application",
+          "requiredCapabilities": [
+            "product-planning",
+            "planning"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_f5a24d74-dc04-48e6-9a1c-52e364b2dd43"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "plan"
+            }
+          ],
+          "state": "completed",
+          "attempts": 1,
+          "maxAttempts": 3,
+          "executor": "internal.plan",
+          "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "toolNames": [
+            "planning.execute"
+          ],
+          "requiredTools": [],
+          "sequence": 20,
+          "artifactSpec": null,
+          "updatedAt": "2026-08-24T12:20:16.408Z",
+          "createdAt": "2026-08-24T12:20:16.408Z",
+          "startedAt": "2026-08-24T12:20:16.408Z",
+          "memoryContext": [],
+          "result": {
+            "type": "plan",
+            "taskId": "task_637481d4-6926-44f1-b238-4f6809352b45",
+            "output": "Execution plan generated.",
+            "diagnostics": {
+              "healthy": true,
+              "at": "2026-08-24T12:20:16.408Z"
+            },
+            "summary": "Execution plan generated. Verification complete."
+          },
+          "verificationId": "verification_35deef6a-9e71-4a80-9fcf-1eaff0450e31",
+          "completedAt": "2026-08-24T12:20:16.408Z"
+        },
+        "selectedAgent": {
+          "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "name": "Product Agent",
+          "role": "Product",
+          "department": "Business",
+          "capabilities": [
+            "requirements",
+            "product-planning",
+            "planning"
+          ],
+          "tools": [
+            "planning.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-24T12:20:42.806Z",
+          "metadata": {
+            "outcomeCount": 35,
+            "successCount": 35,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-24T12:20:16.408Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "analysis|research": {
+                "attempts": 10,
+                "successes": 10,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
+              },
+              "planning|product-planning": {
+                "attempts": 24,
+                "successes": 24,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-24T12:20:16.408Z"
+              },
+              "testing|verification": {
+                "attempts": 1,
+                "successes": 1,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 0.1,
+                "lastOutcomeAt": "2026-08-21T17:01:36.812Z"
+              }
+            }
+          },
+          "updatedAt": "2026-08-24T12:20:42.806Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_4fc38bce-c6ff-4c1d-9ab3-2f32a631612f",
+        "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+        "title": "Implement backend code and API: Ensure accuracy of conversion calculations",
+        "description": "Design a unit converter mobile application",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_637481d4-6926-44f1-b238-4f6809352b45"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-24T12:20:23.781Z",
+        "createdAt": "2026-08-24T12:20:16.408Z",
+        "startedAt": "2026-08-24T12:20:16.408Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_2aa227dd-ab11-4673-9e74-0d9ab6a419f2",
+          "summary": "Backend API for unit converter mobile application",
+          "files": [
+            {
+              "path": "converter.py",
+              "content": "from flask import Flask, request, jsonify\n\napp = Flask(__name__)\n\n# Define conversion factors\nconversion_factors = {\n    'length': {'meter': 1, 'centimeter': 100, 'kilometer': 0.001},\n    'weight': {'gram': 1, 'kilogram': 0.001, 'ton': 0.000001}\n}\n\n# Define conversion functions\ndef convert_length(value, from_unit, to_unit):\n    if from_unit not in conversion_factors['length'] or to_unit not in conversion_factors['length']:\n        return 'Invalid unit'\n    return value * conversion_factors['length'][from_unit] / conversion_factors['length'][to_unit]\n\ndef convert_weight(value, from_unit, to_unit):\n    if from_unit not in conversion_factors['weight'] or to_unit not in conversion_factors['weight']:\n        return 'Invalid unit'\n    return value * conversion_factors['weight'][from_unit] / conversion_factors['weight'][to_unit]\n\n# Define API endpoints\n@app.route('/convert', methods=['POST'])\ndef convert):\n    data = request.get_json()\n    if data['type'] == 'length':\n        result = convert_length(data['value'], data['from_unit'], data['to_unit'])\n    elif data['type'] == 'weight':\n        result = convert_weight(data['value'], data['from_unit'], data['to_unit'])\n    else:\n        return jsonify({'error': 'Invalid conversion type'}), 400\n    return jsonify({'result': result}), 200\n\nif __name__ == '__main__':\n    app.run(debug=True)"
+            }
+          ],
+          "tests": [
+            "Test conversion of length from meter to centimeter",
+            "Test conversion of weight from gram to kilogram",
+            "Test conversion of length from invalid unit",
+            "Test conversion of weight from invalid unit"
+          ],
+          "notes": [
+            "Use a more robust method for storing and retrieving conversion factors",
+            "Add more conversion types (e.g. temperature, time)",
+            "Implement error handling for invalid input"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "qualityGate": {
+            "passed": true,
+            "gate": "L1.1-generated-project-quality",
+            "status": "PASS",
+            "stages": {
+              "automatedBuildTest": true,
+              "requirementVerification": true,
+              "securityCheck": true,
+              "artifactIntegrity": true,
+              "integrationCheck": true
+            },
+            "checks": [
+              {
+                "name": "files_present",
+                "passed": true
+              },
+              {
+                "name": "unique_paths",
+                "passed": true
+              },
+              {
+                "name": "safe_paths",
+                "passed": true
+              },
+              {
+                "name": "non_empty_files",
+                "passed": true
+              },
+              {
+                "name": "valid_file_records",
+                "passed": true
+              },
+              {
+                "name": "python_basic_syntax:converter.py",
+                "passed": true
+              },
+              {
+                "name": "no_obvious_hardcoded_secrets",
+                "passed": true
+              },
+              {
+                "name": "no_dynamic_eval",
+                "passed": true
+              },
+              {
+                "name": "no_dangerous_html_sink",
+                "passed": true
+              },
+              {
+                "name": "no_embedded_private_key",
+                "passed": true
+              },
+              {
+                "name": "artifact_file_count",
+                "passed": true
+              },
+              {
+                "name": "artifact_paths_unique",
+                "passed": true
+              },
+              {
+                "name": "artifact_content_utf8",
+                "passed": true
+              }
+            ],
+            "requirementsDetected": "general",
+            "artifactManifest": [
+              {
+                "path": "converter.py",
+                "bytes": 1348,
+                "sha256": "427b1c0a3546b26acc47bd496a2216cdffaf8879cc08601befcbfccd6b14f053"
+              }
+            ],
+            "checkedAt": "2026-08-24T12:20:23.781Z"
+          }
+        },
+        "verificationId": "verification_d615031b-35fb-47d8-8b41-f94f3be0965d",
+        "completedAt": "2026-08-24T12:20:23.781Z",
+        "task": {
+          "id": "task_4fc38bce-c6ff-4c1d-9ab3-2f32a631612f",
+          "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+          "title": "Implement backend code and API: Ensure accuracy of conversion calculations",
+          "description": "Design a unit converter mobile application",
+          "requiredCapabilities": [
+            "backend",
+            "api"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_637481d4-6926-44f1-b238-4f6809352b45"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "state": "completed",
+          "attempts": 1,
+          "maxAttempts": 3,
+          "executor": "internal.code",
+          "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+          "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 30,
+          "artifactSpec": null,
+          "updatedAt": "2026-08-24T12:20:23.781Z",
+          "createdAt": "2026-08-24T12:20:16.408Z",
+          "startedAt": "2026-08-24T12:20:16.408Z",
+          "memoryContext": [],
+          "result": {
+            "type": "code",
+            "artifactId": "artifact_2aa227dd-ab11-4673-9e74-0d9ab6a419f2",
+            "summary": "Backend API for unit converter mobile application",
+            "files": [
+              {
+                "path": "converter.py",
+                "content": "from flask import Flask, request, jsonify\n\napp = Flask(__name__)\n\n# Define conversion factors\nconversion_factors = {\n    'length': {'meter': 1, 'centimeter': 100, 'kilometer': 0.001},\n    'weight': {'gram': 1, 'kilogram': 0.001, 'ton': 0.000001}\n}\n\n# Define conversion functions\ndef convert_length(value, from_unit, to_unit):\n    if from_unit not in conversion_factors['length'] or to_unit not in conversion_factors['length']:\n        return 'Invalid unit'\n    return value * conversion_factors['length'][from_unit] / conversion_factors['length'][to_unit]\n\ndef convert_weight(value, from_unit, to_unit):\n    if from_unit not in conversion_factors['weight'] or to_unit not in conversion_factors['weight']:\n        return 'Invalid unit'\n    return value * conversion_factors['weight'][from_unit] / conversion_factors['weight'][to_unit]\n\n# Define API endpoints\n@app.route('/convert', methods=['POST'])\ndef convert):\n    data = request.get_json()\n    if data['type'] == 'length':\n        result = convert_length(data['value'], data['from_unit'], data['to_unit'])\n    elif data['type'] == 'weight':\n        result = convert_weight(data['value'], data['from_unit'], data['to_unit'])\n    else:\n        return jsonify({'error': 'Invalid conversion type'}), 400\n    return jsonify({'result': result}), 200\n\nif __name__ == '__main__':\n    app.run(debug=True)"
+              }
+            ],
+            "tests": [
+              "Test conversion of length from meter to centimeter",
+              "Test conversion of weight from gram to kilogram",
+              "Test conversion of length from invalid unit",
+              "Test conversion of weight from invalid unit"
+            ],
+            "notes": [
+              "Use a more robust method for storing and retrieving conversion factors",
+              "Add more conversion types (e.g. temperature, time)",
+              "Implement error handling for invalid input"
+            ],
+            "acceptance": [
+              {
+                "field": "type",
+                "equals": "code"
+              }
+            ],
+            "qualityGate": {
+              "passed": true,
+              "gate": "L1.1-generated-project-quality",
+              "status": "PASS",
+              "stages": {
+                "automatedBuildTest": true,
+                "requirementVerification": true,
+                "securityCheck": true,
+                "artifactIntegrity": true,
+                "integrationCheck": true
+              },
+              "checks": [
+                {
+                  "name": "files_present",
+                  "passed": true
+                },
+                {
+                  "name": "unique_paths",
+                  "passed": true
+                },
+                {
+                  "name": "safe_paths",
+                  "passed": true
+                },
+                {
+                  "name": "non_empty_files",
+                  "passed": true
+                },
+                {
+                  "name": "valid_file_records",
+                  "passed": true
+                },
+                {
+                  "name": "python_basic_syntax:converter.py",
+                  "passed": true
+                },
+                {
+                  "name": "no_obvious_hardcoded_secrets",
+                  "passed": true
+                },
+                {
+                  "name": "no_dynamic_eval",
+                  "passed": true
+                },
+                {
+                  "name": "no_dangerous_html_sink",
+                  "passed": true
+                },
+                {
+                  "name": "no_embedded_private_key",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_file_count",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_paths_unique",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_content_utf8",
+                  "passed": true
+                }
+              ],
+              "requirementsDetected": "general",
+              "artifactManifest": [
+                {
+                  "path": "converter.py",
+                  "bytes": 1348,
+                  "sha256": "427b1c0a3546b26acc47bd496a2216cdffaf8879cc08601befcbfccd6b14f053"
+                }
+              ],
+              "checkedAt": "2026-08-24T12:20:23.781Z"
+            }
+          },
+          "verificationId": "verification_d615031b-35fb-47d8-8b41-f94f3be0965d",
+          "completedAt": "2026-08-24T12:20:23.781Z"
+        },
+        "selectedAgent": {
+          "id": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+          "name": "Backend Agent",
+          "role": "Engineer",
+          "department": "Engineering",
+          "capabilities": [
+            "backend",
+            "api",
+            "javascript"
+          ],
+          "tools": [
+            "code.execute",
+            "test.run"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-24T12:20:42.806Z",
+          "metadata": {
+            "outcomeCount": 16,
+            "successCount": 15,
+            "failureCount": 1,
+            "successRate": 0.9375,
+            "lastOutcomeAt": "2026-08-24T12:20:23.781Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 94,
+            "consecutiveFailures": 0,
+            "learning": {
+              "api|backend": {
+                "attempts": 16,
+                "successes": 15,
+                "failures": 1,
+                "successRate": 0.9375,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-24T12:20:23.781Z"
+              }
+            }
+          },
+          "updatedAt": "2026-08-24T12:20:42.806Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_fbbb4f02-08ef-43f5-836a-f1b2a256c169",
+        "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+        "title": "Implement database and persistence schema: Store user conversion history",
+        "description": "Design a unit converter mobile application",
+        "requiredCapabilities": [
+          "database",
+          "schema",
+          "sql"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_4fc38bce-c6ff-4c1d-9ab3-2f32a631612f"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 40,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-24T12:20:30.092Z",
+        "createdAt": "2026-08-24T12:20:16.408Z",
+        "startedAt": "2026-08-24T12:20:23.781Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_dade443c-91cb-49c0-9496-07d21c24f194",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: Store user conversion history\nObjective: Design a unit converter mobile application\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime did not return a valid file artifact."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "qualityGate": {
+            "passed": true,
+            "gate": "L1.1-generated-project-quality",
+            "status": "PASS",
+            "stages": {
+              "automatedBuildTest": true,
+              "requirementVerification": true,
+              "securityCheck": true,
+              "artifactIntegrity": true,
+              "integrationCheck": true
+            },
+            "checks": [
+              {
+                "name": "files_present",
+                "passed": true
+              },
+              {
+                "name": "unique_paths",
+                "passed": true
+              },
+              {
+                "name": "safe_paths",
+                "passed": true
+              },
+              {
+                "name": "non_empty_files",
+                "passed": true
+              },
+              {
+                "name": "valid_file_records",
+                "passed": true
+              },
+              {
+                "name": "no_obvious_hardcoded_secrets",
+                "passed": true
+              },
+              {
+                "name": "no_dynamic_eval",
+                "passed": true
+              },
+              {
+                "name": "no_dangerous_html_sink",
+                "passed": true
+              },
+              {
+                "name": "no_embedded_private_key",
+                "passed": true
+              },
+              {
+                "name": "artifact_file_count",
+                "passed": true
+              },
+              {
+                "name": "artifact_paths_unique",
+                "passed": true
+              },
+              {
+                "name": "artifact_content_utf8",
+                "passed": true
+              }
+            ],
+            "requirementsDetected": "general",
+            "artifactManifest": [
+              {
+                "path": "generated/README.md",
+                "bytes": 189,
+                "sha256": "f4f8f16ed71b17bb1c7d662b5827eff4111b57690c73e3a3cdb50d5a7aba8b3f"
+              }
+            ],
+            "checkedAt": "2026-08-24T12:20:30.092Z"
+          }
+        },
+        "verificationId": "verification_07590475-5a2d-446c-86b9-e8a98bd503d8",
+        "completedAt": "2026-08-24T12:20:30.092Z",
+        "task": {
+          "id": "task_fbbb4f02-08ef-43f5-836a-f1b2a256c169",
+          "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+          "title": "Implement database and persistence schema: Store user conversion history",
+          "description": "Design a unit converter mobile application",
+          "requiredCapabilities": [
+            "database",
+            "schema",
+            "sql"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_4fc38bce-c6ff-4c1d-9ab3-2f32a631612f"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "state": "completed",
+          "attempts": 1,
+          "maxAttempts": 3,
+          "executor": "internal.code",
+          "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+          "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 40,
+          "artifactSpec": null,
+          "updatedAt": "2026-08-24T12:20:30.092Z",
+          "createdAt": "2026-08-24T12:20:16.408Z",
+          "startedAt": "2026-08-24T12:20:23.781Z",
+          "memoryContext": [],
+          "result": {
+            "type": "code",
+            "artifactId": "artifact_dade443c-91cb-49c0-9496-07d21c24f194",
+            "summary": "Code artifact generated without paid/cloud services. [object Object]",
+            "files": [
+              {
+                "path": "generated/README.md",
+                "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: Store user conversion history\nObjective: Design a unit converter mobile application\nAcceptance: [object Object]"
+              }
+            ],
+            "tests": [
+              "node --test"
+            ],
+            "notes": [
+              "Deterministic L1 fallback used because AI runtime did not return a valid file artifact."
+            ],
+            "acceptance": [
+              {
+                "field": "type",
+                "equals": "code"
+              }
+            ],
+            "qualityGate": {
+              "passed": true,
+              "gate": "L1.1-generated-project-quality",
+              "status": "PASS",
+              "stages": {
+                "automatedBuildTest": true,
+                "requirementVerification": true,
+                "securityCheck": true,
+                "artifactIntegrity": true,
+                "integrationCheck": true
+              },
+              "checks": [
+                {
+                  "name": "files_present",
+                  "passed": true
+                },
+                {
+                  "name": "unique_paths",
+                  "passed": true
+                },
+                {
+                  "name": "safe_paths",
+                  "passed": true
+                },
+                {
+                  "name": "non_empty_files",
+                  "passed": true
+                },
+                {
+                  "name": "valid_file_records",
+                  "passed": true
+                },
+                {
+                  "name": "no_obvious_hardcoded_secrets",
+                  "passed": true
+                },
+                {
+                  "name": "no_dynamic_eval",
+                  "passed": true
+                },
+                {
+                  "name": "no_dangerous_html_sink",
+                  "passed": true
+                },
+                {
+                  "name": "no_embedded_private_key",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_file_count",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_paths_unique",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_content_utf8",
+                  "passed": true
+                }
+              ],
+              "requirementsDetected": "general",
+              "artifactManifest": [
+                {
+                  "path": "generated/README.md",
+                  "bytes": 189,
+                  "sha256": "f4f8f16ed71b17bb1c7d662b5827eff4111b57690c73e3a3cdb50d5a7aba8b3f"
+                }
+              ],
+              "checkedAt": "2026-08-24T12:20:30.092Z"
+            }
+          },
+          "verificationId": "verification_07590475-5a2d-446c-86b9-e8a98bd503d8",
+          "completedAt": "2026-08-24T12:20:30.092Z"
+        },
+        "selectedAgent": {
+          "id": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+          "name": "Database Agent",
+          "role": "Engineer",
+          "department": "Engineering",
+          "capabilities": [
+            "database",
+            "schema",
+            "sql"
+          ],
+          "tools": [
+            "database.query",
+            "code.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-24T12:20:42.806Z",
+          "metadata": {
+            "outcomeCount": 15,
+            "successCount": 15,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-24T12:20:30.092Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "database|schema|sql": {
+                "attempts": 15,
+                "successes": 15,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-24T12:20:30.092Z"
+              }
+            }
+          },
+          "updatedAt": "2026-08-24T12:20:42.806Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af",
+        "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+        "title": "Implement frontend code and user experience",
+        "description": "Design a unit converter mobile application",
+        "requiredCapabilities": [
+          "frontend",
+          "ui"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_fbbb4f02-08ef-43f5-836a-f1b2a256c169"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 50,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-24T12:20:44.878Z",
+        "createdAt": "2026-08-24T12:20:16.408Z",
+        "startedAt": "2026-08-24T12:20:30.092Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_f9a12e4c-38e1-4294-94d5-fd3c34e00361",
+          "summary": "Unit Converter Mobile Application Frontend Code",
+          "files": [
+            {
+              "path": "index.html",
+              "content": "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Unit Converter</title><link rel='stylesheet' href='styles.css'></head><body><header><h1>Unit Converter</h1></header><main><form id='converter-form'><label for='input-value'>Value:</label><input type='number' id='input-value' required><label for='input-unit'>From:</label><select id='input-unit' required><option value='length'>Length</option><option value='weight'>Weight</option><option value='temperature'>Temperature</option></select><label for='output-unit'>To:</label><select id='output-unit' required><option value='length'>Length</option><option value='weight'>Weight</option><option value='temperature'>Temperature</option></select><button id='convert-btn'>Convert</button></form><div id='result'></div></main><script src='script.js'></script></body></html>"
+            },
+            {
+              "path": "styles.css",
+              "content": "body { font-family: Arial, sans-serif; } header { background-color: #f0f0f0; padding: 1em; text-align: center; } main { display: flex; flex-direction: column; align-items: center; padding: 2em; } form { display: flex; flex-direction: column; align-items: center; } label { margin-bottom: 0.5em; } input, select { margin-bottom: 1em; padding: 0.5em; } button { background-color: #4CAF50; color: #fff; padding: 0.5em 1em; border: none; border-radius: 0.25em; cursor: pointer; } button:hover { background-color: #3e8e41; } #result { margin-top: 1em; }"
+            },
+            {
+              "path": "script.js",
+              "content": "const form = document.getElementById('converter-form'); const input_value = document.getElementById('input-value'); const input_unit = document.getElementById('input-unit'); const output_unit = document.getElementById('output-unit'); const result_div = document.getElementById('result'); form.addEventListener('submit', (e) => { e.preventDefault(); const value = parseFloat(input_value.value); const input_unit_value = input_unit.value; const output_unit_value = output_unit.value; let result; if (input_unit_value === 'length' && output_unit_value === 'length') { result = convertLength(value); } else if (input_unit_value === 'weight' && output_unit_value === 'weight') { result = convertWeight(value); } else if (input_unit_value === 'temperature' && output_unit_value === 'temperature') { result = convertTemperature(value); } result_div.innerText = `Result: ${result}`; }); function convertLength(value) { // implement length conversion logic here } function convertWeight(value) { // implement weight conversion logic here } function convertTemperature(value) { // implement temperature conversion logic here }"
+            }
+          ],
+          "tests": [
+            "Test case 1: Convert 10 meters to kilometers",
+            "Test case 2: Convert 50 kilograms to pounds",
+            "Test case 3: Convert 30 degrees Celsius to Fahrenheit"
+          ],
+          "notes": [
+            "Implement the conversion logic for each unit type in the script.js file",
+            "Add more test cases to cover different conversion scenarios",
+            "Consider using a library or API for more accurate and up-to-date conversion rates"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "qualityGate": {
+            "passed": true,
+            "gate": "L1.1-generated-project-quality",
+            "status": "PASS",
+            "stages": {
+              "automatedBuildTest": true,
+              "requirementVerification": true,
+              "securityCheck": true,
+              "artifactIntegrity": true,
+              "integrationCheck": true
+            },
+            "checks": [
+              {
+                "name": "files_present",
+                "passed": true
+              },
+              {
+                "name": "unique_paths",
+                "passed": true
+              },
+              {
+                "name": "safe_paths",
+                "passed": true
+              },
+              {
+                "name": "non_empty_files",
+                "passed": true
+              },
+              {
+                "name": "valid_file_records",
+                "passed": true
+              },
+              {
+                "name": "html_has_document_structure",
+                "passed": true
+              },
+              {
+                "name": "html_balanced_script_tags",
+                "passed": true
+              },
+              {
+                "name": "js_basic_syntax:script.js",
+                "passed": true
+              },
+              {
+                "name": "script_reference:script.js",
+                "passed": true
+              },
+              {
+                "name": "style_reference:styles.css",
+                "passed": true
+              },
+              {
+                "name": "no_obvious_hardcoded_secrets",
+                "passed": true
+              },
+              {
+                "name": "no_dynamic_eval",
+                "passed": true
+              },
+              {
+                "name": "no_dangerous_html_sink",
+                "passed": true
+              },
+              {
+                "name": "no_embedded_private_key",
+                "passed": true
+              },
+              {
+                "name": "artifact_file_count",
+                "passed": true
+              },
+              {
+                "name": "artifact_paths_unique",
+                "passed": true
+              },
+              {
+                "name": "artifact_content_utf8",
+                "passed": true
+              }
+            ],
+            "requirementsDetected": "general",
+            "artifactManifest": [
+              {
+                "path": "index.html",
+                "bytes": 901,
+                "sha256": "9856d1299ac1493af95f1f6da779a7b99feb6ab636fe880b94944f5378469711"
+              },
+              {
+                "path": "styles.css",
+                "bytes": 548,
+                "sha256": "33156f189fc6c2c63d2c8e8289beea2b9488698eefe9d2dbf509cd2daa062ec3"
+              },
+              {
+                "path": "script.js",
+                "bytes": 1116,
+                "sha256": "06d8aa638f9a1441ec3ccc3b8c17d529f9b6e07b2ca3f2161318bbe6aaa28c17"
+              }
+            ],
+            "checkedAt": "2026-08-24T12:20:44.878Z"
+          }
+        },
+        "verificationId": "verification_964019f5-655f-47cf-ba72-4bffa3a85811",
+        "completedAt": "2026-08-24T12:20:44.878Z",
+        "task": {
+          "id": "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af",
+          "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+          "title": "Implement frontend code and user experience",
+          "description": "Design a unit converter mobile application",
+          "requiredCapabilities": [
+            "frontend",
+            "ui"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_fbbb4f02-08ef-43f5-836a-f1b2a256c169"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "state": "completed",
+          "attempts": 1,
+          "maxAttempts": 3,
+          "executor": "internal.code",
+          "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+          "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 50,
+          "artifactSpec": null,
+          "updatedAt": "2026-08-24T12:20:44.878Z",
+          "createdAt": "2026-08-24T12:20:16.408Z",
+          "startedAt": "2026-08-24T12:20:30.092Z",
+          "memoryContext": [],
+          "result": {
+            "type": "code",
+            "artifactId": "artifact_f9a12e4c-38e1-4294-94d5-fd3c34e00361",
+            "summary": "Unit Converter Mobile Application Frontend Code",
+            "files": [
+              {
+                "path": "index.html",
+                "content": "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Unit Converter</title><link rel='stylesheet' href='styles.css'></head><body><header><h1>Unit Converter</h1></header><main><form id='converter-form'><label for='input-value'>Value:</label><input type='number' id='input-value' required><label for='input-unit'>From:</label><select id='input-unit' required><option value='length'>Length</option><option value='weight'>Weight</option><option value='temperature'>Temperature</option></select><label for='output-unit'>To:</label><select id='output-unit' required><option value='length'>Length</option><option value='weight'>Weight</option><option value='temperature'>Temperature</option></select><button id='convert-btn'>Convert</button></form><div id='result'></div></main><script src='script.js'></script></body></html>"
+              },
+              {
+                "path": "styles.css",
+                "content": "body { font-family: Arial, sans-serif; } header { background-color: #f0f0f0; padding: 1em; text-align: center; } main { display: flex; flex-direction: column; align-items: center; padding: 2em; } form { display: flex; flex-direction: column; align-items: center; } label { margin-bottom: 0.5em; } input, select { margin-bottom: 1em; padding: 0.5em; } button { background-color: #4CAF50; color: #fff; padding: 0.5em 1em; border: none; border-radius: 0.25em; cursor: pointer; } button:hover { background-color: #3e8e41; } #result { margin-top: 1em; }"
+              },
+              {
+                "path": "script.js",
+                "content": "const form = document.getElementById('converter-form'); const input_value = document.getElementById('input-value'); const input_unit = document.getElementById('input-unit'); const output_unit = document.getElementById('output-unit'); const result_div = document.getElementById('result'); form.addEventListener('submit', (e) => { e.preventDefault(); const value = parseFloat(input_value.value); const input_unit_value = input_unit.value; const output_unit_value = output_unit.value; let result; if (input_unit_value === 'length' && output_unit_value === 'length') { result = convertLength(value); } else if (input_unit_value === 'weight' && output_unit_value === 'weight') { result = convertWeight(value); } else if (input_unit_value === 'temperature' && output_unit_value === 'temperature') { result = convertTemperature(value); } result_div.innerText = `Result: ${result}`; }); function convertLength(value) { // implement length conversion logic here } function convertWeight(value) { // implement weight conversion logic here } function convertTemperature(value) { // implement temperature conversion logic here }"
+              }
+            ],
+            "tests": [
+              "Test case 1: Convert 10 meters to kilometers",
+              "Test case 2: Convert 50 kilograms to pounds",
+              "Test case 3: Convert 30 degrees Celsius to Fahrenheit"
+            ],
+            "notes": [
+              "Implement the conversion logic for each unit type in the script.js file",
+              "Add more test cases to cover different conversion scenarios",
+              "Consider using a library or API for more accurate and up-to-date conversion rates"
+            ],
+            "acceptance": [
+              {
+                "field": "type",
+                "equals": "code"
+              }
+            ],
+            "qualityGate": {
+              "passed": true,
+              "gate": "L1.1-generated-project-quality",
+              "status": "PASS",
+              "stages": {
+                "automatedBuildTest": true,
+                "requirementVerification": true,
+                "securityCheck": true,
+                "artifactIntegrity": true,
+                "integrationCheck": true
+              },
+              "checks": [
+                {
+                  "name": "files_present",
+                  "passed": true
+                },
+                {
+                  "name": "unique_paths",
+                  "passed": true
+                },
+                {
+                  "name": "safe_paths",
+                  "passed": true
+                },
+                {
+                  "name": "non_empty_files",
+                  "passed": true
+                },
+                {
+                  "name": "valid_file_records",
+                  "passed": true
+                },
+                {
+                  "name": "html_has_document_structure",
+                  "passed": true
+                },
+                {
+                  "name": "html_balanced_script_tags",
+                  "passed": true
+                },
+                {
+                  "name": "js_basic_syntax:script.js",
+                  "passed": true
+                },
+                {
+                  "name": "script_reference:script.js",
+                  "passed": true
+                },
+                {
+                  "name": "style_reference:styles.css",
+                  "passed": true
+                },
+                {
+                  "name": "no_obvious_hardcoded_secrets",
+                  "passed": true
+                },
+                {
+                  "name": "no_dynamic_eval",
+                  "passed": true
+                },
+                {
+                  "name": "no_dangerous_html_sink",
+                  "passed": true
+                },
+                {
+                  "name": "no_embedded_private_key",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_file_count",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_paths_unique",
+                  "passed": true
+                },
+                {
+                  "name": "artifact_content_utf8",
+                  "passed": true
+                }
+              ],
+              "requirementsDetected": "general",
+              "artifactManifest": [
+                {
+                  "path": "index.html",
+                  "bytes": 901,
+                  "sha256": "9856d1299ac1493af95f1f6da779a7b99feb6ab636fe880b94944f5378469711"
+                },
+                {
+                  "path": "styles.css",
+                  "bytes": 548,
+                  "sha256": "33156f189fc6c2c63d2c8e8289beea2b9488698eefe9d2dbf509cd2daa062ec3"
+                },
+                {
+                  "path": "script.js",
+                  "bytes": 1116,
+                  "sha256": "06d8aa638f9a1441ec3ccc3b8c17d529f9b6e07b2ca3f2161318bbe6aaa28c17"
+                }
+              ],
+              "checkedAt": "2026-08-24T12:20:44.878Z"
+            }
+          },
+          "verificationId": "verification_964019f5-655f-47cf-ba72-4bffa3a85811",
+          "completedAt": "2026-08-24T12:20:44.878Z"
+        },
+        "selectedAgent": {
+          "id": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+          "name": "Frontend Agent",
+          "role": "Engineer",
+          "department": "Engineering",
+          "capabilities": [
+            "frontend",
+            "javascript",
+            "ui"
+          ],
+          "tools": [
+            "code.execute",
+            "test.run"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-08-24T12:20:44.878Z",
+          "metadata": {
+            "outcomeCount": 14,
+            "successCount": 14,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-24T12:20:44.878Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "frontend|ui": {
+                "attempts": 14,
+                "successes": 14,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-24T12:20:44.878Z"
+              }
+            }
+          },
+          "updatedAt": "2026-08-24T12:20:44.878Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_6ff40aa9-3c0e-48ea-a786-e321fbf224f7",
+        "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+        "title": "Create testing and verification plan",
+        "description": "Design a unit converter mobile application",
         "requiredCapabilities": [
           "testing",
           "verification"
         ],
         "risk": "normal",
-        "dependsOn": [],
+        "dependsOn": [
+          "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af"
+        ],
         "acceptance": [
           {
             "field": "type",
@@ -201,34 +1490,36 @@
         ],
         "requiredTools": [],
         "sequence": 70,
-        "updatedAt": "2026-08-24T11:27:09.523Z",
-        "createdAt": "2026-08-24T11:27:09.523Z",
-        "assignedAt": "2026-08-24T11:27:09.523Z",
-        "startedAt": "2026-08-24T11:27:09.523Z",
+        "artifactSpec": null,
+        "updatedAt": "2026-08-24T12:20:44.878Z",
+        "createdAt": "2026-08-24T12:20:16.408Z",
+        "startedAt": "2026-08-24T12:20:44.878Z",
         "memoryContext": [],
         "result": {
           "type": "plan",
-          "taskId": "task_77159a67-6c8e-4f0e-9909-e13891cde3ac",
+          "taskId": "task_6ff40aa9-3c0e-48ea-a786-e321fbf224f7",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-24T11:27:09.523Z"
+            "at": "2026-08-24T12:20:44.878Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_8a4a8231-2ad8-4894-b65d-36644473c8dc",
-        "completedAt": "2026-08-24T11:27:09.523Z",
+        "verificationId": "verification_ef33dcc2-67f9-4187-9c69-2fcddbd5586c",
+        "completedAt": "2026-08-24T12:20:44.878Z",
         "task": {
-          "id": "task_77159a67-6c8e-4f0e-9909-e13891cde3ac",
-          "projectId": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
-          "title": "Create testing and verification plan: Create task-1-output.txt with content 'MAULI TASK 1 PASSED'",
-          "description": "Create MAULI ARTIFACT E2E RETEST project with 3 dependent tasks and verify artifact files",
+          "id": "task_6ff40aa9-3c0e-48ea-a786-e321fbf224f7",
+          "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+          "title": "Create testing and verification plan",
+          "description": "Design a unit converter mobile application",
           "requiredCapabilities": [
             "testing",
             "verification"
           ],
           "risk": "normal",
-          "dependsOn": [],
+          "dependsOn": [
+            "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af"
+          ],
           "acceptance": [
             {
               "field": "type",
@@ -246,23 +1537,23 @@
           ],
           "requiredTools": [],
           "sequence": 70,
-          "updatedAt": "2026-08-24T11:27:09.523Z",
-          "createdAt": "2026-08-24T11:27:09.523Z",
-          "assignedAt": "2026-08-24T11:27:09.523Z",
-          "startedAt": "2026-08-24T11:27:09.523Z",
+          "artifactSpec": null,
+          "updatedAt": "2026-08-24T12:20:44.878Z",
+          "createdAt": "2026-08-24T12:20:16.408Z",
+          "startedAt": "2026-08-24T12:20:44.878Z",
           "memoryContext": [],
           "result": {
             "type": "plan",
-            "taskId": "task_77159a67-6c8e-4f0e-9909-e13891cde3ac",
+            "taskId": "task_6ff40aa9-3c0e-48ea-a786-e321fbf224f7",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-24T11:27:09.523Z"
+              "at": "2026-08-24T12:20:44.878Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_8a4a8231-2ad8-4894-b65d-36644473c8dc",
-          "completedAt": "2026-08-24T11:27:09.523Z"
+          "verificationId": "verification_ef33dcc2-67f9-4187-9c69-2fcddbd5586c",
+          "completedAt": "2026-08-24T12:20:44.878Z"
         },
         "selectedAgent": {
           "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
@@ -278,44 +1569,44 @@
             "code.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-24T11:27:09.523Z",
+          "heartbeatAt": "2026-08-24T12:20:44.878Z",
           "metadata": {
-            "outcomeCount": 22,
-            "successCount": 22,
+            "outcomeCount": 24,
+            "successCount": 24,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-24T11:27:09.523Z",
+            "lastOutcomeAt": "2026-08-24T12:20:44.878Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "testing|verification": {
-                "attempts": 22,
-                "successes": 22,
+                "attempts": 24,
+                "successes": 24,
                 "failures": 0,
                 "successRate": 1,
                 "confidence": 1,
-                "lastOutcomeAt": "2026-08-24T11:27:09.523Z"
+                "lastOutcomeAt": "2026-08-24T12:20:44.878Z"
               }
             }
           },
-          "updatedAt": "2026-08-24T11:27:09.523Z",
+          "updatedAt": "2026-08-24T12:20:44.878Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       },
       {
-        "id": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
-        "projectId": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
+        "id": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
+        "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
         "title": "Final project verification and QA",
-        "description": "Verify completed project project_39d62820-d777-44dd-ad49-9b3db157e4e5",
+        "description": "Verify completed project project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
         "requiredCapabilities": [
           "testing",
           "verification"
         ],
         "risk": "low",
         "dependsOn": [
-          "task_77159a67-6c8e-4f0e-9909-e13891cde3ac"
+          "task_6ff40aa9-3c0e-48ea-a786-e321fbf224f7"
         ],
         "acceptance": [
           {
@@ -333,35 +1624,35 @@
         "requiredTools": [],
         "sequence": 999,
         "finalProjectVerification": true,
-        "updatedAt": "2026-08-24T11:27:09.523Z",
-        "createdAt": "2026-08-24T11:27:09.523Z",
-        "assignedAt": "2026-08-24T11:27:09.523Z",
-        "startedAt": "2026-08-24T11:27:09.523Z",
+        "updatedAt": "2026-08-24T12:20:44.878Z",
+        "createdAt": "2026-08-24T12:20:44.878Z",
+        "assignedAt": "2026-08-24T12:20:44.878Z",
+        "startedAt": "2026-08-24T12:20:44.878Z",
         "memoryContext": [],
         "result": {
           "type": "plan",
-          "taskId": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
+          "taskId": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
           "output": "Execution plan generated.",
           "diagnostics": {
             "healthy": true,
-            "at": "2026-08-24T11:27:09.523Z"
+            "at": "2026-08-24T12:20:44.878Z"
           },
           "summary": "Execution plan generated. Verification complete."
         },
-        "verificationId": "verification_c110a55a-a60c-4be9-bcc0-516b42ff1428",
-        "completedAt": "2026-08-24T11:27:09.523Z",
+        "verificationId": "verification_af3330a6-9a3b-4112-a63b-03ccb9108c9e",
+        "completedAt": "2026-08-24T12:20:44.878Z",
         "task": {
-          "id": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
-          "projectId": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
+          "id": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
+          "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
           "title": "Final project verification and QA",
-          "description": "Verify completed project project_39d62820-d777-44dd-ad49-9b3db157e4e5",
+          "description": "Verify completed project project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
           "requiredCapabilities": [
             "testing",
             "verification"
           ],
           "risk": "low",
           "dependsOn": [
-            "task_77159a67-6c8e-4f0e-9909-e13891cde3ac"
+            "task_6ff40aa9-3c0e-48ea-a786-e321fbf224f7"
           ],
           "acceptance": [
             {
@@ -379,23 +1670,23 @@
           "requiredTools": [],
           "sequence": 999,
           "finalProjectVerification": true,
-          "updatedAt": "2026-08-24T11:27:09.523Z",
-          "createdAt": "2026-08-24T11:27:09.523Z",
-          "assignedAt": "2026-08-24T11:27:09.523Z",
-          "startedAt": "2026-08-24T11:27:09.523Z",
+          "updatedAt": "2026-08-24T12:20:44.878Z",
+          "createdAt": "2026-08-24T12:20:44.878Z",
+          "assignedAt": "2026-08-24T12:20:44.878Z",
+          "startedAt": "2026-08-24T12:20:44.878Z",
           "memoryContext": [],
           "result": {
             "type": "plan",
-            "taskId": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
+            "taskId": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
             "output": "Execution plan generated.",
             "diagnostics": {
               "healthy": true,
-              "at": "2026-08-24T11:27:09.523Z"
+              "at": "2026-08-24T12:20:44.878Z"
             },
             "summary": "Execution plan generated. Verification complete."
           },
-          "verificationId": "verification_c110a55a-a60c-4be9-bcc0-516b42ff1428",
-          "completedAt": "2026-08-24T11:27:09.523Z"
+          "verificationId": "verification_af3330a6-9a3b-4112-a63b-03ccb9108c9e",
+          "completedAt": "2026-08-24T12:20:44.878Z"
         },
         "selectedAgent": {
           "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
@@ -411,54 +1702,67 @@
             "code.execute"
           ],
           "state": "available",
-          "heartbeatAt": "2026-08-24T11:27:09.523Z",
+          "heartbeatAt": "2026-08-24T12:20:44.878Z",
           "metadata": {
-            "outcomeCount": 22,
-            "successCount": 22,
+            "outcomeCount": 24,
+            "successCount": 24,
             "failureCount": 0,
             "successRate": 1,
-            "lastOutcomeAt": "2026-08-24T11:27:09.523Z",
+            "lastOutcomeAt": "2026-08-24T12:20:44.878Z",
             "lastOutcome": "success",
             "reliabilityScore": 100,
             "consecutiveFailures": 0,
             "learning": {
               "testing|verification": {
-                "attempts": 22,
-                "successes": 22,
+                "attempts": 24,
+                "successes": 24,
                 "failures": 0,
                 "successRate": 1,
                 "confidence": 1,
-                "lastOutcomeAt": "2026-08-24T11:27:09.523Z"
+                "lastOutcomeAt": "2026-08-24T12:20:44.878Z"
               }
             }
           },
-          "updatedAt": "2026-08-24T11:27:09.523Z",
+          "updatedAt": "2026-08-24T12:20:44.878Z",
           "createdAt": "2026-08-20T08:12:51.655Z",
           "currentTaskId": null
         }
       }
     ],
+    "progress": {
+      "percent": 100,
+      "completed": 7,
+      "total": 7,
+      "currentTask": null
+    },
     "finalDelivery": {
-      "id": "artifact_ee78f7e0-59d9-4658-95b2-cdc87aa8ccf8",
-      "projectId": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
+      "id": "artifact_7e9d5389-24e3-474d-ab7e-d9d33e351c29",
+      "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
       "taskId": null,
       "agentId": null,
       "type": "final-delivery",
       "content": {
-        "projectId": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
+        "projectId": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
         "project": {
-          "id": "project_39d62820-d777-44dd-ad49-9b3db157e4e5",
-          "name": "Project: Create MAULI ARTIFACT E2E RETEST project with 3 dependent ta",
-          "objective": "Create MAULI ARTIFACT E2E RETEST project with 3 dependent tasks and verify artifact files",
+          "id": "project_8afcf90f-c462-4e96-8e4a-c8f75ac0df0c",
+          "name": "Project: Design a unit converter mobile application",
+          "objective": "Design a unit converter mobile application",
           "state": "completed"
         },
         "summary": {
-          "totalTasks": 2,
-          "completedTasks": 2,
+          "totalTasks": 7,
+          "completedTasks": 7,
           "failedTasks": 0,
-          "artifactCount": 0,
-          "qualityGatePassedArtifacts": 0,
-          "deliveredAt": "2026-08-24T11:27:09.523Z"
+          "artifactCount": 3,
+          "qualityGatePassedArtifacts": 3,
+          "artifactFileCount": 5,
+          "deliveredAt": "2026-08-24T12:20:44.878Z"
+        },
+        "progress": {
+          "percent": 100,
+          "completed": 7,
+          "total": 7,
+          "currentTask": null
         },
         "quality": {
           "required": true,
@@ -474,34 +1778,422 @@
         },
         "tasks": [
           {
-            "id": "task_77159a67-6c8e-4f0e-9909-e13891cde3ac",
-            "title": "Create testing and verification plan: Create task-1-output.txt with content 'MAULI TASK 1 PASSED'",
+            "id": "task_f5a24d74-dc04-48e6-9a1c-52e364b2dd43",
+            "title": "Research and validate requirements: Support conversion of length, weight, temperature, and time units",
             "state": "completed",
-            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-            "verificationId": "verification_8a4a8231-2ad8-4894-b65d-36644473c8dc"
+            "executor": "internal.plan",
+            "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+            "verificationId": "verification_edfb484a-7aeb-4872-8b3b-6f7b14e49b36"
           },
           {
-            "id": "task_102f997c-6d54-4eb8-9778-8b7cc86827ba",
+            "id": "task_637481d4-6926-44f1-b238-4f6809352b45",
+            "title": "Define product and architecture plan: Implement intuitive user interface for easy unit selection and conversion",
+            "state": "completed",
+            "executor": "internal.plan",
+            "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+            "verificationId": "verification_35deef6a-9e71-4a80-9fcf-1eaff0450e31"
+          },
+          {
+            "id": "task_4fc38bce-c6ff-4c1d-9ab3-2f32a631612f",
+            "title": "Implement backend code and API: Ensure accuracy of conversion calculations",
+            "state": "completed",
+            "executor": "internal.code",
+            "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+            "verificationId": "verification_d615031b-35fb-47d8-8b41-f94f3be0965d"
+          },
+          {
+            "id": "task_fbbb4f02-08ef-43f5-836a-f1b2a256c169",
+            "title": "Implement database and persistence schema: Store user conversion history",
+            "state": "completed",
+            "executor": "internal.code",
+            "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+            "verificationId": "verification_07590475-5a2d-446c-86b9-e8a98bd503d8"
+          },
+          {
+            "id": "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af",
+            "title": "Implement frontend code and user experience",
+            "state": "completed",
+            "executor": "internal.code",
+            "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+            "verificationId": "verification_964019f5-655f-47cf-ba72-4bffa3a85811"
+          },
+          {
+            "id": "task_6ff40aa9-3c0e-48ea-a786-e321fbf224f7",
+            "title": "Create testing and verification plan",
+            "state": "completed",
+            "executor": "internal.plan",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_ef33dcc2-67f9-4187-9c69-2fcddbd5586c"
+          },
+          {
+            "id": "task_24dc4d9d-0518-470e-8ca0-321c967dcca6",
             "title": "Final project verification and QA",
             "state": "completed",
+            "executor": "internal.plan",
             "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
-            "verificationId": "verification_c110a55a-a60c-4be9-bcc0-516b42ff1428"
+            "verificationId": "verification_af3330a6-9a3b-4112-a63b-03ccb9108c9e"
           }
         ],
-        "artifacts": [],
-        "artifactId": "artifact_ee78f7e0-59d9-4658-95b2-cdc87aa8ccf8",
+        "artifacts": [
+          {
+            "id": "artifact_2aa227dd-ab11-4673-9e74-0d9ab6a419f2",
+            "type": "code-workspace",
+            "taskId": "task_4fc38bce-c6ff-4c1d-9ab3-2f32a631612f",
+            "metadata": {
+              "generatedBy": "internal.code",
+              "qualityGate": {
+                "passed": true,
+                "gate": "L1.1-generated-project-quality",
+                "status": "PASS",
+                "stages": {
+                  "automatedBuildTest": true,
+                  "requirementVerification": true,
+                  "securityCheck": true,
+                  "artifactIntegrity": true,
+                  "integrationCheck": true
+                },
+                "checks": [
+                  {
+                    "name": "files_present",
+                    "passed": true
+                  },
+                  {
+                    "name": "unique_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "safe_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "non_empty_files",
+                    "passed": true
+                  },
+                  {
+                    "name": "valid_file_records",
+                    "passed": true
+                  },
+                  {
+                    "name": "python_basic_syntax:converter.py",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_obvious_hardcoded_secrets",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dynamic_eval",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dangerous_html_sink",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_embedded_private_key",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_file_count",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_paths_unique",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_content_utf8",
+                    "passed": true
+                  }
+                ],
+                "requirementsDetected": "general",
+                "artifactManifest": [
+                  {
+                    "path": "converter.py",
+                    "bytes": 1348,
+                    "sha256": "427b1c0a3546b26acc47bd496a2216cdffaf8879cc08601befcbfccd6b14f053"
+                  }
+                ],
+                "checkedAt": "2026-08-24T12:20:23.781Z"
+              },
+              "qualityGateStatus": "PASS",
+              "qualityGateCheckedAt": "2026-08-24T12:20:23.781Z"
+            },
+            "files": [
+              {
+                "path": "converter.py",
+                "content": "from flask import Flask, request, jsonify\n\napp = Flask(__name__)\n\n# Define conversion factors\nconversion_factors = {\n    'length': {'meter': 1, 'centimeter': 100, 'kilometer': 0.001},\n    'weight': {'gram': 1, 'kilogram': 0.001, 'ton': 0.000001}\n}\n\n# Define conversion functions\ndef convert_length(value, from_unit, to_unit):\n    if from_unit not in conversion_factors['length'] or to_unit not in conversion_factors['length']:\n        return 'Invalid unit'\n    return value * conversion_factors['length'][from_unit] / conversion_factors['length'][to_unit]\n\ndef convert_weight(value, from_unit, to_unit):\n    if from_unit not in conversion_factors['weight'] or to_unit not in conversion_factors['weight']:\n        return 'Invalid unit'\n    return value * conversion_factors['weight'][from_unit] / conversion_factors['weight'][to_unit]\n\n# Define API endpoints\n@app.route('/convert', methods=['POST'])\ndef convert):\n    data = request.get_json()\n    if data['type'] == 'length':\n        result = convert_length(data['value'], data['from_unit'], data['to_unit'])\n    elif data['type'] == 'weight':\n        result = convert_weight(data['value'], data['from_unit'], data['to_unit'])\n    else:\n        return jsonify({'error': 'Invalid conversion type'}), 400\n    return jsonify({'result': result}), 200\n\nif __name__ == '__main__':\n    app.run(debug=True)"
+              }
+            ]
+          },
+          {
+            "id": "artifact_dade443c-91cb-49c0-9496-07d21c24f194",
+            "type": "code-workspace",
+            "taskId": "task_fbbb4f02-08ef-43f5-836a-f1b2a256c169",
+            "metadata": {
+              "generatedBy": "internal.code",
+              "qualityGate": {
+                "passed": true,
+                "gate": "L1.1-generated-project-quality",
+                "status": "PASS",
+                "stages": {
+                  "automatedBuildTest": true,
+                  "requirementVerification": true,
+                  "securityCheck": true,
+                  "artifactIntegrity": true,
+                  "integrationCheck": true
+                },
+                "checks": [
+                  {
+                    "name": "files_present",
+                    "passed": true
+                  },
+                  {
+                    "name": "unique_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "safe_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "non_empty_files",
+                    "passed": true
+                  },
+                  {
+                    "name": "valid_file_records",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_obvious_hardcoded_secrets",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dynamic_eval",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dangerous_html_sink",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_embedded_private_key",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_file_count",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_paths_unique",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_content_utf8",
+                    "passed": true
+                  }
+                ],
+                "requirementsDetected": "general",
+                "artifactManifest": [
+                  {
+                    "path": "generated/README.md",
+                    "bytes": 189,
+                    "sha256": "f4f8f16ed71b17bb1c7d662b5827eff4111b57690c73e3a3cdb50d5a7aba8b3f"
+                  }
+                ],
+                "checkedAt": "2026-08-24T12:20:30.092Z"
+              },
+              "qualityGateStatus": "PASS",
+              "qualityGateCheckedAt": "2026-08-24T12:20:30.092Z"
+            },
+            "files": [
+              {
+                "path": "generated/README.md",
+                "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: Store user conversion history\nObjective: Design a unit converter mobile application\nAcceptance: [object Object]"
+              }
+            ]
+          },
+          {
+            "id": "artifact_f9a12e4c-38e1-4294-94d5-fd3c34e00361",
+            "type": "code-workspace",
+            "taskId": "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af",
+            "metadata": {
+              "generatedBy": "internal.code",
+              "qualityGate": {
+                "passed": true,
+                "gate": "L1.1-generated-project-quality",
+                "status": "PASS",
+                "stages": {
+                  "automatedBuildTest": true,
+                  "requirementVerification": true,
+                  "securityCheck": true,
+                  "artifactIntegrity": true,
+                  "integrationCheck": true
+                },
+                "checks": [
+                  {
+                    "name": "files_present",
+                    "passed": true
+                  },
+                  {
+                    "name": "unique_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "safe_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "non_empty_files",
+                    "passed": true
+                  },
+                  {
+                    "name": "valid_file_records",
+                    "passed": true
+                  },
+                  {
+                    "name": "html_has_document_structure",
+                    "passed": true
+                  },
+                  {
+                    "name": "html_balanced_script_tags",
+                    "passed": true
+                  },
+                  {
+                    "name": "js_basic_syntax:script.js",
+                    "passed": true
+                  },
+                  {
+                    "name": "script_reference:script.js",
+                    "passed": true
+                  },
+                  {
+                    "name": "style_reference:styles.css",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_obvious_hardcoded_secrets",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dynamic_eval",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dangerous_html_sink",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_embedded_private_key",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_file_count",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_paths_unique",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_content_utf8",
+                    "passed": true
+                  }
+                ],
+                "requirementsDetected": "general",
+                "artifactManifest": [
+                  {
+                    "path": "index.html",
+                    "bytes": 901,
+                    "sha256": "9856d1299ac1493af95f1f6da779a7b99feb6ab636fe880b94944f5378469711"
+                  },
+                  {
+                    "path": "styles.css",
+                    "bytes": 548,
+                    "sha256": "33156f189fc6c2c63d2c8e8289beea2b9488698eefe9d2dbf509cd2daa062ec3"
+                  },
+                  {
+                    "path": "script.js",
+                    "bytes": 1116,
+                    "sha256": "06d8aa638f9a1441ec3ccc3b8c17d529f9b6e07b2ca3f2161318bbe6aaa28c17"
+                  }
+                ],
+                "checkedAt": "2026-08-24T12:20:44.878Z"
+              },
+              "qualityGateStatus": "PASS",
+              "qualityGateCheckedAt": "2026-08-24T12:20:44.878Z"
+            },
+            "files": [
+              {
+                "path": "index.html",
+                "content": "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Unit Converter</title><link rel='stylesheet' href='styles.css'></head><body><header><h1>Unit Converter</h1></header><main><form id='converter-form'><label for='input-value'>Value:</label><input type='number' id='input-value' required><label for='input-unit'>From:</label><select id='input-unit' required><option value='length'>Length</option><option value='weight'>Weight</option><option value='temperature'>Temperature</option></select><label for='output-unit'>To:</label><select id='output-unit' required><option value='length'>Length</option><option value='weight'>Weight</option><option value='temperature'>Temperature</option></select><button id='convert-btn'>Convert</button></form><div id='result'></div></main><script src='script.js'></script></body></html>"
+              },
+              {
+                "path": "styles.css",
+                "content": "body { font-family: Arial, sans-serif; } header { background-color: #f0f0f0; padding: 1em; text-align: center; } main { display: flex; flex-direction: column; align-items: center; padding: 2em; } form { display: flex; flex-direction: column; align-items: center; } label { margin-bottom: 0.5em; } input, select { margin-bottom: 1em; padding: 0.5em; } button { background-color: #4CAF50; color: #fff; padding: 0.5em 1em; border: none; border-radius: 0.25em; cursor: pointer; } button:hover { background-color: #3e8e41; } #result { margin-top: 1em; }"
+              },
+              {
+                "path": "script.js",
+                "content": "const form = document.getElementById('converter-form'); const input_value = document.getElementById('input-value'); const input_unit = document.getElementById('input-unit'); const output_unit = document.getElementById('output-unit'); const result_div = document.getElementById('result'); form.addEventListener('submit', (e) => { e.preventDefault(); const value = parseFloat(input_value.value); const input_unit_value = input_unit.value; const output_unit_value = output_unit.value; let result; if (input_unit_value === 'length' && output_unit_value === 'length') { result = convertLength(value); } else if (input_unit_value === 'weight' && output_unit_value === 'weight') { result = convertWeight(value); } else if (input_unit_value === 'temperature' && output_unit_value === 'temperature') { result = convertTemperature(value); } result_div.innerText = `Result: ${result}`; }); function convertLength(value) { // implement length conversion logic here } function convertWeight(value) { // implement weight conversion logic here } function convertTemperature(value) { // implement temperature conversion logic here }"
+              }
+            ]
+          }
+        ],
+        "artifactFiles": [
+          {
+            "artifactId": "artifact_2aa227dd-ab11-4673-9e74-0d9ab6a419f2",
+            "artifactType": "code-workspace",
+            "taskId": "task_4fc38bce-c6ff-4c1d-9ab3-2f32a631612f",
+            "path": "converter.py",
+            "content": "from flask import Flask, request, jsonify\n\napp = Flask(__name__)\n\n# Define conversion factors\nconversion_factors = {\n    'length': {'meter': 1, 'centimeter': 100, 'kilometer': 0.001},\n    'weight': {'gram': 1, 'kilogram': 0.001, 'ton': 0.000001}\n}\n\n# Define conversion functions\ndef convert_length(value, from_unit, to_unit):\n    if from_unit not in conversion_factors['length'] or to_unit not in conversion_factors['length']:\n        return 'Invalid unit'\n    return value * conversion_factors['length'][from_unit] / conversion_factors['length'][to_unit]\n\ndef convert_weight(value, from_unit, to_unit):\n    if from_unit not in conversion_factors['weight'] or to_unit not in conversion_factors['weight']:\n        return 'Invalid unit'\n    return value * conversion_factors['weight'][from_unit] / conversion_factors['weight'][to_unit]\n\n# Define API endpoints\n@app.route('/convert', methods=['POST'])\ndef convert):\n    data = request.get_json()\n    if data['type'] == 'length':\n        result = convert_length(data['value'], data['from_unit'], data['to_unit'])\n    elif data['type'] == 'weight':\n        result = convert_weight(data['value'], data['from_unit'], data['to_unit'])\n    else:\n        return jsonify({'error': 'Invalid conversion type'}), 400\n    return jsonify({'result': result}), 200\n\nif __name__ == '__main__':\n    app.run(debug=True)",
+            "verified": true
+          },
+          {
+            "artifactId": "artifact_dade443c-91cb-49c0-9496-07d21c24f194",
+            "artifactType": "code-workspace",
+            "taskId": "task_fbbb4f02-08ef-43f5-836a-f1b2a256c169",
+            "path": "generated/README.md",
+            "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: Store user conversion history\nObjective: Design a unit converter mobile application\nAcceptance: [object Object]",
+            "verified": true
+          },
+          {
+            "artifactId": "artifact_f9a12e4c-38e1-4294-94d5-fd3c34e00361",
+            "artifactType": "code-workspace",
+            "taskId": "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af",
+            "path": "index.html",
+            "content": "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Unit Converter</title><link rel='stylesheet' href='styles.css'></head><body><header><h1>Unit Converter</h1></header><main><form id='converter-form'><label for='input-value'>Value:</label><input type='number' id='input-value' required><label for='input-unit'>From:</label><select id='input-unit' required><option value='length'>Length</option><option value='weight'>Weight</option><option value='temperature'>Temperature</option></select><label for='output-unit'>To:</label><select id='output-unit' required><option value='length'>Length</option><option value='weight'>Weight</option><option value='temperature'>Temperature</option></select><button id='convert-btn'>Convert</button></form><div id='result'></div></main><script src='script.js'></script></body></html>",
+            "verified": true
+          },
+          {
+            "artifactId": "artifact_f9a12e4c-38e1-4294-94d5-fd3c34e00361",
+            "artifactType": "code-workspace",
+            "taskId": "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af",
+            "path": "styles.css",
+            "content": "body { font-family: Arial, sans-serif; } header { background-color: #f0f0f0; padding: 1em; text-align: center; } main { display: flex; flex-direction: column; align-items: center; padding: 2em; } form { display: flex; flex-direction: column; align-items: center; } label { margin-bottom: 0.5em; } input, select { margin-bottom: 1em; padding: 0.5em; } button { background-color: #4CAF50; color: #fff; padding: 0.5em 1em; border: none; border-radius: 0.25em; cursor: pointer; } button:hover { background-color: #3e8e41; } #result { margin-top: 1em; }",
+            "verified": true
+          },
+          {
+            "artifactId": "artifact_f9a12e4c-38e1-4294-94d5-fd3c34e00361",
+            "artifactType": "code-workspace",
+            "taskId": "task_78275cd3-b5c1-41ab-84d3-0c4cdc8e63af",
+            "path": "script.js",
+            "content": "const form = document.getElementById('converter-form'); const input_value = document.getElementById('input-value'); const input_unit = document.getElementById('input-unit'); const output_unit = document.getElementById('output-unit'); const result_div = document.getElementById('result'); form.addEventListener('submit', (e) => { e.preventDefault(); const value = parseFloat(input_value.value); const input_unit_value = input_unit.value; const output_unit_value = output_unit.value; let result; if (input_unit_value === 'length' && output_unit_value === 'length') { result = convertLength(value); } else if (input_unit_value === 'weight' && output_unit_value === 'weight') { result = convertWeight(value); } else if (input_unit_value === 'temperature' && output_unit_value === 'temperature') { result = convertTemperature(value); } result_div.innerText = `Result: ${result}`; }); function convertLength(value) { // implement length conversion logic here } function convertWeight(value) { // implement weight conversion logic here } function convertTemperature(value) { // implement temperature conversion logic here }",
+            "verified": true
+          }
+        ],
+        "artifactId": "artifact_7e9d5389-24e3-474d-ab7e-d9d33e351c29",
         "artifactType": "final-delivery"
       },
       "metadata": {
         "state": "completed",
         "generatedBy": "mauli-l1.1-delivery",
         "qualityGateStatus": "PASS",
-        "downloadPath": "/api/artifacts/artifact_ee78f7e0-59d9-4658-95b2-cdc87aa8ccf8/download"
+        "downloadPath": "/api/artifacts/artifact_7e9d5389-24e3-474d-ab7e-d9d33e351c29/download"
       },
-      "createdAt": "2026-08-24T11:27:09.523Z",
-      "updatedAt": "2026-08-24T11:27:09.523Z"
+      "createdAt": "2026-08-24T12:20:44.878Z",
+      "updatedAt": "2026-08-24T12:20:44.878Z"
     },
-    "artifact": "artifact_ee78f7e0-59d9-4658-95b2-cdc87aa8ccf8",
+    "artifact": "artifact_7e9d5389-24e3-474d-ab7e-d9d33e351c29",
     "artifactType": "final-delivery"
   }
 }
