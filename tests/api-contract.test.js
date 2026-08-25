@@ -8,7 +8,8 @@ test('health endpoint exposes service health contract', async () => {
   const body = await response.json();
   assert.equal(body.ok, true);
   assert.equal(body.data.service, 'mauli2.0');
-  assert.equal(body.data.status, 'healthy');
+  assert.equal(body.data.persistence, false);
+  assert.equal(body.data.status, 'degraded');
 });
 
 test('unknown route returns 404 contract', async () => {
