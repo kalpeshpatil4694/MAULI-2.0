@@ -3,6 +3,10 @@ name: MAULI L1 Tests
 on:
   workflow_dispatch:
 
+concurrency:
+  group: mauli-l1-tests
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

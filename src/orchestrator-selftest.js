@@ -13,7 +13,9 @@ export function runOrchestratorSelfTest() {
 
   const ranked = selectAgents(['backend','api']);
   check('available-agent selection', Array.isArray(ranked));
-  check('selection is ranked', ranked.every((agent,index)=>index===0 || String(ranked[index-1].id)<=String(agent.id) || true));
+  const rankedScores = ranked.map(agent => scoreAgent(agent,['backend','api']));
+  const isDescending = rankedScores.every((score,index)=>index===0 || rankedScores[index-1] >= score);
+  check('selection is ranked by score', isDescending, `scores=${rankedScores.join(',')}`);
 
   return { passed:checks.every(x=>x.passed), checks, testedAt:new Date().toISOString() };
 }
