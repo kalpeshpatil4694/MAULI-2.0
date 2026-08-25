@@ -7,22 +7,28 @@ test('L1 approval gate blocks high-risk work until founder approval', () => {
   assert.equal(requiresApproval('high'), true);
   assert.equal(requiresApproval('critical'), true);
 
-  const approval = requestApproval({
+  const rejectedApproval = requestApproval({
     action: 'Write generated application code',
     risk: 'high',
     projectId: 'fixture-project',
     taskId: 'fixture-task'
   });
 
-  assert.equal(approval.state, 'pending');
-  assert.equal(isApprovalGranted(approval.id), false);
+  assert.equal(rejectedApproval.state, 'pending');
+  assert.equal(isApprovalGranted(rejectedApproval.id), false);
 
-  const rejected = decideApproval(approval.id, false, 'Founder rejected for test');
+  const rejected = decideApproval(rejectedApproval.id, false, 'Founder rejected for test');
   assert.equal(rejected.state, 'rejected');
-  assert.equal(isApprovalGranted(approval.id), false);
+  assert.equal(isApprovalGranted(rejectedApproval.id), false);
 
-  const approved = decideApproval(approval.id, true, 'Founder approved for test');
+  const approvedApproval = requestApproval({
+    action: 'Write generated application code',
+    risk: 'high',
+    projectId: 'fixture-project',
+    taskId: 'fixture-task'
+  });
+  const approved = decideApproval(approvedApproval.id, true, 'Founder approved for test');
   assert.equal(approved.state, 'approved');
-  assert.equal(isApprovalGranted(approval.id), true);
-  assert.equal(store.get('approvals', approval.id).state, 'approved');
+  assert.equal(isApprovalGranted(approvedApproval.id), true);
+  assert.equal(store.get('approvals', approvedApproval.id).state, 'approved');
 });
