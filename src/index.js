@@ -27,8 +27,8 @@ function completionSafe(project,tasks){if(!project||project.state!=='completed')
 
 export default {async fetch(request,env){try{
   await ensureSchema(env);store.configure(env);if(!store.hydrated)await store.hydrate();ensureBuiltinTools();seedAgents();const recoveredRuns=recoverRunningExecutions();const url=new URL(request.url);
-  if(request.method==='GET'&&url.pathname==='/command-center')return new Response(founderCommandCenter(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
-  if(request.method==='GET'&&(url.pathname==='/'||url.pathname==='/observer'))return new Response(observerDashboard(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
+  if(request.method==='GET'&&(url.pathname==='/'||url.pathname==='/command-center'))return new Response(founderCommandCenter(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
+  if(request.method==='GET'&&url.pathname==='/observer')return new Response(observerDashboard(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
   if(request.method==='GET'&&url.pathname==='/api/health'){const snapshot=productionSnapshot({env,recoveredRuns,store});return ok({service:'mauli2.0',status:isProductionHealthy(snapshot)?'healthy':'degraded',...snapshot,hydrated:store.hydrated,recoveredRuns:recoveredRuns.length,time:now()})}
   if(request.method==='GET'&&url.pathname==='/api/state'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
