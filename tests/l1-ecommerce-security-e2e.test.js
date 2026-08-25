@@ -33,19 +33,20 @@ test('L1 e-commerce security-aware flow gates code work and completes after appr
   const blocked = validateCodeAction({ operation: 'create', target: '../unsafe.js', content: 'sudo rm -rf /' });
   assert.equal(blocked.ok, false);
 
-  const approval = requestApproval({ action: `Execute code task ${codeTask.id}`, risk: 'high', projectId: plan.project.id, taskId: codeTask.id });
-  assert.equal(isApprovalGranted(approval.id), false);
+  const rejectedApproval = requestApproval({ action: `Execute code task ${codeTask.id}`, risk: 'high', projectId: plan.project.id, taskId: codeTask.id });
+  assert.equal(isApprovalGranted(rejectedApproval.id), false);
 
-  const rejected = decideApproval(approval.id, false, 'Security gate test rejection');
+  const rejected = decideApproval(rejectedApproval.id, false, 'Security gate test rejection');
   assert.equal(rejected.state, 'rejected');
-  assert.equal(isApprovalGranted(approval.id), false);
+  assert.equal(isApprovalGranted(rejectedApproval.id), false);
 
-  const approved = decideApproval(approval.id, true, 'Security gate test approval');
+  const approvedApproval = requestApproval({ action: `Execute code task ${codeTask.id}`, risk: 'high', projectId: plan.project.id, taskId: codeTask.id });
+  const approved = decideApproval(approvedApproval.id, true, 'Security gate test approval');
   assert.equal(approved.state, 'approved');
-  assert.equal(isApprovalGranted(approval.id), true);
+  assert.equal(isApprovalGranted(approvedApproval.id), true);
 
   await executeDependencies(codeTask);
-  const execution = await executeTaskLifecycle(codeTask, { approved: true, approvalId: approval.id, dependenciesComplete: true });
+  const execution = await executeTaskLifecycle(codeTask, { approved: true, approvalId: approvedApproval.id, dependenciesComplete: true });
   assert.equal(execution.status, 'completed');
   assert.equal(execution.verification.passed, true);
   assert.ok(store.list('runs').some(r => r.taskId === codeTask.id));
