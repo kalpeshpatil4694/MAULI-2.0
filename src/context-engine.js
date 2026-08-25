@@ -57,13 +57,15 @@ function compactText(text, maxTokens) {
   const maxChars = Math.max(1, budget * DEFAULT_CHARS_PER_TOKEN);
   if (text.length <= maxChars) return text;
 
-  const marker = '\n…[compressed for context headroom]…\n';
+  // The final string is always sliced to the exact character budget so
+  // estimateTokens(compactText(...)) can never exceed maxTokens.
+  const marker = '...';
   if (maxChars <= marker.length) return text.slice(0, maxChars);
 
   const payloadChars = maxChars - marker.length;
-  const head = Math.max(1, Math.ceil(payloadChars / 2));
-  const tail = Math.max(0, payloadChars - head);
-  return `${text.slice(0, head)}${marker}${tail ? text.slice(-tail) : ''}`.slice(0, maxChars);
+  const headChars = Math.ceil(payloadChars / 2);
+  const tailChars = payloadChars - headChars;
+  return `${text.slice(0, headChars)}${marker}${tailChars ? text.slice(-tailChars) : ''}`.slice(0, maxChars);
 }
 
 function makeCandidate(message, index, latestUser, queryTerms) {
