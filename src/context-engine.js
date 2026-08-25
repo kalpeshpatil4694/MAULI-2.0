@@ -56,9 +56,14 @@ function compactText(text, maxTokens) {
   const budget = clampBudget(maxTokens, 1);
   const maxChars = Math.max(1, budget * DEFAULT_CHARS_PER_TOKEN);
   if (text.length <= maxChars) return text;
-  const head = Math.max(1, Math.floor(maxChars * 0.72));
-  const tail = Math.max(1, maxChars - head - 28);
-  return `${text.slice(0, head)}\n…[compressed for context headroom]…\n${text.slice(-tail)}`;
+
+  const marker = '\n…[compressed for context headroom]…\n';
+  if (maxChars <= marker.length) return text.slice(0, maxChars);
+
+  const payloadChars = maxChars - marker.length;
+  const head = Math.max(1, Math.ceil(payloadChars / 2));
+  const tail = Math.max(0, payloadChars - head);
+  return `${text.slice(0, head)}${marker}${tail ? text.slice(-tail) : ''}`.slice(0, maxChars);
 }
 
 function makeCandidate(message, index, latestUser, queryTerms) {
@@ -124,7 +129,7 @@ export function selectContext(messages = [], options = {}) {
     reserveTokens,
     droppedCount: dropped.length,
     droppedMessages: dropped.map(x => x.message),
-    compressed: selected.some((x, i) => x.message.content !== normalized.find(m => m._index === x.message._index)?.content),
+    compressed: selected.some(x => x.message.content !== normalized.find(m => m._index === x.message._index)?.content),
     headroomTokens: Math.max(0, usableBudget - used)
   };
 }
