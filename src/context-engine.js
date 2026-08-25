@@ -56,12 +56,8 @@ function compactText(text, maxTokens) {
   const budget = clampBudget(maxTokens, 1);
   const maxChars = Math.max(1, budget * DEFAULT_CHARS_PER_TOKEN);
   if (text.length <= maxChars) return text;
-
-  // The final string is always sliced to the exact character budget so
-  // estimateTokens(compactText(...)) can never exceed maxTokens.
   const marker = '...';
   if (maxChars <= marker.length) return text.slice(0, maxChars);
-
   const payloadChars = maxChars - marker.length;
   const headChars = Math.ceil(payloadChars / 2);
   const tailChars = payloadChars - headChars;
@@ -102,16 +98,22 @@ export function selectContext(messages = [], options = {}) {
     if (used + tokens <= usableBudget) {
       selected.push(candidate);
       used += tokens;
+      continue;
+    }
+
+    const remaining = usableBudget - used;
+    if (remaining <= 0) {
+      dropped.push(candidate);
+      continue;
+    }
+
+    const compressed = { ...candidate, message: { ...candidate.message, content: compactText(candidate.message.content, remaining) } };
+    compressed.tokens = estimateTokens(compressed.message.content);
+    if (compressed.tokens > 0 && compressed.tokens <= remaining) {
+      selected.push(compressed);
+      used += compressed.tokens;
     } else {
-      const remaining = Math.max(1, usableBudget - used);
-      const compressed = { ...candidate, message: { ...candidate.message, content: compactText(candidate.message.content, remaining) } };
-      compressed.tokens = estimateTokens(compressed.message.content);
-      if (compressed.tokens <= remaining) {
-        selected.push(compressed);
-        used += compressed.tokens;
-      } else {
-        dropped.push(candidate);
-      }
+      dropped.push(candidate);
     }
   }
 
