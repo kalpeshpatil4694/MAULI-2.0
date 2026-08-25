@@ -11,25 +11,33 @@ function domainFor(type = '') {
   return 'system';
 }
 
-function entityIdFor(event) {
+function entityIdFor(event, domain = domainFor(event?.type)) {
   const p = event?.payload ?? {};
-  return p.taskId ?? p.agentId ?? p.runId ?? p.executionId ?? p.verificationId ?? p.artifactId ?? p.projectId ?? null;
+  if (domain === 'task') return p.taskId ?? p.id ?? null;
+  if (domain === 'agent') return p.agentId ?? p.id ?? null;
+  if (domain === 'execution') return p.executionId ?? p.runId ?? p.id ?? null;
+  if (domain === 'verification') return p.verificationId ?? p.id ?? null;
+  if (domain === 'artifact') return p.artifactId ?? p.id ?? null;
+  if (domain === 'project') return p.projectId ?? p.id ?? null;
+  return p.taskId ?? p.agentId ?? p.runId ?? p.executionId ?? p.verificationId ?? p.artifactId ?? p.projectId ?? p.id ?? null;
 }
 
 function normalize(event) {
+  const domain = domainFor(event.type);
+  const p = event.payload ?? {};
   return {
     id: event.id,
     type: event.type,
-    domain: domainFor(event.type),
-    entityId: entityIdFor(event),
-    taskId: event.payload?.taskId ?? null,
-    projectId: event.payload?.projectId ?? null,
-    agentId: event.payload?.agentId ?? null,
-    executionId: event.payload?.executionId ?? event.payload?.runId ?? null,
-    verificationId: event.payload?.verificationId ?? null,
-    artifactId: event.payload?.artifactId ?? null,
+    domain,
+    entityId: entityIdFor(event, domain),
+    taskId: p.taskId ?? (domain === 'task' ? p.id : null),
+    projectId: p.projectId ?? (domain === 'project' ? p.id : null),
+    agentId: p.agentId ?? (domain === 'agent' ? p.id : null),
+    executionId: p.executionId ?? p.runId ?? (domain === 'execution' ? p.id : null),
+    verificationId: p.verificationId ?? (domain === 'verification' ? p.id : null),
+    artifactId: p.artifactId ?? (domain === 'artifact' ? p.id : null),
     at: event.at ?? event.createdAt ?? now(),
-    payload: event.payload ?? {}
+    payload: p
   };
 }
 
@@ -44,7 +52,7 @@ export function listObserverEvents({ limit = 100, domain, taskId, projectId, age
   return store.recentEvents(Math.max(safeLimit, 1000)).map(normalize).filter(event => {
     if (domain && event.domain !== domain) return false;
     if (taskId && event.taskId !== taskId && event.entityId !== taskId) return false;
-    if (projectId && event.projectId !== projectId) return false;
+    if (projectId && event.projectId !== projectId && event.entityId !== projectId) return false;
     if (agentId && event.agentId !== agentId && event.entityId !== agentId) return false;
     if (executionId && event.executionId !== executionId && event.entityId !== executionId) return false;
     if (verificationId && event.verificationId !== verificationId && event.entityId !== verificationId) return false;
