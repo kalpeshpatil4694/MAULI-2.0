@@ -15,6 +15,7 @@ import { runL1SelfTest } from './self-test.js';
 import { diagnoseResultPersistence, saveCommandResult } from './result-recorder.js';
 import { listObserverEvents, getTaskTimeline, getProjectTimeline, getAgentTimeline, getExecutionTimeline, getVerificationTimeline, observerSummary } from './observer.js';
 import { observerDashboard } from './observer-dashboard.js';
+import { productionSnapshot, isProductionHealthy } from './production.js';
 
 function artifactJson(a){return a?ok({artifact:a}):fail('Artifact not found',404)}
 function isIsolatedTestEnv(env){return env?.SKIP_RESULT_PERSISTENCE===true||env?.SKIP_RESULT_PERSISTENCE==='true'||env?.MAULI_TEST_MODE===true||env?.MAULI_TEST_MODE==='true'}
@@ -23,7 +24,7 @@ function completionSafe(project,tasks){if(!project||project.state!=='completed')
 export default {async fetch(request,env){try{
   await ensureSchema(env);store.configure(env);if(!store.hydrated)await store.hydrate();ensureBuiltinTools();seedAgents();const recoveredRuns=recoverRunningExecutions();const url=new URL(request.url);
   if(request.method==='GET'&&(url.pathname==='/'||url.pathname==='/observer'))return new Response(observerDashboard(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
-  if(request.method==='GET'&&url.pathname==='/api/health')return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,time:now()});
+  if(request.method==='GET'&&url.pathname==='/api/health'){const snapshot=productionSnapshot({env,recoveredRuns,store});return ok({service:'mauli2.0',status:isProductionHealthy(snapshot)?'healthy':'degraded',...snapshot,hydrated:store.hydrated,recoveredRuns:recoveredRuns.length,time:now()})}
   if(request.method==='GET'&&url.pathname==='/api/state'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const [agents,projects,tasks,approvals,events]=hasD1(env)?await Promise.all([d1List(env,'agents'),d1List(env,'projects'),d1List(env,'tasks'),d1List(env,'approvals'),d1Events(env)]):[listAgents(),listProjects(),listTasks(),listApprovals(),store.recentEvents()];
