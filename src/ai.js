@@ -1,20 +1,52 @@
+import { routeModel } from './model-router.js';
+import { generateWithProvider, registerModelProvider } from './model-provider.js';
+import { store } from './store.js';
+
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 function resolveModel(env, options = {}) { return options.model ?? env?.MAULI_MODEL ?? DEFAULT_MODEL; }
 function getProvider(env, options = {}) { return options.provider ?? env?.MAULI_AI_PROVIDER ?? 'cloudflare'; }
 
+function resolveRoute(env, options = {}) {
+  const explicitModel = options.model ?? env?.MAULI_MODEL;
+  if (explicitModel) return { selected: { id: explicitModel, provider: getProvider(env, options) }, fallback: null, routable: true, reason: 'explicit model configuration' };
+  const task = options.task ?? {};
+  return routeModel(task, { provider: options.provider ?? env?.MAULI_AI_PROVIDER, avoidModels: options.avoidModels ?? [] });
+}
+
 async function cloudflareGenerate(env, messages, options = {}) {
   if (!env?.AI?.run) throw new Error('Cloudflare AI binding is not configured');
-  const response = await env.AI.run(resolveModel(env, options), { messages, temperature: options.temperature ?? 0.2, max_tokens: options.maxTokens ?? 1200 });
+  const model = options.model ?? resolveModel(env, options);
+  const response = await env.AI.run(model, { messages, temperature: options.temperature ?? 0.2, max_tokens: options.maxTokens ?? 1200 });
   return response?.response ?? response;
 }
 
+registerModelProvider('cloudflare', { generate: ({ env, messages, model, options = {} }) => cloudflareGenerate(env, messages, { ...options, model }) });
+
 export async function generateAI(env, messages, options = {}) {
-  switch (getProvider(env, options)) {
-    case 'cloudflare': return cloudflareGenerate(env, messages, options);
-    default: throw new Error(`Unsupported AI provider: ${getProvider(env, options)}`);
+  const route = resolveRoute(env, options);
+  if (!route.selected) throw new Error(`No eligible model for task: ${route.reason}`);
+  const primary = route.selected;
+  const provider = primary.provider ?? getProvider(env, options);
+  store.addEvent('model.routing.selected', { taskId: options.task?.id ?? null, modelId: primary.id, provider, complexity: route.complexity ?? null, riskLevel: route.riskLevel ?? null, candidates: route.candidates ?? [], reason: route.reason });
+  try {
+    return await generateWithProvider(provider, { env, messages, model: primary.id, options });
+  } catch (primaryError) {
+    const fallback = route.fallback;
+    if (!fallback || options.disableFallback || options.model || env?.MAULI_MODEL) {
+      store.addEvent('model.routing.failed', { taskId: options.task?.id ?? null, modelId: primary.id, provider, error: primaryError?.message ?? String(primaryError) });
+      throw primaryError;
+    }
+    store.addEvent('model.routing.fallback', { taskId: options.task?.id ?? null, failedModelId: primary.id, fallbackModelId: fallback.id, fallbackProvider: fallback.provider, error: primaryError?.message ?? String(primaryError) });
+    try {
+      return await generateWithProvider(fallback.provider, { env, messages, model: fallback.id, options: { ...options, model: fallback.id, provider: fallback.provider, disableFallback: true } });
+    } catch (fallbackError) {
+      store.addEvent('model.routing.exhausted', { taskId: options.task?.id ?? null, primaryModelId: primary.id, fallbackModelId: fallback.id, error: fallbackError?.message ?? String(fallbackError) });
+      throw new Error(`Model routing exhausted: primary=${primaryError?.message ?? primaryError}; fallback=${fallbackError?.message ?? fallbackError}`);
+    }
   }
 }
+
 export async function generate(env, messages, options = {}) { return generateAI(env, messages, options); }
 export async function reason(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 1800 }); }
 
@@ -24,8 +56,7 @@ function extractJson(raw) {
   try { return JSON.parse(text); } catch {}
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
   if (fenced) { try { return JSON.parse(fenced); } catch {} }
-  const first = text.indexOf('{');
-  const last = text.lastIndexOf('}');
+  const first = text.indexOf('{'); const last = text.lastIndexOf('}');
   if (first >= 0 && last > first) { try { return JSON.parse(text.slice(first, last + 1)); } catch {} }
   return null;
 }
@@ -50,8 +81,7 @@ export async function code(env, messages, options = {}) {
   const parsed = extractJson(raw);
   if (isCalculatorPrompt(messages)) {
     const files = Array.isArray(parsed?.files) ? parsed.files.filter(f => f && typeof f.path === 'string' && typeof f.content === 'string') : [];
-    const hasHtml = files.some(f => /\.html?$/i.test(f.path));
-    const hasJs = files.some(f => /\.js$/i.test(f.path));
+    const hasHtml = files.some(f => /\.html?$/i.test(f.path)); const hasJs = files.some(f => /\.js$/i.test(f.path));
     if (!hasHtml || !hasJs || files.length < 2) return calculatorFallback();
   }
   if (parsed && Array.isArray(parsed.files) && parsed.files.length) return parsed;
@@ -73,14 +103,9 @@ export function freePlanFromCommand(command) {
 
 export async function interpretWithAI(env, command, options = {}) {
   const system = ['You are MAULI Executive AI for a software company.','Analyze the Founder command before any execution.','Return one valid JSON object only. Do not use markdown fences or explanatory text.','Never claim work is completed. You are planning only.',`Allowed capabilities: ${CAPABILITIES.join(', ')}.`,'For explicit artifact E2E commands containing exact artifact file requirements, use the artifact-e2e capability and do not invent unrelated product tasks.','Requirements must be concrete and testable. Acceptance criteria must describe observable completion conditions.','Risks must mention meaningful execution or approval concerns, not generic filler.','Schema: {"objective":string,"requirements":string[],"capabilities":string[],"risks":string[],"acceptanceCriteria":string[]}'].join(' ');
-  const raw = await reason(env,[{role:'system',content:system},{role:'user',content:String(command)}],options); const parsed=extractJson(raw);
-  if (!parsed) return {
-    objective: String(command).trim(),
-    requirements: [],
-    capabilities: [],
-    risks: ['AI planning output was malformed; no execution capabilities are claimed.'],
-    acceptanceCriteria: []
-  };
+  const raw = await reason(env,[{role:'system',content:system},{role:'user',content:String(command)}],{...options,task:{...(options.task??{}),requiredCapabilities:['planning','requirements']}}); const parsed=extractJson(raw);
+  if (!parsed) return { objective:String(command).trim(), requirements:[], capabilities:[], risks:['AI planning output was malformed; no execution capabilities are claimed.'], acceptanceCriteria:[] };
   return normalizePlan(parsed,command);
 }
-export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'deterministic-free-planner' }; }
+
+export function getAIConfig(env) { const route=routeModel({}, { provider:env?.MAULI_AI_PROVIDER }); return { provider:getProvider(env), model:resolveModel(env), selectedModel:route.selected?.id??resolveModel(env), architecture:'MAULI Intelligence Bus', router:'intelligent-model-router', upgradeable:true, fallback:'model-router-fallback + deterministic-free-planner' }; }
