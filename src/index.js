@@ -15,7 +15,11 @@ import { runL1SelfTest } from './self-test.js';
 import { diagnoseResultPersistence, saveCommandResult } from './result-recorder.js';
 import { listObserverEvents, getTaskTimeline, getProjectTimeline, getAgentTimeline, getExecutionTimeline, getVerificationTimeline, observerSummary } from './observer.js';
 import { observerDashboard } from './observer-dashboard.js';
+import { founderCommandCenter } from './founder-command-center.js';
 import { productionSnapshot, isProductionHealthy } from './production.js';
+import { modelRegistry } from './model-registry.js';
+import { learningSnapshot } from './learning.js';
+import { providerSnapshot } from './provider-independence.js';
 
 function artifactJson(a){return a?ok({artifact:a}):fail('Artifact not found',404)}
 function isIsolatedTestEnv(env){return env?.SKIP_RESULT_PERSISTENCE===true||env?.SKIP_RESULT_PERSISTENCE==='true'||env?.MAULI_TEST_MODE===true||env?.MAULI_TEST_MODE==='true'}
@@ -23,6 +27,7 @@ function completionSafe(project,tasks){if(!project||project.state!=='completed')
 
 export default {async fetch(request,env){try{
   await ensureSchema(env);store.configure(env);if(!store.hydrated)await store.hydrate();ensureBuiltinTools();seedAgents();const recoveredRuns=recoverRunningExecutions();const url=new URL(request.url);
+  if(request.method==='GET'&&url.pathname==='/command-center')return new Response(founderCommandCenter(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
   if(request.method==='GET'&&(url.pathname==='/'||url.pathname==='/observer'))return new Response(observerDashboard(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
   if(request.method==='GET'&&url.pathname==='/api/health'){const snapshot=productionSnapshot({env,recoveredRuns,store});return ok({service:'mauli2.0',status:isProductionHealthy(snapshot)?'healthy':'degraded',...snapshot,hydrated:store.hydrated,recoveredRuns:recoveredRuns.length,time:now()})}
   if(request.method==='GET'&&url.pathname==='/api/state'){
@@ -30,6 +35,10 @@ export default {async fetch(request,env){try{
     const [agents,projects,tasks,approvals,events]=hasD1(env)?await Promise.all([d1List(env,'agents'),d1List(env,'projects'),d1List(env,'tasks'),d1List(env,'approvals'),d1Events(env)]):[listAgents(),listProjects(),listTasks(),listApprovals(),store.recentEvents()];
     const safeProjects=projects.map(p=>{const pt=tasks.filter(t=>t.projectId===p.id);return p.state==='completed'&&!completionSafe(p,pt)?{...p,state:'active',completionGuard:'blocked-until-all-tasks-finish'}:p});
     return ok({agents,projects:safeProjects,tasks,approvals,tools:listTools(),artifacts:store.list('artifacts'),events,recoveredRuns});
+  }
+  if(request.method==='GET'&&url.pathname==='/api/command-center'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    return ok({models:modelRegistry.list({enabledOnly:true}),providers:providerSnapshot().providers,learning:learningSnapshot(),memoryCount:store.list('memory').length,production:productionSnapshot({env,recoveredRuns,store})});
   }
   if(request.method==='GET'&&url.pathname==='/api/observer'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
