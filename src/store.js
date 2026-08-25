@@ -4,7 +4,7 @@ import { hasD1, d1List, d1Put, d1Event, d1Events } from './db.js';
 export class MemoryStore {
   constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); }
   configure(env) { this.env=env??null; }
-  list(type) { return [...(this.data.get(type)??new Map()).values()]; }
+  list(type) { if(type==='events') return [...this.events]; return [...(this.data.get(type)??new Map()).values()]; }
   get(type,key) { return this.data.get(type)?.get(key)??null; }
   put(type,value) {
     const bucket=this.data.get(type)??new Map();
