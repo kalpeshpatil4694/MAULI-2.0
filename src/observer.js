@@ -4,10 +4,11 @@ import { store } from './store.js';
 export const OBSERVER_DOMAINS = ['task','agent','execution','verification','retry','escalation','artifact','project','system'];
 
 function domainFor(type = '') {
-  const prefix = String(type).split('.')[0];
+  const value = String(type).toLowerCase();
+  if (value.includes('escalat')) return 'escalation';
+  if (value.includes('retry')) return 'retry';
+  const prefix = value.split('.')[0];
   if (prefix === 'task' || prefix === 'agent' || prefix === 'execution' || prefix === 'verification' || prefix === 'artifact' || prefix === 'project') return prefix;
-  if (String(type).includes('retry')) return 'retry';
-  if (String(type).includes('escalat')) return 'escalation';
   return 'system';
 }
 
@@ -23,8 +24,8 @@ function entityIdFor(event, domain = domainFor(event?.type)) {
 }
 
 function normalize(event) {
-  const domain = domainFor(event.type);
-  const p = event.payload ?? {};
+  const domain = domainFor(event?.type);
+  const p = event?.payload ?? {};
   return {
     id: event.id,
     type: event.type,
