@@ -14,10 +14,41 @@ test('observer records normalized lifecycle events', () => {
 
   const timeline = getTaskTimeline(task.id);
   assert.ok(timeline.length >= 3);
-  assert.ok(timeline.some(event => event.type === 'task.created'));
-  assert.ok(timeline.some(event => event.type === 'task.started'));
+  assert.ok(timeline.some(event => event.type === 'task.created' && event.domain === 'task'));
+  assert.ok(timeline.some(event => event.type === 'task.started' && event.domain === 'task'));
   assert.ok(timeline.some(event => event.type === 'task.retry' && event.domain === 'retry'));
   assert.equal(timeline[0].taskId, task.id);
+});
+
+test('observer classifies retry and escalation before task/agent prefixes', () => {
+  const taskId = `task_observer_${Date.now()}`;
+  const agentId = `agent_observer_${Date.now()}`;
+  const retry = recordObserverEvent('task.retry', { taskId, agentId, attempt: 2 });
+  const escalation = recordObserverEvent('task.escalated', { taskId, agentId, reason: 'max_attempts' });
+  const retryFromExecution = recordObserverEvent('execution.retry', { taskId, executionId: `run_${Date.now()}` });
+
+  assert.equal(retry.domain, 'retry');
+  assert.equal(retry.taskId, taskId);
+  assert.equal(escalation.domain, 'escalation');
+  assert.equal(escalation.taskId, taskId);
+  assert.equal(retryFromExecution.domain, 'retry');
+  assert.equal(retryFromExecution.taskId, taskId);
+});
+
+test('observer normalizes entity ids for every lifecycle domain', () => {
+  const ids = {
+    task: `task_${Date.now()}`,
+    agent: `agent_${Date.now()}`,
+    execution: `run_${Date.now()}`,
+    verification: `verification_${Date.now()}`,
+    artifact: `artifact_${Date.now()}`,
+    project: `project_${Date.now()}`
+  };
+  for (const [domain, entityId] of Object.entries(ids)) {
+    const event = recordObserverEvent(`${domain}.created`, { id: entityId });
+    assert.equal(event.domain, domain);
+    assert.equal(event.entityId, entityId);
+  }
 });
 
 test('observer filters by domain and entity without mutating store events', () => {
@@ -30,10 +61,11 @@ test('observer filters by domain and entity without mutating store events', () =
   assert.equal(store.recentEvents(1000).length, before + 2);
 });
 
-test('observer summary exposes domain counts', () => {
+test('observer summary exposes all domain counts', () => {
   const summary = observerSummary({ limit: 100 });
   assert.ok(summary.count >= 1);
+  for (const domain of ['task','agent','execution','verification','retry','escalation','artifact','project','system']) {
+    assert.ok(Object.hasOwn(summary.counts, domain));
+  }
   assert.ok(summary.counts.task >= 1);
-  assert.ok(Object.hasOwn(summary.counts, 'execution'));
-  assert.ok(Object.hasOwn(summary.counts, 'verification'));
 });
