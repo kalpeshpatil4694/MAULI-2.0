@@ -54,3 +54,11 @@ test('summaries and context envelope respect requested headroom', () => {
   assert.ok(envelope.usedTokens <= 40);
   assert.ok(envelope.headroomTokens >= 0);
 });
+
+test('compression never exceeds any small positive token budget', () => {
+  const source = 'context '.repeat(100);
+  for (let budget = 1; budget <= 12; budget += 1) {
+    const summary = summarizeText(source, budget);
+    assert.ok(estimateTokens(summary) <= budget, `budget ${budget} exceeded`);
+  }
+});
