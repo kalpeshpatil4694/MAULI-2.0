@@ -10,7 +10,7 @@ import { saveCommandResult } from './result-recorder.js';
 const MAX_STEP_MS=25_000, LEASE_MS=35_000, MAX_RESUMES_PER_TICK=10;
 function sameText(a,b){return String(a||'').trim().toLocaleLowerCase()===String(b||'').trim().toLocaleLowerCase()}
 function entity(c){return {...c,lifecycle:Array.isArray(c.lifecycle)?c.lifecycle:[],progress:c.progress??{percent:0,completed:0,total:0,currentTask:null},phase:c.phase??'accepted',updatedAt:c.updatedAt??now()}}
-async function persist(env,c){const value=entity(c);if(env?.DB?.prepare)await d1Put(env,'commands',value);else store.put('commands',value);return value}
+async function persist(env,c){const value=entity(c);if(env?.DB?.prepare)await d1Put(env,'commands',value);else {store.put('commands',value);await store.flush?.()}return value}
 async function read(env,id){if(env?.DB?.prepare){const rows=await d1List(env,'commands');return rows.find(x=>x.id===id)||null}return store.get('commands',id)}
 async function latestReusable(command){return listProjects().filter(p=>sameText(p?.founderCommand,command)&&['active','planning','escalated'].includes(p?.state)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0]??null}
 async function supersedeOlderCommands(env,text,newId){const rows=env?.DB?.prepare?await d1List(env,'commands'):store.list('commands');const active=rows.filter(c=>sameText(c?.command,text)&&['accepted','running','recovering'].includes(c?.state)&&c.id!==newId);for(const c of active){await persist(env,{...c,state:'superseded',phase:'superseded',leaseUntil:null,updatedAt:now(),supersededBy:newId,lifecycle:[...new Set([...(c.lifecycle||[]),'superseded'])],error:'Superseded by a newer Founder command'})}}
@@ -19,9 +19,9 @@ function phase(project,snap){if(!project)return'planning';if(snap.current?.state
 async function withTimeout(p,ms){return Promise.race([p,new Promise((_,reject)=>setTimeout(()=>reject(new Error(`Autonomous step exceeded ${ms}ms; checkpoint saved for automatic resume`)),ms))])}
 async function checkpointResult(env,command,project,tasks,progress,status='running',extra={}){try{return await saveCommandResult({command:command.command,commandId:command.id,generatedAt:now(),result:{project:project||null,tasks:tasks||[],progress:progress||command.progress,status,...extra}},env)}catch{return{saved:false,reason:'Result checkpoint could not be persisted'}}}
 export async function createCommandRecord(env,text){const id=`cmd_${crypto.randomUUID()}`;await supersedeOlderCommands(env,text,id);return persist(env,{id,command:text,state:'accepted',phase:'accepted',progress:{percent:0,completed:0,total:0,currentTask:null},lifecycle:['accepted'],createdAt:now(),updatedAt:now(),result:null,resultFile:null,error:null,leaseUntil:null,supersededBy:null})}
-export async function runCommandStep(env,commandId){
+export async function runCommandStep(env,commandId,force=false){
  let command=await read(env,commandId);if(!command||['completed','failed','awaiting_approval','superseded'].includes(command.state))return command;
- if(command.leaseUntil&&Date.parse(command.leaseUntil)>Date.now())return command;
+ if(!force&&command.leaseUntil&&Date.parse(command.leaseUntil)>Date.now())return command;
  command=await persist(env,{...command,state:'running',phase:command.phase==='accepted'?'planning':command.phase,leaseUntil:new Date(Date.now()+LEASE_MS).toISOString(),lifecycle:[...new Set([...(command.lifecycle||[]),'running'])],updatedAt:now(),error:null});
  let project=command.projectId?store.get('projects',command.projectId):await latestReusable(command.command);
  try{
@@ -29,8 +29,10 @@ export async function runCommandStep(env,commandId){
    await checkpointResult(env,command,null,[],command.progress,'planning',{checkpoint:'planning'});
    const prepared=await withTimeout(prepareCommand(command.command,env),MAX_STEP_MS);
    if(prepared?.status==='awaiting_approval')return persist(env,{...command,state:'awaiting_approval',phase:'awaiting_approval',leaseUntil:null,projectId:prepared.project?.id??null,lifecycle:[...new Set([...command.lifecycle,'awaiting_approval'])],updatedAt:now(),result:prepared,resultFile:await checkpointResult(env,command,prepared.project,[],command.progress,'awaiting_approval',{checkpoint:'awaiting_approval'})});
-   project=prepared.project;command={...command,projectId:project?.id??null};
-   const planned=projectSnapshot(project);await checkpointResult(env,command,project,planned.tasks,planned.progress,'planned',{checkpoint:'planned'});
+   project=prepared.project;command={...command,projectId:project?.id??null,phase:'executing',progress:projectSnapshot(project).progress};
+   const planned=projectSnapshot(project);
+   command=await persist(env,{...command,state:'running',phase:planned.current?'executing':'qa',leaseUntil:null,progress:planned.progress,updatedAt:now(),lifecycle:[...new Set([...command.lifecycle,'planned'])]});
+   await checkpointResult(env,command,project,planned.tasks,planned.progress,'planned',{checkpoint:'planned'});
   }
   if(!project)throw new Error('Command planning did not create a project');
   const snap=projectSnapshot(project),current=snap.current;
