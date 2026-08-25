@@ -15,7 +15,7 @@ const DEFAULT_MODELS = [
   }
 ];
 
-const REQUIRED_NUMERIC = ['contextWindow','reasoningScore','codingScore','qualityScore','speedScore','costScore','reliabilityScore'];
+const SCORE_FIELDS = ['reasoningScore','codingScore','qualityScore','speedScore','costScore','reliabilityScore'];
 const RISK_LEVELS = new Set(['low','normal','high','critical','restricted']);
 
 function clone(model) { return { ...model, capabilities: [...(model.capabilities ?? [])] }; }
@@ -25,8 +25,8 @@ function validateModel(model) {
   if (!model?.id || typeof model.id !== 'string') throw new Error('Model id is required');
   if (!model?.provider || typeof model.provider !== 'string') throw new Error('Model provider is required');
   if (!Array.isArray(model.capabilities)) throw new Error('Model capabilities must be an array');
-  if (Number(model.contextWindow) <= 0) throw new Error('Model contextWindow must be positive');
-  for (const key of REQUIRED_NUMERIC) if (!validScore(model[key])) throw new Error(`Model ${key} must be between 0 and 100`);
+  if (!Number.isFinite(Number(model.contextWindow)) || Number(model.contextWindow) <= 0) throw new Error('Model contextWindow must be positive');
+  for (const key of SCORE_FIELDS) if (!validScore(model[key])) throw new Error(`Model ${key} must be between 0 and 100`);
   if (!RISK_LEVELS.has(model.riskLevel ?? 'normal')) throw new Error('Model riskLevel is invalid');
 }
 
@@ -51,7 +51,7 @@ export class ModelRegistry {
       if (excluded.has(model.id)) return false;
       if (provider && model.provider !== provider) return false;
       if (Number(model.contextWindow) < Number(minContextWindow)) return false;
-      if (riskLevel === 'critical' && ['restricted'].includes(model.riskLevel)) return false;
+      if (riskLevel === 'critical' && model.riskLevel === 'restricted') return false;
       if (riskLevel === 'high' && model.riskLevel === 'restricted') return false;
       const capabilities = new Set(model.capabilities ?? []);
       return required.every(capability => capabilities.has(capability));
