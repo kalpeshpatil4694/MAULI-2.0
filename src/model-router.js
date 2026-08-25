@@ -33,10 +33,19 @@ export function expandCapabilities(required = []) {
   return [...set];
 }
 
+function capabilityMatches(model, required = []) {
+  const capabilities = new Set(model?.capabilities ?? []);
+  return required.every(capability => {
+    const key = String(capability).toLowerCase();
+    const aliases = CAPABILITY_ALIASES[key] ?? [capability];
+    return aliases.some(alias => capabilities.has(alias));
+  });
+}
+
 export function scoreModel(model, { complexity = 'medium', estimatedContext = 0, riskLevel = 'normal', avoidModels = [] } = {}) {
   if (!model?.id || avoidModels.includes(model.id)) return -Infinity;
   const contextWindow = Number(model.contextWindow ?? 0);
-  if (contextWindow < Number(estimatedContext)) return -Infinity;
+  if (!Number.isFinite(contextWindow) || contextWindow <= 0 || contextWindow < Number(estimatedContext)) return -Infinity;
   if (riskLevel === 'critical' && model.riskLevel === 'restricted') return -Infinity;
   if (riskLevel === 'high' && model.riskLevel === 'restricted') return -Infinity;
   const w = COMPLEXITY_WEIGHTS[complexity] ?? COMPLEXITY_WEIGHTS.medium;
@@ -56,17 +65,18 @@ function rank(candidates, scoringOptions) {
 }
 
 export function routeModel(task = {}, options = {}) {
-  const required = expandCapabilities(task.requiredCapabilities ?? []);
+  const required = [...new Set((task.requiredCapabilities ?? []).filter(Boolean).map(String))];
+  const expanded = expandCapabilities(required);
   const complexity = classifyComplexity(task);
   const riskLevel = task.riskLevel ?? (complexity === 'critical' ? 'critical' : 'normal');
   const estimatedContext = Math.max(0, Number(task.estimatedContext ?? task.contextTokens ?? 0));
   const avoidModels = options.avoidModels ?? [];
-  const candidates = modelRegistry.candidates(required, {
+  const candidates = modelRegistry.candidates([], {
     provider: options.provider,
     minContextWindow: estimatedContext,
     riskLevel,
     excludedModels: avoidModels
-  });
+  }).filter(model => capabilityMatches(model, required));
   const scored = rank(candidates, { complexity, estimatedContext, riskLevel, avoidModels });
   const selected = scored[0]?.model ?? null;
   const fallback = scored[1]?.model ?? null;
@@ -75,7 +85,7 @@ export function routeModel(task = {}, options = {}) {
     fallback,
     complexity,
     riskLevel,
-    requiredCapabilities: required,
+    requiredCapabilities: expanded,
     candidates: scored.map(({ model, score }) => ({ modelId: model.id, provider: model.provider, score: Number(score.toFixed(4)) })),
     reason: selected ? 'best-fit capability/quality/speed/cost/reliability/context score' : 'no eligible model with required capabilities and context',
     routable: Boolean(selected)
