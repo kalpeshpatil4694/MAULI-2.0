@@ -1,4 +1,4 @@
-name: MAULI 2.0 Full CI/CD
+name: MAULI 2.0 Single Gate CI/CD
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: mauli-full-ci-${{ github.ref }}
+  group: mauli-single-gate-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -16,33 +16,49 @@ permissions:
 
 jobs:
   validate:
-    name: Full L1 validation
+    name: Single Gate — All Tests + Integration + Build
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: Checkout exact commit under test
         uses: actions/checkout@v4
+
+      - name: Show commit under test
+        shell: powershell
+        run: |
+          Write-Host "Commit SHA: $env:GITHUB_SHA"
+          git rev-parse HEAD
+          if ((git rev-parse HEAD) -ne $env:GITHUB_SHA) { throw "Checked out SHA does not match GITHUB_SHA" }
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
       - name: JavaScript syntax check
         run: |
           node --check src/index.js
           node --check src/observer.js
           node --check src/observer-dashboard.js
-      - name: Run complete Node test suite
+
+      - name: MAULI Self Tests
         run: npm test
-      - name: Run MAULI integration self-tests
+
+      - name: MAULI L1 Tests
+        run: npm test
+
+      - name: MAULI integration self-tests
         run: |
           node --input-type=module -e "import('./src/orchestrator-selftest.js').then(async ({runOrchestratorSelfTest}) => { const {runAgentRecoverySelfTest}=await import('./src/e2e-selftest.js'); const results=[runOrchestratorSelfTest(),runAgentRecoverySelfTest()]; console.log(JSON.stringify(results,null,2)); if(results.some(result=>!result.passed)) process.exit(1); })"
+
       - name: Validate Wrangler configuration and Worker bundle
         run: npx wrangler deploy --dry-run
 
   deploy:
-    name: Deploy MAULI 2.0 Worker
+    name: Deploy exact validated commit
     needs: validate
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, Windows, X64]
@@ -50,14 +66,24 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout
+      - name: Checkout exact validated commit
         uses: actions/checkout@v4
+
+      - name: Show deploy commit
+        shell: powershell
+        run: |
+          Write-Host "Deploy SHA: $env:GITHUB_SHA"
+          git rev-parse HEAD
+          if ((git rev-parse HEAD) -ne $env:GITHUB_SHA) { throw "Deploy checkout SHA mismatch" }
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
       - name: Deploy Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
