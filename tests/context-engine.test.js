@@ -45,6 +45,8 @@ test('oversized content is compressed without exceeding the budget', () => {
 test('summaries and context envelope respect requested headroom', () => {
   const summary = summarizeText('one two three '.repeat(100), 10);
   assert.ok(estimateTokens(summary) <= 10);
+  const tinySummary = summarizeText('x'.repeat(100), 1);
+  assert.ok(estimateTokens(tinySummary) <= 1);
   const envelope = buildContextEnvelope({
     task:{objective:'build API'}, project:{name:'P'}, agent:{name:'A'},
     importantFacts:['fact'], recentEvents:['event'], memory:['memory'], budgetTokens:40
