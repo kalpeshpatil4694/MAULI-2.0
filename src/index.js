@@ -4,7 +4,7 @@ import { seedAgents, listAgents } from './agents.js';
 import { listProjects } from './projects.js';
 import { listTasks } from './tasks.js';
 import { listApprovals, decideApproval } from './governance.js';
-import { executeAutonomously, resumeApprovedCommand } from './orchestrator.js';
+import { resumeApprovedCommand } from './orchestrator.js';
 import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { collectProjectFiles, createZip } from './zip.js';
@@ -12,7 +12,7 @@ import { ensureSchema, hasD1, d1List, d1Events } from './db.js';
 import { recoverRunningExecutions } from './execution.js';
 import { requireFounder, checkRateLimit } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
-import { diagnoseResultPersistence, saveCommandResult } from './result-recorder.js';
+import { diagnoseResultPersistence } from './result-recorder.js';
 import { listObserverEvents, getTaskTimeline, getProjectTimeline, getAgentTimeline, getExecutionTimeline, getVerificationTimeline, observerSummary } from './observer.js';
 import { observerDashboard } from './observer-dashboard.js';
 import { founderCommandCenter } from './founder-command-center.js';
@@ -20,12 +20,12 @@ import { productionSnapshot, isProductionHealthy } from './production.js';
 import { modelRegistry } from './model-registry.js';
 import { learningSnapshot } from './learning.js';
 import { providerSnapshot } from './provider-independence.js';
+import { createCommand, getCommand, listRecentCommands, startCommand } from './command-runtime.js';
 
 function artifactJson(a){return a?ok({artifact:a}):fail('Artifact not found',404)}
-function isIsolatedTestEnv(env){return env?.SKIP_RESULT_PERSISTENCE===true||env?.SKIP_RESULT_PERSISTENCE==='true'||env?.MAULI_TEST_MODE===true||env?.MAULI_TEST_MODE==='true'}
 function completionSafe(project,tasks){if(!project||project.state!=='completed')return true;return tasks.filter(t=>t.projectId===project.id).every(t=>t.state==='completed'||t.state==='failed')&&tasks.filter(t=>t.projectId===project.id).every(t=>t.state!=='queued'&&t.state!=='working')}
 
-export default {async fetch(request,env){try{
+export default {async fetch(request,env,ctx){try{
   await ensureSchema(env);store.configure(env);if(!store.hydrated)await store.hydrate();ensureBuiltinTools();seedAgents();const recoveredRuns=recoverRunningExecutions();const url=new URL(request.url);
   if(request.method==='GET'&&(url.pathname==='/'||url.pathname==='/command-center'))return new Response(founderCommandCenter(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
   if(request.method==='GET'&&url.pathname==='/observer')return new Response(observerDashboard(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
@@ -39,6 +39,15 @@ export default {async fetch(request,env){try{
   if(request.method==='GET'&&url.pathname==='/api/command-center'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     return ok({models:modelRegistry.list({enabledOnly:true}),providers:providerSnapshot().providers,learning:learningSnapshot(),memoryCount:store.list('memory').length,production:productionSnapshot({env,recoveredRuns,store})});
+  }
+  if(request.method==='GET'&&url.pathname==='/api/commands'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    return ok({commands:await listRecentCommands(env,Number(url.searchParams.get('limit')||20))});
+  }
+  if(request.method==='GET'&&url.pathname.startsWith('/api/commands/')){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const command=await getCommand(env,url.pathname.split('/').pop());
+    return command?ok({command}):fail('Command not found',404);
   }
   if(request.method==='GET'&&url.pathname==='/api/observer'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
@@ -55,7 +64,10 @@ export default {async fetch(request,env){try{
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')&&url.pathname.endsWith('/download')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/'),artifactId=parts[parts.length-2],artifact=getArtifact(artifactId);if(!artifact)return fail('Artifact not found',404);const files=collectProjectFiles(artifact.projectId,artifact,store);if(!files.length)return fail('No downloadable project files found',404);const zip=createZip(files),safeName=String(artifact.projectId).replace(/[^a-zA-Z0-9_-]/g,'_');return new Response(zip,{status:200,headers:{'content-type':'application/zip','content-disposition':`attachment; filename="mauli-${safeName}.zip"`,'cache-control':'no-store'}})}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return artifactJson(getArtifact(url.pathname.split('/').pop()))}
   if(request.method==='POST'&&url.pathname==='/api/command'){
-    const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const body=await json(request);if(!body.command)return fail('Founder command is required',400);const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const isolatedTest=isIsolatedTestEnv(env),result=await executeAutonomously(body.command,env);const projects=result?.project?[result.project]:listProjects();const tasks=listTasks();const p=projects.find(x=>x?.id===result?.project?.id)||result?.project;const pt=p?tasks.filter(t=>t.projectId===p.id):[];if(p?.state==='completed'&&!completionSafe(p,pt))result.project={...p,state:'active',completionGuard:'blocked-until-all-tasks-finish'};const persistedPayload={command:body.command,generatedAt:now(),result};const saved=isolatedTest?{saved:true,skipped:true,testMode:true,reason:'Result persistence disabled for isolated test'}:await saveCommandResult(persistedPayload,env);if(!saved.saved)return fail('Command executed but Result file persistence failed',502,{resultFile:saved,result});return ok({result,resultFile:saved},201);
+    const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const body=await json(request);if(!body.command)return fail('Founder command is required',400);const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const command=await createCommand(env,String(body.command).trim());
+    startCommand(env,command,ctx?.waitUntil?.bind(ctx));
+    return ok({commandId:command.id,state:command.state,command:command.command},202);
   }
   if(request.method==='POST'&&url.pathname.startsWith('/api/approvals/')){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const approvalId=url.pathname.split('/').pop(),body=await json(request),result=decideApproval(approvalId,Boolean(body.approved),body.note??'');if(!result)return fail('Approval not found',404);if(result.state==='rejected')return ok({approval:result,status:'rejected'});return ok({approval:result,result:await resumeApprovedCommand(approvalId,env)})}
   return fail('Route not found',404)
