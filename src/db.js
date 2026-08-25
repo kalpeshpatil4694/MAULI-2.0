@@ -24,8 +24,9 @@ export async function d1Put(env, type, value) {
   return item;
 }
 
-export async function d1Events(env, limit = 50) {
-  const result = await env.DB.prepare('SELECT id,type,payload,created_at FROM events ORDER BY created_at DESC LIMIT ?').bind(limit).all();
+export async function d1Events(env, limit = 1000) {
+  const safeLimit = Math.max(1, Math.min(5000, Number(limit) || 1000));
+  const result = await env.DB.prepare('SELECT id,type,payload,created_at FROM events ORDER BY created_at DESC LIMIT ?').bind(safeLimit).all();
   return (result.results ?? []).map(r => ({ id:r.id, type:r.type, payload:JSON.parse(r.payload), at:r.created_at }));
 }
 
