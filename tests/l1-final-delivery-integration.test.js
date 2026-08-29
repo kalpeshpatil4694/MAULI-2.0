@@ -18,6 +18,11 @@ test('L1 final delivery is generated from completed project state', () => {
     assignedAgentId: 'agent-test',
     verificationId: 'verification-test'
   });
+  store.put('verifications', {
+    id: 'verification-test',
+    taskId: 'delivery-integration-task',
+    passed: true
+  });
 
   const artifact = buildFinalDelivery(project);
   assert.equal(artifact.type, 'final-delivery');
