@@ -691,7 +691,7 @@ function renderProjects(){
     html += '<div class="project-stat">🕐 '+fmtDate(p.updatedAt||p.createdAt)+'</div>';
     html += '</div>';
     if(reqs) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:4px">REQUIREMENTS</div>'+reqs+'</div>';
-    if(p.state==='completed'){
+    if(p.state==='completed' || STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='final-delivery'&&a.metadata?.downloadPath) || STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace')){
       const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');
       const dlPath=delivery?.metadata?.downloadPath;
       if(dlPath) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><button class="btn btn-primary btn-sm download-btn" data-path="'+dlPath+'">📥 Download ZIP</button>';
