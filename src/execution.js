@@ -62,4 +62,11 @@ export async function executeTaskLifecycle(task, context = {}) {
   return {status:'failed',task:store.get('tasks',currentTask.id),execution};
 }
 
+export function recoverRunningExecutions(){
+  return store.list('runs').filter(run=>run.state==='running').map(run=>{
+    store.addEvent('execution.recovery_candidate',{runId:run.id,taskId:run.taskId,executor:run.executor});
+    return run;
+  });
+}
+
 export function getExecutorHandler(name){ return getExecutor(name)?.handler ?? null; }
