@@ -1,0 +1,9 @@
+{
+  "name": "implement-backend-code-and-api-user-interface",
+  "version": "1.0.0",
+  "main": "main.js",
+  "build": {
+    "appId": "com.mauli.implement-backend-code-and-api-user-interface",
+    "productName": "Implement backend code and API User interface"
+  }
+}
