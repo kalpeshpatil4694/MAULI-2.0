@@ -2,11 +2,17 @@ name: Build Apps (.apk and .exe)
 on:
   push:
     branches: [main]
+    paths:
+      - 'www/**'
+      - 'capacitor.config.json'
+      - 'electron/**'
+      - 'package.json'
   workflow_dispatch:
 
 jobs:
   build-android-apk:
     runs-on: ubuntu-latest
+    if: hashFiles('www/index.html') != ''
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -16,31 +22,33 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Check www folder
+        run: ls www/ || (echo "No www/ folder found, skipping Android build" && exit 1)
       - name: Install dependencies
         run: npm install
       - name: Install Capacitor
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
-      - name: Init Capacitor
-        run: npx cap init mauli-app com.mauli.app --web-dir www || true
-      - name: Add Android platform
-        run: npx cap add android || true
       - name: Sync web assets
         run: npx cap sync
       - name: Build Android APK
         run: cd android && chmod +x gradlew && ./gradlew assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
+        if: success()
         with:
-          name: mauli-android-apk
+          name: android-apk
           path: android/app/build/outputs/apk/debug/*.apk
 
-  build-linux-exe:
+  build-desktop-exe:
     runs-on: ubuntu-latest
+    if: hashFiles('electron/main.js') != ''
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Check electron folder
+        run: ls electron/ || (echo "No electron/ folder found, skipping desktop build" && exit 1)
       - name: Install dependencies
         run: npm install
       - name: Install Electron
@@ -49,17 +57,21 @@ jobs:
         run: npx electron-builder --linux --dir
       - name: Upload Linux build
         uses: actions/upload-artifact@v4
+        if: success()
         with:
-          name: mauli-linux-exe
+          name: linux-exe
           path: dist/
 
   build-windows-exe:
     runs-on: windows-latest
+    if: hashFiles('electron/main.js') != ''
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Check electron folder
+        run: if exist electron (echo Found) else (echo No electron folder && exit 1)
       - name: Install dependencies
         run: npm install
       - name: Install Electron
@@ -68,6 +80,7 @@ jobs:
         run: npx electron-builder --win --dir
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
+        if: success()
         with:
-          name: mauli-windows-exe
+          name: windows-exe
           path: dist/

@@ -104,7 +104,7 @@ registerExecutor('internal.code',async({task,env,agentId})=>{
   const files=[
     // package.json
     {path:'package.json',content:JSON.stringify({
-      name:appName,version:'1.0.0',description:objective,main:'src/index.js',
+      name:appName,version:'1.0.0',description:objective,main:'electron/main.js',
       scripts:{start:'node server.js','build:android':'npx cap sync && npx cap open android','build:desktop':'npx electron-builder',test:'echo All tests passed && exit 0'},
       dependencies:{},
       devDependencies:{},
