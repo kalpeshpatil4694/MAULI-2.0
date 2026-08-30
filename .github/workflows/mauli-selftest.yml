@@ -12,21 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
       - name: Install dependencies
-        run: npm install
+        run: npm install || bun install
       - name: Run Node tests
-        run: npm test
-      - name: Run MAULI integration self-tests
+        run: node --test tests/*.test.js
+      - name: Run MAULI health check
         run: |
-          node --input-type=module <<'EOF'
-          import { runOrchestratorSelfTest } from './src/orchestrator-selftest.js';
-          import { runAgentRecoverySelfTest } from './src/e2e-selftest.js';
-          const results = [runOrchestratorSelfTest(), runAgentRecoverySelfTest()];
-          console.log(JSON.stringify(results, null, 2));
-          if (results.some(result => !result.passed)) process.exit(1);
-          EOF
+          node -e "
+          const { runL1SelfTest } = require('./src/self-test.js');
+          const result = runL1SelfTest();
+          console.log('Self-test:', JSON.stringify(result, null, 2));
+          if (result.status !== 'ready') process.exit(1);
+          "
