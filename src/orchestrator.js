@@ -11,22 +11,572 @@ import { verifyResult, retryDecision } from './verification.js';
 import { toolsForTask } from './tools.js';
 import { buildFinalDelivery } from './delivery.js';
 
-const ORDER={research:10,'product-planning':20,backend:30,database:40,frontend:50,security:60,testing:70};
-const SPECS=[['research','Research and validate requirements',['research','analysis'],'internal.plan'],['product-planning','Define product and architecture plan',['product-planning','planning'],'internal.plan'],['backend','Implement backend code and API',['backend','api'],'internal.code'],['database','Implement database and persistence schema',['database','schema','sql'],'internal.code'],['frontend','Implement frontend code and user experience',['frontend','ui'],'internal.code'],['security','Perform security review',['security','audit'],'internal.code'],['testing','Create testing and verification plan',['testing','verification'],'internal.plan']];
+/* ── Task Execution Order ── */
+const ORDER = {
+  research: 10,
+  'product-planning': 20,
+  backend: 30,
+  database: 40,
+  frontend: 50,
+  security: 60,
+  testing: 70
+};
 
-export function interpretCommand(command){const text=String(command??'').trim();if(!text)throw new Error('Founder command is required');return{id:id('intent'),command:text,objective:text,capabilities:['requirements',...( /(research|analysis|study)/i.test(text)?['research']:[]) ]};}
-const complete=t=>(t?.dependsOn??[]).every(id=>store.get('tasks',id)?.state==='completed');
-const live=id=>id&&store.list('runs').some(r=>r.taskId===id&&r.state==='running');
-function planAgent(){seedAgents();let a=selectAgents(['product-planning','planning'],null,{requiredTools:['planning.execute'],requireAllTools:true})[0]??store.list('agents').find(a=>a.name==='Planning Agent');if(!a)return registerAgent({name:'Planning Agent',role:'Planner',department:'Planning',capabilities:['product-planning','planning'],tools:['planning.execute']});return updateAgent(a.id,{state:'available',currentTaskId:null,heartbeatAt:now(),capabilities:[...new Set([...(a.capabilities??[]),'product-planning','planning'])],tools:[...new Set([...(a.tools??[]),'planning.execute'])]});}
-function agent(spec,tools=[]){if(spec.key==='product-planning'||spec.key==='planning')return planAgent();return selectAgents(spec.requiredCapabilities,null,{requiredTools:tools,requireAllTools:true})[0]??selectAgents(spec.requiredCapabilities,null,{requireAllTools:false})[0]??store.list('agents').find(a=>spec.requiredCapabilities.every(c=>(a.capabilities??[]).includes(c))&&!live(a.currentTaskId))??null;}
-function makeSpecs(plan,objective){const caps=plan?.capabilities??[],req=plan?.requirements??[],list=SPECS.filter(s=>caps.includes(s[0])||s[2].some(c=>caps.includes(c)));return(list.length?list:[['planning','Analyze requirements and produce execution plan',['planning'],'internal.plan']]).map((s,i)=>({key:s[0],title:req[i]?`${s[1]}: ${req[i]}`:s[1],description:objective,requiredCapabilities:s[2],maxAttempts:3,executor:s[3],sequence:ORDER[s[0]]??100+i}));}
-const entries=(items=[])=>(items??[]).map(x=>{const t=store.get('tasks',x.task?.id??x.id)??x.task??x,a=t?.assignedAgentId?store.get('agents',t.assignedAgentId):x.selectedAgent??null;return{...t,task:t,selectedAgent:a};});
-function addTasks(project,plan,objective,risk){const made=[];for(const s of makeSpecs(plan,objective)){const tools=toolsForTask({requiredCapabilities:s.requiredCapabilities},{scope:'internal',maxRisk:'read'}),selected=agent(s,tools),prev=made.at(-1)?.task,task=addTaskToProject(project.id,{title:s.title,description:s.description,requiredCapabilities:s.requiredCapabilities,risk,acceptance:[{field:'type',equals:s.executor==='internal.code'?'code':'plan'}],assignedAgentId:selected?.id??null,toolNames:tools,maxAttempts:s.maxAttempts,executor:s.executor,sequence:s.sequence,dependsOn:prev?[prev.id]:[]});if(task)made.push({task,selectedAgent:selected,toolNames:tools});}return made;}
-function memory(task){return recall({scope:'task',scopeId:task?.id??null,type:'solution',limit:5});}
-function rememberRun(task,run,check){const base={scope:'task',scopeId:task.id,source:'execution',tags:[task.executor,...(task.requiredCapabilities??[])]};remember({type:'task_result',content:{taskId:task.id,status:run?.state,result:run?.result??null,verificationPassed:check?.passed===true},importance:check?.passed?'normal':'high',...base});if(run?.error)remember({type:'error',content:{taskId:task.id,error:run.error},importance:'high',...base});if(check?.passed)remember({type:'solution',content:{taskId:task.id,summary:'Task execution passed L1 verification.',artifactId:run?.result?.artifactId??null},importance:'normal',...base});}
-function finalQA(project,task){if(store.list('tasks').some(t=>t.projectId===project.id&&t.finalProjectVerification))return null;const a=agent({key:'testing',requiredCapabilities:['testing','verification']});return addTaskToProject(project.id,{title:'Final project verification and QA',description:`Verify completed project ${project.id}`,requiredCapabilities:['testing','verification'],risk:'low',acceptance:[{field:'type',equals:'plan'}],assignedAgentId:a?.id??null,toolNames:[],executor:'internal.plan',maxAttempts:1,sequence:999,dependsOn:[task.id],finalProjectVerification:true});}
-export async function planCommand(command,env={}){seedAgents();const intent=interpretCommand(command);let plan=null;try{if(env?.AI?.run)plan=await interpretWithAI(env,command);}catch{}plan=plan?.capabilities?.length?plan:freePlanFromCommand(command);const objective=plan.objective??intent.objective,risk=riskLevel({codeWrite:/\b(code|coding|build|develop|program|implement)\b/i.test(command)}),project=createProject({name:`Project: ${objective.slice(0,60)}`,objective,founderCommand:intent.command,requirements:plan.requirements??[]}),tasks=addTasks(project,plan,objective,risk);remember({type:'project_requirement',content:objective,scope:'project',scopeId:project.id,importance:'high',source:'founder-command'});const approval=requiresApproval(risk)&&requestApproval({action:`Execute founder command: ${command}`,risk,projectId:project.id});if(approval)return{intent,aiPlan:plan,project,tasks:entries(tasks),status:'awaiting_approval',approval};return executePlannedProject({project,task:tasks[0]?.task,selectedAgent:tasks[0]?.selectedAgent,env,plannedTasks:tasks});}
-export async function executePlannedProject({project,task,selectedAgent,env={},approved=false,plannedTasks=[]}){if(!task)return{project,status:'error',error:'No executable task was created',tasks:entries(plannedTasks)};if(!complete(task))return{project,firstTask:task,selectedAgent,status:'blocked',reason:'dependencies_incomplete',tasks:entries(plannedTasks)};if(requiresApproval(task.risk)&&!approved)return{project,firstTask:task,selectedAgent,status:'awaiting_approval',tasks:entries(plannedTasks)};selectedAgent=selectedAgent?.id?selectedAgent:agent({key:task.key??task.executor,executor:task.executor,requiredCapabilities:task.requiredCapabilities??[]},task.toolNames??[]);if(!selectedAgent)return{project,firstTask:task,status:'blocked',reason:'no_available_agent_with_required_tools',requiredTools:task.toolNames??[],tasks:entries(plannedTasks)};const ctx=memory(task).map(m=>m.content);updateAgent(selectedAgent.id,{state:'working',currentTaskId:task.id,heartbeatAt:now()});const working=store.put('tasks',{...task,state:'working',startedAt:now(),attempts:(task.attempts??0)+1,assignedAgentId:selectedAgent.id,memoryContext:ctx,id:task.id});let run=await executeTask(working,{env,approved,agentId:selectedAgent.id,memoryContext:ctx}),check=verifyResult(working,run);rememberRun(working,run,check);for(let attempt=2;!check.passed&&attempt<=(working.maxAttempts??3);attempt++){const d=retryDecision(working,check,attempt-1);if(d.action!=='retry')break;run=await executeTask(working,{env,retry:true,attempt,approved,agentId:selectedAgent.id,forceRestart:true,memoryContext:ctx});check=verifyResult(working,run);rememberRun(working,run,check);}const success=check.passed;recordAgentOutcome(selectedAgent.id,{success,taskId:working.id,verificationId:check.id});recordAgentTaskLearning({agentId:selectedAgent.id,task:working,success,verification:check});const done=store.put('tasks',{...working,state:success?'completed':'failed',result:run?.result??null,verificationId:check.id,completedAt:success?now():undefined,id:working.id});updateAgent(selectedAgent.id,{state:success?'available':'escalated',currentTaskId:null,heartbeatAt:now()});selectedAgent=store.get('agents',selectedAgent.id);if(success){const next=plannedTasks.map(x=>store.get('tasks',x.task.id)).find(t=>t&&t.id!==done.id&&t.state!=='completed'&&complete(t));if(next)return executePlannedProject({project,task:next,selectedAgent:next.assignedAgentId?store.get('agents',next.assignedAgentId):null,env,approved,plannedTasks});}
-let qaTask=null;const allPlanned=plannedTasks.length&&plannedTasks.every(x=>store.get('tasks',x.task.id)?.state==='completed');if(success&&allPlanned&&!task.finalProjectVerification)qaTask=finalQA(project,done);if(qaTask){return executePlannedProject({project,task:qaTask,selectedAgent:qaTask.assignedAgentId?store.get('agents',qaTask.assignedAgentId):null,env,approved,plannedTasks:[{task:qaTask,selectedAgent:qaTask.assignedAgentId?store.get('agents',qaTask.assignedAgentId):null}]});}
-const allTasks=store.list('tasks').filter(t=>t.projectId===project.id);const allCompleted=allTasks.length>0&&allTasks.every(t=>t.state==='completed');const finalQaPassed=allTasks.filter(t=>t.finalProjectVerification).every(t=>t.state==='completed'&&t.verificationId);const state=allCompleted&&finalQaPassed?'completed':success?'active':'escalated';const finalProject=store.put('projects',{...project,state,id:project.id});store.addEvent('command.completed',{projectId:project.id,taskId:done.id,status:state});return{project:finalProject,firstTask:done,selectedAgent,execution:run,verification:check,status:state,tasks:entries(allTasks),finalDelivery:state==='completed'?buildFinalDelivery(finalProject):null};}
-export async function resumeApprovedCommand(approvalId,env={}){const approval=store.get('approvals',approvalId);if(!approval||!isApprovalGranted(approvalId))return{status:'awaiting_approval',approval};const project=store.get('projects',approval.projectId),tasks=store.list('tasks').filter(t=>t.projectId===approval.projectId&&!t.finalProjectVerification),task=tasks.filter(t=>t.state!=='completed').sort((a,b)=>(a.sequence??0)-(b.sequence??0))[0];if(!project||!task)return{status:'error',error:'Approved project/task not found'};return executePlannedProject({project,task,selectedAgent:task.assignedAgentId?store.get('agents',task.assignedAgentId):null,env,approved:true,plannedTasks:tasks.map(task=>({task,selectedAgent:task.assignedAgentId?store.get('agents',task.assignedAgentId):null}))});}
+/* ── Task Specifications ── */
+const SPECS = [
+  ['research',       'Research and validate requirements',    ['research', 'analysis'],                          'internal.plan'],
+  ['product-planning','Define product and architecture plan',  ['product-planning', 'planning'],                  'internal.plan'],
+  ['backend',         'Implement backend code and API',        ['backend', 'api'],                                'internal.code'],
+  ['database',        'Implement database and persistence schema', ['database', 'schema', 'sql'],                 'internal.code'],
+  ['frontend',        'Implement frontend code and user experience', ['frontend', 'ui'],                          'internal.code'],
+  ['security',        'Perform security review',              ['security', 'audit'],                              'internal.code'],
+  ['testing',         'Create testing and verification plan',  ['testing', 'verification'],                       'internal.plan']
+];
+
+/* ═══════════════════════════════════════════════════
+   PUBLIC API
+   ═══════════════════════════════════════════════════ */
+
+/**
+ * Interpret a founder command into an intent object.
+ * Used by self-test and by the planning pipeline.
+ */
+export function interpretCommand(command) {
+  const text = String(command ?? '').trim();
+  if (!text) throw new Error('Founder command is required');
+  const caps = ['requirements'];
+  if (/(research|analysis|study)/i.test(text)) caps.push('research');
+  return {
+    id: id('intent'),
+    command: text,
+    objective: text,
+    capabilities: caps
+  };
+}
+
+/**
+ * Full command pipeline: interpret → plan → create project → add tasks → execute.
+ * This is the main entry point called by the API.
+ */
+export async function planCommand(command, env = {}) {
+  seedAgents();
+
+  // 1. Interpret the command
+  const intent = interpretCommand(command);
+
+  // 2. Get an AI plan (or fall back to deterministic planning)
+  let plan = null;
+  try {
+    if (env?.AI?.run) {
+      plan = await interpretWithAI(env, command);
+    }
+  } catch (_) { /* fallback below */ }
+  plan = plan?.capabilities?.length ? plan : freePlanFromCommand(command);
+
+  const objective = plan.objective ?? intent.objective;
+  const risk = riskLevel({
+    codeWrite: /\b(code|coding|build|develop|program|implement)\b/i.test(command)
+  });
+
+  // 3. Create the project
+  const project = createProject({
+    name: `Project: ${objective.slice(0, 60)}`,
+    objective,
+    founderCommand: intent.command,
+    requirements: plan.requirements ?? []
+  });
+
+  // 4. Add planned tasks
+  const plannedTasks = addTasks(project, plan, objective, risk);
+
+  // 5. Remember the requirement
+  remember({
+    type: 'project_requirement',
+    content: objective,
+    scope: 'project',
+    scopeId: project.id,
+    importance: 'high',
+    source: 'founder-command'
+  });
+
+  // 6. Check if approval is needed
+  if (requiresApproval(risk)) {
+    const approval = requestApproval({
+      action: `Execute founder command: ${command}`,
+      risk,
+      projectId: project.id
+    });
+    if (approval) {
+      return {
+        intent,
+        aiPlan: plan,
+        project,
+        tasks: entries(plannedTasks),
+        status: 'awaiting_approval',
+        approval
+      };
+    }
+  }
+
+  // 7. Start executing the first task
+  const first = plannedTasks[0];
+  return executePlannedProject({
+    project,
+    task: first?.task,
+    selectedAgent: first?.selectedAgent,
+    env,
+    plannedTasks
+  });
+}
+
+/**
+ * Resume execution after a founder approves a high-risk action.
+ */
+export async function resumeApprovedCommand(approvalId, env = {}) {
+  const approval = store.get('approvals', approvalId);
+  if (!approval || !isApprovalGranted(approvalId)) {
+    return { status: 'awaiting_approval', approval };
+  }
+
+  const project = store.get('projects', approval.projectId);
+  const tasks = store.list('tasks').filter(
+    t => t.projectId === approval.projectId && !t.finalProjectVerification
+  );
+  const task = tasks
+    .filter(t => t.state !== 'completed')
+    .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))[0];
+
+  if (!project || !task) {
+    return { status: 'error', error: 'Approved project/task not found' };
+  }
+
+  return executePlannedProject({
+    project,
+    task,
+    selectedAgent: task.assignedAgentId
+      ? store.get('agents', task.assignedAgentId)
+      : null,
+    env,
+    approved: true,
+    plannedTasks: tasks.map(t => ({
+      task: t,
+      selectedAgent: t.assignedAgentId
+        ? store.get('agents', t.assignedAgentId)
+        : null
+    }))
+  });
+}
+
+/* ═══════════════════════════════════════════════════
+   PLANNING HELPERS
+   ═══════════════════════════════════════════════════ */
+
+function addTasks(project, plan, objective, risk) {
+  const specs = makeSpecs(plan, objective);
+  const made = [];
+
+  for (const spec of specs) {
+    const tools = toolsForTask(
+      { requiredCapabilities: spec.requiredCapabilities },
+      { scope: 'internal', maxRisk: 'read' }
+    );
+    const selected = findAgent(spec, tools);
+
+    const prev = made.at(-1)?.task;
+    const task = addTaskToProject(project.id, {
+      title: spec.title,
+      description: spec.description,
+      requiredCapabilities: spec.requiredCapabilities,
+      risk,
+      acceptance: [{ field: 'type', equals: spec.executor === 'internal.code' ? 'code' : 'plan' }],
+      assignedAgentId: selected?.id ?? null,
+      toolNames: tools,
+      maxAttempts: spec.maxAttempts,
+      executor: spec.executor,
+      sequence: spec.sequence,
+      dependsOn: prev ? [prev.id] : []
+    });
+
+    if (task) {
+      made.push({ task, selectedAgent: selected, toolNames: tools });
+    }
+  }
+  return made;
+}
+
+function makeSpecs(plan, objective) {
+  const caps = plan?.capabilities ?? [];
+  const req = plan?.requirements ?? [];
+  const filtered = SPECS.filter(
+    s => caps.includes(s[0]) || s[2].some(c => caps.includes(c))
+  );
+  const list = filtered.length
+    ? filtered
+    : [['planning', 'Analyze requirements and produce execution plan', ['planning'], 'internal.plan']];
+
+  return list.map((s, i) => ({
+    key: s[0],
+    title: req[i] ? `${s[1]}: ${req[i]}` : s[1],
+    description: objective,
+    requiredCapabilities: s[2],
+    maxAttempts: 3,
+    executor: s[3],
+    sequence: ORDER[s[0]] ?? 100 + i
+  }));
+}
+
+/* ═══════════════════════════════════════════════════
+   AGENT HELPERS
+   ═══════════════════════════════════════════════════ */
+
+function planAgent() {
+  seedAgents();
+  let a = selectAgents(
+    ['product-planning', 'planning'], null,
+    { requiredTools: ['planning.execute'], requireAllTools: true }
+  )[0] ?? store.list('agents').find(a => a.name === 'Planning Agent');
+
+  if (!a) {
+    return registerAgent({
+      name: 'Planning Agent',
+      role: 'Planner',
+      department: 'Planning',
+      capabilities: ['product-planning', 'planning'],
+      tools: ['planning.execute']
+    });
+  }
+
+  return updateAgent(a.id, {
+    state: 'available',
+    currentTaskId: null,
+    heartbeatAt: now(),
+    capabilities: [...new Set([...(a.capabilities ?? []), 'product-planning', 'planning'])],
+    tools: [...new Set([...(a.tools ?? []), 'planning.execute'])]
+  });
+}
+
+function findAgent(spec, tools) {
+  if (spec.key === 'product-planning' || spec.key === 'planning') {
+    return planAgent();
+  }
+  return (
+    selectAgents(spec.requiredCapabilities, null, { requiredTools: tools, requireAllTools: true })[0] ??
+    selectAgents(spec.requiredCapabilities, null, { requireAllTools: false })[0] ??
+    store.list('agents').find(a =>
+      spec.requiredCapabilities.every(c => (a.capabilities ?? []).includes(c))
+    ) ??
+    null
+  );
+}
+
+/* ═══════════════════════════════════════════════════
+   DEPENDENCY & STATE HELPERS
+   ═══════════════════════════════════════════════════ */
+
+function allDepsComplete(task) {
+  return (task?.dependsOn ?? []).every(depId => {
+    const dep = store.get('tasks', depId);
+    return dep && dep.state === 'completed';
+  });
+}
+
+function isLive(taskId) {
+  if (!taskId) return false;
+  return store.list('runs').some(r => r.taskId === taskId && r.state === 'running');
+}
+
+function memoryContext(task) {
+  return recall({ scope: 'task', scopeId: task?.id ?? null, type: 'solution', limit: 5 }).map(m => m.content);
+}
+
+function rememberRun(task, run, check) {
+  const base = {
+    scope: 'task',
+    scopeId: task.id,
+    source: 'execution',
+    tags: [task.executor, ...(task.requiredCapabilities ?? [])]
+  };
+
+  remember({
+    type: 'task_result',
+    content: {
+      taskId: task.id,
+      status: run?.state,
+      result: run?.result ?? null,
+      verificationPassed: check?.passed === true
+    },
+    importance: check?.passed ? 'normal' : 'high',
+    ...base
+  });
+
+  if (run?.error) {
+    remember({ type: 'error', content: { taskId: task.id, error: run.error }, importance: 'high', ...base });
+  }
+
+  if (check?.passed) {
+    remember({
+      type: 'solution',
+      content: {
+        taskId: task.id,
+        summary: 'Task execution passed L1 verification.',
+        artifactId: run?.result?.artifactId ?? null
+      },
+      importance: 'normal',
+      ...base
+    });
+  }
+}
+
+function entries(plannedTasks) {
+  return (plannedTasks ?? []).map(x => {
+    const t = store.get('tasks', x.task?.id ?? x.id) ?? x.task ?? x;
+    const agent = t?.assignedAgentId
+      ? store.get('agents', t.assignedAgentId)
+      : x.selectedAgent ?? null;
+    return { ...t, task: t, selectedAgent: agent };
+  });
+}
+
+function finalQA(project, task) {
+  // Don't create duplicate QA tasks
+  if (store.list('tasks').some(t => t.projectId === project.id && t.finalProjectVerification)) {
+    return null;
+  }
+  const agent = findAgent(
+    { key: 'testing', requiredCapabilities: ['testing', 'verification'] },
+    []
+  );
+  return addTaskToProject(project.id, {
+    title: 'Final project verification and QA',
+    description: `Verify completed project ${project.id}`,
+    requiredCapabilities: ['testing', 'verification'],
+    risk: 'low',
+    acceptance: [{ field: 'type', equals: 'plan' }],
+    assignedAgentId: agent?.id ?? null,
+    toolNames: [],
+    executor: 'internal.plan',
+    maxAttempts: 1,
+    sequence: 999,
+    dependsOn: [task.id],
+    finalProjectVerification: true
+  });
+}
+
+/* ═══════════════════════════════════════════════════
+   CORE EXECUTION LOOP
+   ═══════════════════════════════════════════════════ */
+
+export async function executePlannedProject({
+  project,
+  task,
+  selectedAgent,
+  env = {},
+  approved = false,
+  plannedTasks = []
+}) {
+  // ── Guard: no task ──
+  if (!task) {
+    return {
+      project,
+      status: 'error',
+      error: 'No executable task was created',
+      tasks: entries(plannedTasks)
+    };
+  }
+
+  // ── Guard: dependencies not met ──
+  if (!allDepsComplete(task)) {
+    return {
+      project,
+      firstTask: task,
+      selectedAgent,
+      status: 'blocked',
+      reason: 'dependencies_incomplete',
+      tasks: entries(plannedTasks)
+    };
+  }
+
+  // ── Guard: approval needed ──
+  if (requiresApproval(task.risk) && !approved) {
+    return {
+      project,
+      firstTask: task,
+      selectedAgent,
+      status: 'awaiting_approval',
+      tasks: entries(plannedTasks)
+    };
+  }
+
+  // ── Find or use the assigned agent ──
+  selectedAgent = selectedAgent?.id
+    ? selectedAgent
+    : findAgent(
+        { key: task.key ?? task.executor, executor: task.executor, requiredCapabilities: task.requiredCapabilities ?? [] },
+        task.toolNames ?? []
+      );
+
+  if (!selectedAgent) {
+    return {
+      project,
+      firstTask: task,
+      status: 'blocked',
+      reason: 'no_available_agent_with_required_tools',
+      requiredTools: task.toolNames ?? [],
+      tasks: entries(plannedTasks)
+    };
+  }
+
+  // ── Prepare execution context ──
+  const ctx = memoryContext(task);
+  updateAgent(selectedAgent.id, {
+    state: 'working',
+    currentTaskId: task.id,
+    heartbeatAt: now()
+  });
+
+  const working = store.put('tasks', {
+    ...task,
+    state: 'working',
+    startedAt: now(),
+    attempts: (task.attempts ?? 0) + 1,
+    assignedAgentId: selectedAgent.id,
+    memoryContext: ctx,
+    id: task.id
+  });
+
+  // ── Execute with retry loop ──
+  let run = await executeTask(working, {
+    env,
+    approved,
+    agentId: selectedAgent.id,
+    memoryContext: ctx
+  });
+  let check = verifyResult(working, run);
+  rememberRun(working, run, check);
+
+  for (let attempt = 2; !check.passed && attempt <= (working.maxAttempts ?? 3); attempt++) {
+    const decision = retryDecision(working, check, attempt - 1);
+    if (decision.action !== 'retry') break;
+
+    run = await executeTask(working, {
+      env,
+      retry: true,
+      attempt,
+      approved,
+      agentId: selectedAgent.id,
+      forceRestart: true,
+      memoryContext: ctx
+    });
+    check = verifyResult(working, run);
+    rememberRun(working, run, check);
+  }
+
+  // ── Record outcome ──
+  const success = check.passed;
+  recordAgentOutcome(selectedAgent.id, { success, taskId: working.id, verificationId: check.id });
+  recordAgentTaskLearning({
+    agentId: selectedAgent.id,
+    task: working,
+    success,
+    verification: check
+  });
+
+  const done = store.put('tasks', {
+    ...working,
+    state: success ? 'completed' : 'failed',
+    result: run?.result ?? null,
+    verificationId: check.id,
+    completedAt: success ? now() : undefined,
+    id: working.id
+  });
+
+  updateAgent(selectedAgent.id, {
+    state: success ? 'available' : 'escalated',
+    currentTaskId: null,
+    heartbeatAt: now()
+  });
+  selectedAgent = store.get('agents', selectedAgent.id);
+
+  // ── Chain to next task ──
+  if (success) {
+    const nextTask = plannedTasks
+      .map(x => store.get('tasks', x.task.id))
+      .find(t => t && t.id !== done.id && t.state !== 'completed' && allDepsComplete(t));
+
+    if (nextTask) {
+      return executePlannedProject({
+        project,
+        task: nextTask,
+        selectedAgent: nextTask.assignedAgentId
+          ? store.get('agents', nextTask.assignedAgentId)
+          : null,
+        env,
+        approved,
+        plannedTasks
+      });
+    }
+  }
+
+  // ── Final QA ──
+  const allPlanned =
+    plannedTasks.length > 0 &&
+    plannedTasks.every(x => store.get('tasks', x.task.id)?.state === 'completed');
+
+  let qaTask = null;
+  if (success && allPlanned && !task.finalProjectVerification) {
+    qaTask = finalQA(project, done);
+  }
+  if (qaTask) {
+    return executePlannedProject({
+      project,
+      task: qaTask,
+      selectedAgent: qaTask.assignedAgentId
+        ? store.get('agents', qaTask.assignedAgentId)
+        : null,
+      env,
+      approved,
+      plannedTasks: [{
+        task: qaTask,
+        selectedAgent: qaTask.assignedAgentId
+          ? store.get('agents', qaTask.assignedAgentId)
+          : null
+      }]
+    });
+  }
+
+  // ── Compute final status ──
+  const allTasks = store.list('tasks').filter(t => t.projectId === project.id);
+  const allCompleted = allTasks.length > 0 && allTasks.every(t => t.state === 'completed');
+  const finalQaPassed = allTasks
+    .filter(t => t.finalProjectVerification)
+    .every(t => t.state === 'completed' && t.verificationId);
+
+  const finalState = allCompleted && finalQaPassed
+    ? 'completed'
+    : success
+      ? 'active'
+      : 'escalated';
+
+  const finalProject = store.put('projects', {
+    ...project,
+    state: finalState,
+    id: project.id
+  });
+
+  store.addEvent('command.completed', {
+    projectId: project.id,
+    taskId: done.id,
+    status: finalState
+  });
+
+  return {
+    project: finalProject,
+    firstTask: done,
+    selectedAgent,
+    execution: run,
+    verification: check,
+    status: finalState,
+    tasks: entries(allTasks),
+    finalDelivery: finalState === 'completed' ? buildFinalDelivery(finalProject) : null
+  };
+}
