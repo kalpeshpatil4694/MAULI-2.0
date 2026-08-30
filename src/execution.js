@@ -8,6 +8,7 @@ import { verifyResult, retryDecision } from './verification.js';
 import { executeWithAdapter } from './execution-adapter.js';
 import { remember } from './memory.js';
 import { registerExecutor, listExecutors, getExecutor, grantExecutor, getExecutorScope } from './executor-registry.js';
+import './functional-code-executor.js';
 
 export { registerExecutor, listExecutors, grantExecutor } from './executor-registry.js';
 
