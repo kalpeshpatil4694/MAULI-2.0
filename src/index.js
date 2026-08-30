@@ -48,7 +48,13 @@ export default { async fetch(request, env) { try {
     const buildBranch='build/'+buildId;
     if(!token)return fail('GitHub token not configured. Add GITHUB_TOKEN env var.',500);
     const ghHeaders={Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'MAULI-2.0-builder','Content-Type':'application/json'};
-    const buildFolder='';
+    // Create the build branch from main first
+    const mainRef=await fetch('https://api.github.com/repos/'+repo+'/git/refs/heads/main',{headers:ghHeaders});
+    const mainData=await mainRef.json();
+    const mainSha=mainData?.object?.sha;
+    if(mainSha){
+      await fetch('https://api.github.com/repos/'+repo+'/git/refs',{method:'POST',headers:ghHeaders,body:JSON.stringify({ref:'refs/heads/'+buildBranch,sha:mainSha})});
+    }
     // Push each file to GitHub
     let pushed=0;
     for(const file of files){
@@ -62,7 +68,7 @@ export default { async fetch(request, env) { try {
       const putBody={message:'MAULI build: '+buildId+' add '+file.path,content,branch:buildBranch};
       if(sha)putBody.sha=sha;
       const putResp=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(path),{method:'PUT',headers:ghHeaders,body:JSON.stringify(putBody)});
-      if(putResp.ok)pushed++;
+      if(putResp.ok){pushed++;}else{const errText=await putResp.text().catch(()=>"");store.addEvent('build.push_error',{path:file.path,status:putResp.status,error:errText.substring(0,200)});}
     }
     // Also push the build-apps.yml workflow to the build folder
     const wfContent=['name: Build App','on: push','jobs:','  build:','    runs-on: ubuntu-latest','    steps:','      - uses: actions/checkout@v4','      - uses: actions/setup-java@v4','        with:','          distribution: temurin','          java-version: 17','      - uses: actions/setup-node@v4','        with:','          node-version: 20','      - run: npm install','      - run: npm install @capacitor/core @capacitor/cli @capacitor/android','      - run: npx cap sync || true','      - run: cd android && ./gradlew assembleDebug || true','      - uses: actions/upload-artifact@v4','        with:','          name: android-apk','          path: android/app/build/outputs/apk/debug/*.apk'].join('\n');
@@ -71,9 +77,9 @@ export default { async fetch(request, env) { try {
     let wfSha=null;if(wfCheck.ok){const d=await wfCheck.json();wfSha=d.sha;}
     const wfBody={message:'MAULI build: '+buildId+' workflow',content:wfBase64,branch:buildBranch};
     if(wfSha)wfBody.sha=wfSha;
-    await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(buildFolder+'/.github/workflows/build.yml'),{method:'PUT',headers:ghHeaders,body:JSON.stringify(wfBody)});
+    await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-app.yml'),{method:'PUT',headers:ghHeaders,body:JSON.stringify(wfBody)});
     // Store build info
-    store.put('builds',{id:buildId,projectId,platform,buildFolder,repo,branch:buildBranch,pushedAt:now(),status:'pushed',filesPushed:pushed});
+    store.put('builds',{id:buildId,projectId,platform,repo,branch:buildBranch,pushedAt:now(),status:'pushed',filesPushed:pushed});
     store.addEvent('build.started',{buildId,projectId,platform,pushed});
     return ok({buildId,platform,pushed,repo,branch:buildBranch,status:'pushed',message:pushed+' files pushed to GitHub. Build will start shortly.'});
   }
