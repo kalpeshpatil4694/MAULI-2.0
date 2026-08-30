@@ -1,4 +1,4 @@
-name: Build Apps (.apk and desktop)
+name: Build Apps (.apk and .exe)
 
 on:
   push:
@@ -37,7 +37,7 @@ jobs:
             mkdir -p www
             printf '%s\n' '<!DOCTYPE html><html><head><title>MAULI App</title></head><body style="background:#1a1a2e;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><h1>MAULI 2.0</h1><p>Generated App</p></div></body></html>' > www/index.html
           fi
-          test -f www/index.html
+          test -s www/index.html
 
       - name: Setup and build Android
         run: |
@@ -57,7 +57,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: mauli-android-apk
+          name: android-apk
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -96,7 +96,7 @@ jobs:
       - name: Upload Desktop
         uses: actions/upload-artifact@v4
         with:
-          name: mauli-desktop-appimage
+          name: desktop-exe
           path: dist/*.AppImage
           if-no-files-found: error
           retention-days: 14
