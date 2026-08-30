@@ -12,8 +12,8 @@ test('executive orchestrator completes a multi-task founder command end-to-end',
       async run() {
         return JSON.stringify({
           objective: 'Create a validated product plan',
-          requirements: ['research requirements', 'design frontend'],
-          capabilities: ['research', 'frontend'],
+          requirements: ['research requirements', 'design frontend', 'security verification'],
+          capabilities: ['research', 'frontend', 'security'],
           risks: [],
           acceptanceCriteria: ['Execution plan generated']
         });
