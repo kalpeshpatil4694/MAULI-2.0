@@ -171,13 +171,20 @@ export default { async fetch(request, env) { try {
         // Check ALL successful runs for artifacts (not just bestRun)
         for(const r of successful){
           if(downloadUrl)break;
-          const artResp=await fetch(r.artifacts_url,{headers:ghHeaders});
-          if(artResp.ok){
-            const artData=await artResp.json();
-            const apk=artData.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('apk')||a.name.toLowerCase().includes('android')));
-            if(apk&&!apk.expired)downloadUrl=apk.archive_download_url;
-          }
+          try{
+            const artResp=await fetch(r.artifacts_url,{headers:ghHeaders});
+            if(artResp.ok){
+              const artData=await artResp.json();
+              const apk=artData.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('apk')||a.name.toLowerCase().includes('android')));
+              if(apk&&!apk.expired)downloadUrl=apk.archive_download_url;
+            }else{
+              // Artifacts API may require actions scope - fall back to run page URL
+              downloadUrl=r.html_url;
+            }
+          }catch(e){ downloadUrl=r.html_url; }
         }
+        // If still no download URL, use the best run's HTML page
+        if(!downloadUrl&&bestRun.html_url)downloadUrl=bestRun.html_url;
       }
     }
     // Update build status
@@ -202,22 +209,31 @@ export default { async fetch(request, env) { try {
       const runs=rd.workflow_runs||[];
       // Check each successful build run for artifacts
       for(const r of runs.filter(run=>run.conclusion==='success')){
-        const artResp=await fetch(r.artifacts_url,{headers:ghHeaders});
-        if(artResp.ok){
-          const ad=await artResp.json();
-          const apk=ad.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('apk')||a.name.toLowerCase().includes('android')));
-          const exe=ad.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('exe')||a.name.toLowerCase().includes('desktop')||a.name.toLowerCase().includes('appimage')));
-          if(apk||exe){
-            ghBuilds.push({id:r.id.toString(),branch:r.head_branch||'',status:r.conclusion,conclusion:r.conclusion,completedAt:r.updated_at,downloadUrlAPK:apk&&!apk.expired?apk.archive_download_url:null,downloadUrlEXE:exe&&!exe.expired?exe.archive_download_url:null});
+        let downloadAPK=null,downloadEXE=null,viewUrl=r.html_url||null;
+        try{
+          const artResp=await fetch(r.artifacts_url,{headers:ghHeaders});
+          if(artResp.ok){
+            const ad=await artResp.json();
+            const apk=ad.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('apk')||a.name.toLowerCase().includes('android')));
+            const exe=ad.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('exe')||a.name.toLowerCase().includes('desktop')||a.name.toLowerCase().includes('appimage')));
+            if(apk&&!apk.expired)downloadAPK=apk.archive_download_url;
+            if(exe&&!exe.expired)downloadEXE=exe.archive_download_url;
           }
+        }catch(e){}
+        // If artifacts API failed (403), use run page as view URL
+        if(!downloadAPK&&!downloadEXE){viewUrl=r.html_url||null;downloadAPK=viewUrl;downloadEXE=viewUrl;}
+        if(downloadAPK||downloadEXE||viewUrl){
+          ghBuilds.push({id:r.id.toString(),branch:r.head_branch||'',status:r.conclusion,conclusion:r.conclusion,completedAt:r.updated_at,downloadUrlAPK:downloadAPK,downloadUrlEXE:downloadEXE,viewUrl:viewUrl});
         }
       }
     }
     // Merge local + GitHub builds, dedup by best available
     const allBuilds=[...localBuilds.map(b=>({...b,type:b.platform||'android'})),...ghBuilds];
     // Return the best build with download URL
-    const withAPK=allBuilds.find(b=>b.downloadUrl||b.downloadUrlAPK);
-    return ok({builds:allBuilds.slice(0,5),bestAPK:withAPK?(withAPK.downloadUrl||withAPK.downloadUrlAPK):null,bestEXE:allBuilds.find(b=>b.downloadUrlEXE)?.downloadUrlEXE||null});
+    const withAPK=allBuilds.find(b=>b.downloadUrl||b.downloadUrlAPK||b.viewUrl);
+    const bestAPK=withAPK?(withAPK.downloadUrl||withAPK.downloadUrlAPK||withAPK.viewUrl||null):null;
+    const bestEXE=allBuilds.find(b=>b.downloadUrlEXE)?.downloadUrlEXE||null;
+    return ok({builds:allBuilds.slice(0,5),bestAPK,bestEXE});
   }
   return fail('Route not found',404);
 } catch(error){return fail(error.message||'Internal error',500);} } };

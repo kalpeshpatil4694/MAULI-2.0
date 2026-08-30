@@ -1121,7 +1121,8 @@ async function checkExistingBuilds() {
         buildCache[p.id] = { apk: result.bestAPK, exe: result.bestEXE || null };
         const buildBtns = document.querySelectorAll('.build-btn[data-project="' + p.id + '"][data-platform="android"]');
         buildBtns.forEach(btn => {
-          btn.textContent = "📱 Download APK";
+          const isRunPage = result.bestAPK && result.bestAPK.includes("/actions/runs/");
+          btn.textContent = isRunPage ? "📱 Build Ready (GitHub)" : "📱 Download APK";
           btn.classList.remove("btn-green");
           btn.classList.add("btn-primary");
           btn.onclick = () => window.open(result.bestAPK, "_blank");
@@ -1130,7 +1131,8 @@ async function checkExistingBuilds() {
         if (result.bestEXE) {
           const exeBtns = document.querySelectorAll('.build-btn[data-project="' + p.id + '"][data-platform="desktop"]');
           exeBtns.forEach(btn => {
-            btn.textContent = "🖥️ Download EXE";
+            const isExeRunPage = result.bestEXE && result.bestEXE.includes("/actions/runs/");
+            btn.textContent = isExeRunPage ? "🖥️ Build Ready (GitHub)" : "🖥️ Download EXE";
             btn.classList.remove("btn-accent");
             btn.classList.add("btn-primary");
             btn.onclick = () => window.open(result.bestEXE, "_blank");
