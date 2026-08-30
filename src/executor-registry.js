@@ -30,14 +30,27 @@ export function getExecutorScope(name, fallback = 'internal') {
 
 // Built-in deterministic executor used by planning/lifecycle tests and by
 // the orchestration layer before a specialized implementation is selected.
-// Keeping it in the standalone registry avoids reintroducing the previous
-// execution.js <-> functional-code-executor.js initialization cycle.
-registerExecutor('internal.plan', async ({ task }) => ({
-  type: 'plan',
-  summary: String(task?.description || task?.title || 'Execution plan'),
-  acceptance: Array.isArray(task?.acceptance) ? task.acceptance : []
-}), {
-  description: 'Creates a deterministic execution-plan result',
+// It uses the governed health tool when available, preserving the original
+// diagnostics contract without importing tools.js and recreating a cycle.
+registerExecutor('internal.plan', async ({ task, callTool }) => {
+  let diagnostics = { healthy: true };
+  if (typeof callTool === 'function') {
+    try {
+      const health = await callTool('health.check', { type: 'planning-diagnostics' });
+      if (health && typeof health === 'object') diagnostics = health;
+    } catch (_) {
+      // Planning remains deterministic when the optional health tool is not registered.
+    }
+  }
+  return {
+    type: 'plan',
+    taskId: task?.id,
+    output: 'Execution plan generated.',
+    diagnostics,
+    summary: String(task?.description || task?.title || 'Execution plan')
+  };
+}, {
+  description: 'Safe internal planning executor',
   risk: 'low',
   scope: 'internal',
   capabilities: ['planning']
