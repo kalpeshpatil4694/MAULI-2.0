@@ -1,0 +1,31 @@
+name: Temporary Dashboard Download Patch
+on:
+  push:
+    branches: [fix/dashboard-download-eligibility]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch download eligibility
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/dashboard.js')
+          s = p.read_text()
+          old = "    if(p.state==='completed'){\n      const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');\n      const dlPath=delivery?.metadata?.downloadPath;\n      if(dlPath) html += '<div style=\"margin-top:12px;padding-top:12px;border-top:1px solid var(--border)\"><button class=\"btn btn-primary btn-sm download-btn\" data-path=\"'+dlPath+'\">📥 Download ZIP</button>';\n      const hasCodeArtifact = STATE.artifacts.some(a => a.projectId === p.id && a.type === 'code-workspace');\n      if (hasCodeArtifact) html += '<button class=\"btn btn-green btn-sm build-btn\" data-project=\"'+p.id+'\" data-platform=\"android\">Build APK</button><button class=\"btn btn-accent btn-sm build-btn\" data-project=\"'+p.id+'\" data-platform=\"desktop\">Build EXE</button>';\n      html += '</div>';\n    }"
+          new = "    {\n      const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');\n      const codeArtifact=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='code-workspace');\n      const dlPath=delivery?.metadata?.downloadPath;\n      if(dlPath) html += '<div style=\"margin-top:12px;padding-top:12px;border-top:1px solid var(--border)\"><button class=\"btn btn-primary btn-sm download-btn\" data-path=\"'+dlPath+'\">📥 Download ZIP</button>';\n      if (codeArtifact) html += '<button class=\"btn btn-green btn-sm build-btn\" data-project=\"'+p.id+'\" data-platform=\"android\">Build APK</button><button class=\"btn btn-accent btn-sm build-btn\" data-project=\"'+p.id+'\" data-platform=\"desktop\">Build EXE</button>';\n      if(dlPath || codeArtifact) html += '</div>';\n    }"
+          if old not in s:
+              raise SystemExit('expected dashboard block not found; refusing unsafe patch')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/dashboard.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix(dashboard): show available downloads and builds'
+          git push
