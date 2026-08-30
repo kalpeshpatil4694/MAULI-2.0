@@ -1,0 +1,94 @@
+name: Apply Build GitHub Token Diagnostic Fix
+
+on:
+  push:
+    branches: [fix/build-github-token-diagnostic-v2]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/build-github-token-diagnostic-v2
+          fetch-depth: 0
+
+      - name: Patch build GitHub error handling
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/index.js')
+          s = p.read_text()
+
+          old = """    const mainRef=await fetch('https://api.github.com/repos/'+repo+'/git/refs/heads/main',{headers:ghHeaders});
+    const mainData=await mainRef.json();
+    const mainSha=mainData?.object?.sha;
+    if(mainSha){
+      await fetch('https://api.github.com/repos/'+repo+'/git/refs',{method:'POST',headers:ghHeaders,body:JSON.stringify({ref:'refs/heads/'+buildBranch,sha:mainSha})});
+    }
+"""
+          new = """    const mainRef=await fetch('https://api.github.com/repos/'+repo+'/git/refs/heads/main',{headers:ghHeaders});
+    const mainData=await mainRef.json().catch(()=>({}));
+    const mainSha=mainData?.object?.sha;
+    if(!mainRef.ok || !mainSha){
+      const apiError=String(mainData?.message||'Unable to read main branch ref');
+      store.addEvent('build.github_error',{operation:'read_main_ref',status:mainRef.status,error:apiError.substring(0,240),repo});
+      return fail('GitHub main-branch access failed. Check the Cloudflare GITHUB_TOKEN repository access.',mainRef.status||502,{buildId,repo,branch:buildBranch,githubStatus:mainRef.status,githubError:apiError.substring(0,240)});
+    }
+    const branchResp=await fetch('https://api.github.com/repos/'+repo+'/git/refs',{method:'POST',headers:ghHeaders,body:JSON.stringify({ref:'refs/heads/'+buildBranch,sha:mainSha})});
+    if(!branchResp.ok){
+      const branchData=await branchResp.json().catch(()=>({}));
+      const apiError=String(branchData?.message||'Unable to create build branch');
+      store.addEvent('build.github_error',{operation:'create_branch',status:branchResp.status,error:apiError.substring(0,240),repo,branch:buildBranch});
+      return fail('GitHub build-branch creation failed.',branchResp.status||502,{buildId,repo,branch:buildBranch,githubStatus:branchResp.status,githubError:apiError.substring(0,240)});
+    }
+"""
+          if old not in s:
+              raise SystemExit('main-ref block not found; aborting without changes')
+          s = s.replace(old, new, 1)
+
+          old = """    let pushed=0;
+    for(const file of files){
+"""
+          new = """    let pushed=0;
+    let firstPushError=null;
+    for(const file of files){
+"""
+          if old not in s:
+              raise SystemExit('push counter block not found; aborting without changes')
+          s = s.replace(old, new, 1)
+
+          old = """      if(putResp.ok){pushed++;}else{const errText=await putResp.text().catch(()=>\"\");store.addEvent('build.push_error',{path:file.path,status:putResp.status,error:errText.substring(0,200)});}
+"""
+          new = """      if(putResp.ok){pushed++;}else{const errText=await putResp.text().catch(()=>\"\");const safeError=errText.substring(0,240);if(!firstPushError)firstPushError={path:file.path,status:putResp.status,error:safeError};store.addEvent('build.push_error',{path:file.path,status:putResp.status,error:safeError});}
+"""
+          if old not in s:
+              raise SystemExit('push response block not found; aborting without changes')
+          s = s.replace(old, new, 1)
+
+          old = """    if(pushed===0){return fail('GitHub token does not have push permissions. The token may be expired or missing repo scope. Please check the GITHUB_TOKEN in Settings > Environment.',500,{buildId,pushed,repo,branch:buildBranch});}
+"""
+          new = """    if(pushed===0){const detail=firstPushError||{status:0,error:'No files were accepted by GitHub'};return fail('GitHub build push failed. See githubStatus/githubError for the safe API diagnostic.',detail.status||502,{buildId,pushed,repo,branch:buildBranch,githubStatus:detail.status,githubError:String(detail.error||'').substring(0,240),failedPath:detail.path||null});}
+"""
+          if old not in s:
+              raise SystemExit('generic token error block not found; aborting without changes')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+      - name: Verify syntax
+        run: |
+          npm ci --no-audit --no-fund
+          node --check src/index.js
+          npm test -- --runInBand
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/index.js
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(build): expose safe GitHub API diagnostics"
+          git push origin HEAD:fix/build-github-token-diagnostic-v2
