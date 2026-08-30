@@ -691,13 +691,13 @@ function renderProjects(){
     html += '<div class="project-stat">🕐 '+fmtDate(p.updatedAt||p.createdAt)+'</div>';
     html += '</div>';
     if(reqs) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:4px">REQUIREMENTS</div>'+reqs+'</div>';
-    if(p.state==='completed'){
+    {
       const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');
+      const codeArtifact=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='code-workspace');
       const dlPath=delivery?.metadata?.downloadPath;
       if(dlPath) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><button class="btn btn-primary btn-sm download-btn" data-path="'+dlPath+'">📥 Download ZIP</button>';
-      const hasCodeArtifact = STATE.artifacts.some(a => a.projectId === p.id && a.type === 'code-workspace');
-      if (hasCodeArtifact) html += '<button class="btn btn-green btn-sm build-btn" data-project="'+p.id+'" data-platform="android">Build APK</button><button class="btn btn-accent btn-sm build-btn" data-project="'+p.id+'" data-platform="desktop">Build EXE</button>';
-      html += '</div>';
+      if (codeArtifact) html += '<button class="btn btn-green btn-sm build-btn" data-project="'+p.id+'" data-platform="android">Build APK</button><button class="btn btn-accent btn-sm build-btn" data-project="'+p.id+'" data-platform="desktop">Build EXE</button>';
+      if(dlPath || codeArtifact) html += '</div>';
     }
 
     // Project tasks
