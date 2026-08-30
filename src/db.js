@@ -4,7 +4,7 @@ export async function ensureSchema(env) {
   if (!hasD1(env)) return false;
   const statements = [
     `CREATE TABLE IF NOT EXISTS entities (type TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(type,id))`,
-    `CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, type TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, type TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)` ,
     `CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type)`,
     `CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)`
   ];
@@ -12,9 +12,27 @@ export async function ensureSchema(env) {
   return true;
 }
 
+function projectStateFromTasks(project, tasks) {
+  const own = tasks.filter(t => t?.projectId === project?.id);
+  if (!own.length) return project?.state ?? 'planning';
+  if (own.some(t => t.state === 'failed')) return 'escalated';
+  if (own.some(t => ['working', 'running', 'blocked', 'assigned'].includes(t.state))) return 'active';
+  if (own.every(t => t.state === 'completed')) return 'completed';
+  if (own.some(t => t.state === 'completed')) return 'active';
+  return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
+}
+
 export async function d1List(env, type) {
   const result = await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC').bind(type).all();
-  return (result.results ?? []).map(row => JSON.parse(row.data));
+  const rows = (result.results ?? []).map(row => JSON.parse(row.data));
+  if (type !== 'projects' || !rows.length) return rows;
+
+  const taskResult = await env.DB.prepare('SELECT data FROM entities WHERE type = ?').bind('tasks').all();
+  const tasks = (taskResult.results ?? []).map(row => JSON.parse(row.data));
+  return rows.map(project => ({
+    ...project,
+    state: projectStateFromTasks(project, tasks)
+  }));
 }
 
 export async function d1Put(env, type, value) {
