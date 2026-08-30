@@ -238,6 +238,8 @@ a{color:var(--accent);text-decoration:none}
       <div class="nav-item" data-page="activity"><span class="nav-icon">📡</span>Activity</div>
       <div class="nav-item" data-page="health"><span class="nav-icon">💚</span>Health</div>
       <div class="nav-item" data-page="memory"><span class="nav-icon">🧠</span>Memory</div>
+      <div class="nav-section">Settings</div>
+      <div class="nav-item" onclick="clearKey()"><span class="nav-icon">🔑</span>Reset API Key</div>
     </nav>
   </aside>
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -446,7 +448,8 @@ a{color:var(--accent);text-decoration:none}
 <script>
 /* ───── STATE ───── */
 let STATE = { agents:[], projects:[], tasks:[], approvals:[], tools:[], artifacts:[], events:[] };
-let authKey = localStorage.getItem('mauli_key') || '';
+let authKey = sanitizeKey(localStorage.getItem('mauli_key') || '');
+if(authKey) localStorage.setItem('mauli_key', authKey);
 
 /* ───── UTILS ───── */
 function $(id){ return document.getElementById(id); }
@@ -467,11 +470,23 @@ function eventColor(type){
 }
 
 /* ───── AUTH ───── */
+function sanitizeKey(k) {
+  // Keep ONLY safe ASCII printable chars — anything else breaks fetch headers
+  return String(k || '').replace(/[^a-zA-Z0-9\-_. ]/g, '').trim();
+}
+
 async function getKey(){
   if(authKey) return authKey;
-  authKey = prompt('Founder API Key:') || '';
+  const raw = prompt('Founder API Key (mauli-founder-key-2026):') || '';
+  authKey = sanitizeKey(raw);
   if(authKey) localStorage.setItem('mauli_key', authKey);
   return authKey;
+}
+
+function clearKey(){
+  authKey = '';
+  localStorage.removeItem('mauli_key');
+  toast('API key cleared. Refresh the page.', 'info');
 }
 
 /* ───── API ───── */
