@@ -988,10 +988,10 @@ async function startBuild(projectId, platform, btn) {
 }
 
 /* ───── EVENT DELEGATION ───── */
-document.addEventListener(click, e => {
-  const dlBtn = e.target.closest(.download-btn);
+document.addEventListener('click', e => {
+  const dlBtn = e.target.closest('.download-btn');
   if(dlBtn) downloadZip(dlBtn.dataset.path);
-  const buildBtn = e.target.closest(.build-btn);
+  const buildBtn = e.target.closest('.build-btn');
   if(buildBtn) startBuild(buildBtn.dataset.project, buildBtn.dataset.platform, buildBtn);
 });
 
