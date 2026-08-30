@@ -44,22 +44,22 @@ export default { async fetch(request, env) { try {
     // Push files to GitHub
     const token=env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT;
     const repo=env?.GITHUB_RESULT_REPO||'kalpeshpatil4694/MAULI-2.0';
-    const branch='main';
+    const buildId='build_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+    const buildBranch='build/'+buildId;
     if(!token)return fail('GitHub token not configured. Add GITHUB_TOKEN env var.',500);
     const ghHeaders={Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'MAULI-2.0-builder','Content-Type':'application/json'};
-    const buildId='build_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
-    const buildFolder='builds/'+buildId;
+    const buildFolder='';
     // Push each file to GitHub
     let pushed=0;
     for(const file of files){
-      const path=buildFolder+'/'+file.path;
+      const path=file.path;
       const content=typeof btoa==='function'?btoa(unescape(encodeURIComponent(file.content))):Buffer.from(file.content).toString('base64');
       // Check if file exists
-      const checkUrl='https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(path)+'?ref='+branch;
+      const checkUrl='https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(path)+'?ref='+buildBranch;
       const checkResp=await fetch(checkUrl,{headers:ghHeaders});
       let sha=null;
       if(checkResp.ok){const d=await checkResp.json();sha=d.sha;}
-      const putBody={message:'MAULI build: '+buildId+' add '+file.path,content,branch};
+      const putBody={message:'MAULI build: '+buildId+' add '+file.path,content,branch:buildBranch};
       if(sha)putBody.sha=sha;
       const putResp=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(path),{method:'PUT',headers:ghHeaders,body:JSON.stringify(putBody)});
       if(putResp.ok)pushed++;
@@ -67,15 +67,15 @@ export default { async fetch(request, env) { try {
     // Also push the build-apps.yml workflow to the build folder
     const wfContent=['name: Build App','on: push','jobs:','  build:','    runs-on: ubuntu-latest','    steps:','      - uses: actions/checkout@v4','      - uses: actions/setup-java@v4','        with:','          distribution: temurin','          java-version: 17','      - uses: actions/setup-node@v4','        with:','          node-version: 20','      - run: npm install','      - run: npm install @capacitor/core @capacitor/cli @capacitor/android','      - run: npx cap sync || true','      - run: cd android && ./gradlew assembleDebug || true','      - uses: actions/upload-artifact@v4','        with:','          name: android-apk','          path: android/app/build/outputs/apk/debug/*.apk'].join('\n');
     const wfBase64=typeof btoa==='function'?btoa(unescape(encodeURIComponent(wfContent))):Buffer.from(wfContent).toString('base64');
-    const wfCheck=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(buildFolder+'/.github/workflows/build.yml')+'?ref='+branch,{headers:ghHeaders});
+    const wfCheck=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-app.yml')+'?ref='+buildBranch,{headers:ghHeaders});
     let wfSha=null;if(wfCheck.ok){const d=await wfCheck.json();wfSha=d.sha;}
-    const wfBody={message:'MAULI build: '+buildId+' workflow',content:wfBase64,branch};
+    const wfBody={message:'MAULI build: '+buildId+' workflow',content:wfBase64,branch:buildBranch};
     if(wfSha)wfBody.sha=wfSha;
     await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(buildFolder+'/.github/workflows/build.yml'),{method:'PUT',headers:ghHeaders,body:JSON.stringify(wfBody)});
     // Store build info
-    store.put('builds',{id:buildId,projectId,platform,buildFolder,repo,branch,pushedAt:now(),status:'pushed',filesPushed:pushed});
+    store.put('builds',{id:buildId,projectId,platform,buildFolder,repo,branch:buildBranch,pushedAt:now(),status:'pushed',filesPushed:pushed});
     store.addEvent('build.started',{buildId,projectId,platform,pushed});
-    return ok({buildId,platform,pushed,repo,folder:buildFolder,status:'pushed',message:pushed+' files pushed to GitHub. Build will start shortly.'});
+    return ok({buildId,platform,pushed,repo,branch:buildBranch,status:'pushed',message:pushed+' files pushed to GitHub. Build will start shortly.'});
   }
   // ── BUILD STATUS: Poll GitHub Actions status ──
   if(request.method==='GET'&&url.pathname.startsWith('/api/build-status/')){
