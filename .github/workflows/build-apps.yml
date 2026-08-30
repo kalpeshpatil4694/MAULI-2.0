@@ -2,85 +2,79 @@ name: Build Apps (.apk and .exe)
 on:
   push:
     branches: [main]
-    paths:
-      - 'www/**'
-      - 'capacitor.config.json'
-      - 'electron/**'
-      - 'package.json'
   workflow_dispatch:
 
 jobs:
   build-android-apk:
     runs-on: ubuntu-latest
-    if: hashFiles('www/index.html') != ''
     steps:
       - uses: actions/checkout@v4
+      - name: Check www folder
+        id: check
+        run: |
+          if [ -d "www" ] && [ -f "www/index.html" ]; then
+            echo "has_www=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_www=false" >> $GITHUB_OUTPUT
+            echo "No www/ folder - skipping Android build"
+          fi
       - uses: actions/setup-java@v4
+        if: steps.check.outputs.has_www == 'true'
         with:
           distribution: temurin
           java-version: 17
       - uses: actions/setup-node@v4
+        if: steps.check.outputs.has_www == 'true'
         with:
           node-version: 20
-      - name: Check www folder
-        run: ls www/ || (echo "No www/ folder found, skipping Android build" && exit 1)
       - name: Install dependencies
+        if: steps.check.outputs.has_www == 'true'
         run: npm install
       - name: Install Capacitor
+        if: steps.check.outputs.has_www == 'true'
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
       - name: Sync web assets
+        if: steps.check.outputs.has_www == 'true'
         run: npx cap sync
       - name: Build Android APK
+        if: steps.check.outputs.has_www == 'true'
         run: cd android && chmod +x gradlew && ./gradlew assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
-        if: success()
+        if: steps.check.outputs.has_www == 'true' && success()
         with:
           name: android-apk
           path: android/app/build/outputs/apk/debug/*.apk
 
-  build-desktop-exe:
+  build-desktop:
     runs-on: ubuntu-latest
-    if: hashFiles('electron/main.js') != ''
     steps:
       - uses: actions/checkout@v4
+      - name: Check electron folder
+        id: check
+        run: |
+          if [ -d "electron" ] && [ -f "electron/main.js" ]; then
+            echo "has_electron=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_electron=false" >> $GITHUB_OUTPUT
+            echo "No electron/ folder - skipping desktop build"
+          fi
       - uses: actions/setup-node@v4
+        if: steps.check.outputs.has_electron == 'true'
         with:
           node-version: 20
-      - name: Check electron folder
-        run: ls electron/ || (echo "No electron/ folder found, skipping desktop build" && exit 1)
       - name: Install dependencies
+        if: steps.check.outputs.has_electron == 'true'
         run: npm install
       - name: Install Electron
+        if: steps.check.outputs.has_electron == 'true'
         run: npm install electron electron-builder --save-dev
-      - name: Build Linux EXE
+      - name: Build Desktop App
+        if: steps.check.outputs.has_electron == 'true'
         run: npx electron-builder --linux --dir
-      - name: Upload Linux build
+      - name: Upload build
         uses: actions/upload-artifact@v4
-        if: success()
+        if: steps.check.outputs.has_electron == 'true' && success()
         with:
-          name: linux-exe
-          path: dist/
-
-  build-windows-exe:
-    runs-on: windows-latest
-    if: hashFiles('electron/main.js') != ''
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Check electron folder
-        run: if exist electron (echo Found) else (echo No electron folder && exit 1)
-      - name: Install dependencies
-        run: npm install
-      - name: Install Electron
-        run: npm install electron electron-builder --save-dev
-      - name: Build Windows EXE
-        run: npx electron-builder --win --dir
-      - name: Upload Windows build
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: windows-exe
+          name: linux-desktop
           path: dist/
