@@ -27,3 +27,19 @@ export function grantExecutor(name, scope = 'internal') {
 export function getExecutorScope(name, fallback = 'internal') {
   return permissions.get(name) ?? fallback;
 }
+
+// Built-in deterministic executor used by planning/lifecycle tests and by
+// the orchestration layer before a specialized implementation is selected.
+// Keeping it in the standalone registry avoids reintroducing the previous
+// execution.js <-> functional-code-executor.js initialization cycle.
+registerExecutor('internal.plan', async ({ task }) => ({
+  type: 'plan',
+  summary: String(task?.description || task?.title || 'Execution plan'),
+  acceptance: Array.isArray(task?.acceptance) ? task.acceptance : []
+}), {
+  description: 'Creates a deterministic execution-plan result',
+  risk: 'low',
+  scope: 'internal',
+  capabilities: ['planning']
+});
+grantExecutor('internal.plan', 'internal');
