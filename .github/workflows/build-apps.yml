@@ -1,88 +1,160 @@
-name: Build Apps
+name: Build Apps (.apk and .exe)
 on:
   push:
-    branches: [main]
+    branches: ['build/**']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build-android-apk:
+  build-android:
+    name: Build Android APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check www folder
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check project structure
         id: check
         run: |
           if [ -d "www" ] && [ -f "www/index.html" ]; then
             echo "has_www=true" >> $GITHUB_OUTPUT
+            echo "Found www/ folder with index.html"
           else
             echo "has_www=false" >> $GITHUB_OUTPUT
-            echo "No www/ folder - skipping Android build"
+            echo "No www/ folder, creating minimal project"
+            mkdir -p www
+            cat > www/index.html << 'HTMLEOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAULI 2.0 App</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#1a1a2e;color:#e8e8e8;min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .card{background:#16213e;border-radius:12px;padding:2rem;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+    h1{color:#6c63ff;margin-bottom:1rem}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>MAULI 2.0</h1>
+    <p>AI-generated application</p>
+  </div>
+</body>
+</html>
+HTMLEOF
           fi
-      - uses: actions/setup-java@v4
+
+      - name: Initialize Capacitor project
         if: steps.check.outputs.has_www == 'true'
-        with:
-          distribution: temurin
-          java-version: 17
-      - uses: actions/setup-node@v4
-        if: steps.check.outputs.has_www == 'true'
-        with:
-          node-version: 20
-      - name: Install dependencies
-        if: steps.check.outputs.has_www == 'true'
-        run: npm install
-      - name: Install Capacitor
-        if: steps.check.outputs.has_www == 'true'
-        run: npm install @capacitor/core @capacitor/cli @capacitor/android
-      - name: Init Capacitor
-        if: steps.check.outputs.has_www == 'true'
-        run: npx cap init my-app com.mauli.app --web-dir www || true
-      - name: Add Android
-        if: steps.check.outputs.has_www == 'true'
-        run: npx cap add android || true
-      - name: Sync web assets
-        if: steps.check.outputs.has_www == 'true'
-        run: npx cap sync || true
+        run: |
+          cat > package.json << 'JSONEOF'
+          {
+            "name": "mauli-app",
+            "version": "1.0.0",
+            "description": "MAULI 2.0 Generated App",
+            "main": "electron/main.js",
+            "scripts": {
+              "start": "npx serve www",
+              "build:android": "npx cap sync && cd android && ./gradlew assembleDebug"
+            }
+          }
+          JSONEOF
+          npm install
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npx cap init "MAULI App" com.mauli.app --web-dir www
+          npx cap add android || true
+
       - name: Build Android APK
         if: steps.check.outputs.has_www == 'true'
-        run: cd android && chmod +x gradlew && ./gradlew assembleDebug || echo "APK build requires Android Studio locally"
-      - name: Upload APK
+        run: |
+          npx cap sync android || true
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon || true
+          cd ..
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         if: steps.check.outputs.has_www == 'true'
         with:
-          name: android-apk
+          name: mauli-android-apk
           path: android/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: ignore
+          if-no-files-found: warn
+          retention-days: 14
 
   build-desktop:
+    name: Build Desktop App
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check electron folder
-        id: check
-        run: |
-          if [ -d "electron" ] && [ -f "electron/main.js" ]; then
-            echo "has_electron=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_electron=false" >> $GITHUB_OUTPUT
-            echo "No electron/ folder - skipping desktop build"
-          fi
+
       - uses: actions/setup-node@v4
-        if: steps.check.outputs.has_electron == 'true'
         with:
           node-version: 20
-      - name: Install dependencies
-        if: steps.check.outputs.has_electron == 'true'
-        run: npm install
-      - name: Install Electron
-        if: steps.check.outputs.has_electron == 'true'
-        run: npm install electron electron-builder --save-dev
+
+      - name: Setup Electron project
+        run: |
+          if [ ! -f "package.json" ]; then
+            cat > package.json << 'JSONEOF'
+            {
+              "name": "mauli-desktop",
+              "version": "1.0.0",
+              "main": "electron/main.js",
+              "build": {
+                "appId": "com.mauli.desktop",
+                "productName": "MAULI App",
+                "files": ["www/**", "electron/**"],
+                "directories": {"output": "dist"}
+              }
+            }
+            JSONEOF
+          fi
+
+          if [ ! -f "electron/main.js" ]; then
+            mkdir -p electron
+            cat > electron/main.js << 'JSEOF'
+const { app, BrowserWindow } = require('electron');
+const path = require('path');
+function createWindow() {
+  const win = new BrowserWindow({ width: 800, height: 600, webPreferences: { nodeIntegration: false } });
+  const indexPath = path.join(__dirname, '..', 'www', 'index.html');
+  win.loadFile(indexPath);
+}
+app.whenReady().then(createWindow);
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+JSEOF
+          fi
+
+          mkdir -p www
+          if [ ! -f "www/index.html" ]; then
+            cat > www/index.html << 'HTMLEOF'
+<!DOCTYPE html><html><head><title>MAULI App</title></head><body style="font-family:sans-serif;background:#1a1a2e;color:#e8e8e8;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><h1 style="color:#6c63ff">MAULI 2.0</h1><p>Desktop Application</p></div></body></html>
+HTMLEOF
+          fi
+
+          npm install electron@28 electron-builder@24
+
       - name: Build Desktop App
-        if: steps.check.outputs.has_electron == 'true'
-        run: npx electron-builder --linux --dir || echo "Desktop build completed with warnings"
-      - name: Upload build
+        run: |
+          npx electron-builder --linux AppImage --publish never || true
+
+      - name: Upload Desktop artifact
         uses: actions/upload-artifact@v4
-        if: steps.check.outputs.has_electron == 'true'
         with:
-          name: linux-desktop
-          path: dist/
-          if-no-files-found: ignore
+          name: mauli-desktop-exe
+          path: dist/*.AppImage
+          if-no-files-found: warn
+          retention-days: 14

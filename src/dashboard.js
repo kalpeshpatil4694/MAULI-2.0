@@ -4,8 +4,7 @@ return `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MAULI 2.0 — AI Command Center</title>
-<style>
+<title>MAULI 2.0 — AI Command Center</title>    <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg-0:#060a14;--bg-1:#0b1120;--bg-2:#111a2e;--bg-3:#182240;
@@ -56,7 +55,20 @@ a{color:var(--accent);text-decoration:none}
 .topbar-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)}
 .status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.status-dot.dead{background:var(--red);animation:pulse-fast 0.5s infinite}
+@keyframes pulse-fast{0%,100%{opacity:1}50%{opacity:.2}}
 .topbar-time{font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums}
+
+/* BUILD PROGRESS */
+.build-progress{background:var(--bg-0);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-top:12px}
+.build-progress-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.build-progress-label{font-size:12px;font-weight:600;color:var(--accent)}
+.build-progress-status{font-size:11px;color:var(--text-muted)}
+.build-progress-bar{height:4px;background:var(--bg-3);border-radius:2px;overflow:hidden}
+.build-progress-fill{height:100%;border-radius:2px;transition:width 1s ease;background:linear-gradient(90deg,var(--accent),var(--accent-2));animation:progressPulse 1.5s ease-in-out infinite}
+@keyframes progressPulse{0%,100%{opacity:1}50%{opacity:.7}}
+.build-progress-fill.done{background:var(--green);animation:none}
+.build-progress-fill.error{background:var(--red);animation:none}
 
 .content{padding:24px 28px 40px}
 .page{display:none}
@@ -252,7 +264,7 @@ a{color:var(--accent);text-decoration:none}
         <div class="topbar-title" id="pageTitle">Command Center</div>
       </div>
       <div class="topbar-right">
-        <div class="topbar-status"><span class="status-dot"></span>System Online</div>
+        <div class="topbar-status"><span class="status-dot" id="heartbeatDot"></span><span id="heartbeatText">System Online</span></div>
         <div class="topbar-time" id="topbarTime"></div>
       </div>
     </div>
@@ -933,57 +945,151 @@ document.addEventListener('keydown', e=>{
   }
 });
 
-/* ───── BUILD APP ───── */
-async function startBuild(projectId, platform, btn) {
-  btn.disabled = true;
-  btn.textContent = "Building...";
+/* ───── HEARTBEAT ───── */
+let lastHeartbeat = 0;
+let heartbeatFailures = 0;
+async function checkHeartbeat() {
   try {
-    const result = await api("/api/build-app", {
-      method: "POST", auth: true,
+    const r = await fetch('/api/heartbeat', { cache: 'no-store' });
+    const j = await r.json();
+    if (j.ok) {
+      lastHeartbeat = Date.now();
+      heartbeatFailures = 0;
+      const dot = $('heartbeatDot');
+      const txt = $('heartbeatText');
+      if (dot) dot.classList.remove('dead');
+      if (txt) txt.textContent = 'System Online';
+    }
+  } catch(e) {
+    heartbeatFailures++;
+    if (heartbeatFailures >= 3) {
+      const dot = $('heartbeatDot');
+      const txt = $('heartbeatText');
+      if (dot) dot.classList.add('dead');
+      if (txt) txt.textContent = 'System Offline';
+    }
+  }
+}
+setInterval(checkHeartbeat, 5000);
+checkHeartbeat();
+
+/* ───── BUILD APP ───── */
+let activeBuilds = {};
+
+function renderBuildProgress(projectId, platform, buildId, status, startedAt) {
+  const el = document.querySelector('.build-progress[data-build="'+buildId+'"]');
+  if (!el) return;
+  const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const timeStr = mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+
+  let pct = 0;
+  let label = '';
+  let fillClass = '';
+  let statusText = '';
+
+  if (status === 'completed' || status === 'success') {
+    pct = 100; fillClass = 'done'; label = '✅ Build Complete!'; statusText = 'Download ready';
+  } else if (status === 'failure' || status === 'error') {
+    pct = 100; fillClass = 'error'; label = '❌ Build Failed'; statusText = 'Check GitHub Actions';
+  } else if (status === 'pushed') {
+    pct = 15; label = '📤 Files Pushed to GitHub'; statusText = 'Waiting for GitHub Actions to start... ' + timeStr;
+  } else if (status === 'in_progress' || status === 'queued') {
+    pct = 50; label = '🔨 Building ' + platform.toUpperCase() + '...'; statusText = 'GitHub Actions is building... ' + timeStr;
+  } else {
+    pct = 25; label = '⏳ Build in progress...'; statusText = 'Elapsed: ' + timeStr;
+  }
+
+  el.innerHTML = '<div class="build-progress-header"><span class="build-progress-label">' + label + '</span><span class="build-progress-status">' + statusText + '</span></div><div class="build-progress-bar"><div class="build-progress-fill ' + fillClass + '" style="width:' + pct + '%"></div></div>';
+}
+
+async function startBuild(projectId, platform, btn) {
+  const buildKey = projectId + '_' + platform;
+  if (activeBuilds[buildKey]) {
+    toast('Build already in progress for ' + platform.toUpperCase(), 'info');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+
+  // Insert progress bar after the button
+  const progressDiv = document.createElement('div');
+  progressDiv.className = 'build-progress';
+  progressDiv.dataset.build = 'pending';
+  btn.closest('div').appendChild(progressDiv);
+
+  try {
+    const result = await api('/api/build-app', {
+      method: 'POST', auth: true,
       body: JSON.stringify({ projectId, platform })
     });
-    toast("Build started! Files pushed to GitHub.", "success");
-    // Poll for status
+
     const buildId = result.buildId;
-    btn.textContent = "Checking...";
+    progressDiv.dataset.build = buildId;
+    activeBuilds[buildKey] = { buildId, startedAt: Date.now() };
+    toast('Build started! ' + result.pushed + ' files pushed to GitHub.', 'success');
+
+    btn.textContent = 'Building...';
     let attempts = 0;
+    const maxAttempts = 60;
+
     const poll = async () => {
       attempts++;
       try {
-        const status = await api("/api/build-status/" + buildId, { auth: true });
+        const status = await api('/api/build-status/' + buildId, { auth: true });
+        renderBuildProgress(projectId, platform, buildId, status.status, activeBuilds[buildKey].startedAt);
+
         if (status.downloadUrl) {
-          btn.textContent = "Download " + platform.toUpperCase();
+          btn.textContent = 'Download ' + platform.toUpperCase();
           btn.disabled = false;
-          btn.onclick = () => window.open(status.downloadUrl, "_blank");
-          toast(platform.toUpperCase() + " ready for download!", "success");
+          btn.classList.remove('btn-green');
+          btn.classList.add('btn-primary');
+          btn.onclick = () => window.open(status.downloadUrl, '_blank');
+          delete activeBuilds[buildKey];
+          toast(platform.toUpperCase() + ' ready for download!', 'success');
+          renderBuildProgress(projectId, platform, buildId, 'completed', activeBuilds[buildKey]?.startedAt || Date.now());
           return;
         }
-        if (status.status === "failure") {
-          btn.textContent = "Build Failed";
+        if (status.status === 'failure' || status.status === 'error') {
+          btn.textContent = 'Build Failed';
           btn.disabled = false;
-          toast("Build failed. Check GitHub Actions.", "error");
+          btn.classList.remove('btn-green');
+          btn.classList.add('btn-red');
+          delete activeBuilds[buildKey];
+          toast('Build failed. Check GitHub Actions.', 'error');
+          renderBuildProgress(projectId, platform, buildId, 'failure', activeBuilds[buildKey]?.startedAt || Date.now());
           return;
         }
-        if (attempts < 30) {
-          btn.textContent = "Building... (" + attempts + ")";
+        if (attempts >= maxAttempts) {
+          btn.textContent = 'Check GitHub';
+          btn.disabled = false;
+          btn.onclick = () => window.open('https://github.com/kalpeshpatil4694/MAULI-2.0/actions', '_blank');
+          delete activeBuilds[buildKey];
+          toast('Build still running. Click to check GitHub Actions.', 'info');
+          renderBuildProgress(projectId, platform, buildId, 'in_progress', activeBuilds[buildKey]?.startedAt || Date.now());
+          return;
+        }
+        setTimeout(poll, 10000);
+      } catch(e) {
+        if (attempts < maxAttempts) {
           setTimeout(poll, 10000);
         } else {
-          btn.textContent = "Check GitHub";
+          btn.textContent = 'Check GitHub';
           btn.disabled = false;
-          btn.onclick = () => window.open("https://github.com/kalpeshpatil4694/MAULI-2.0/actions", "_blank");
-          toast("Build still running. Check GitHub Actions.", "info");
+          toast('Error checking build: ' + e.message, 'error');
+          delete activeBuilds[buildKey];
         }
-      } catch(e) {
-        btn.textContent = "Check GitHub";
-        btn.disabled = false;
-        toast("Error checking build: " + e.message, "error");
       }
     };
     setTimeout(poll, 5000);
   } catch(e) {
-    btn.textContent = "Build " + platform.toUpperCase();
+    btn.textContent = 'Build ' + platform.toUpperCase();
     btn.disabled = false;
-    toast("Build failed: " + e.message, "error");
+    delete activeBuilds[buildKey];
+    toast('Build failed: ' + e.message, 'error');
+    progressDiv.remove();
   }
 }
 
