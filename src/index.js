@@ -155,20 +155,27 @@ export default { async fetch(request, env) { try {
     if(!token)return ok({...build,status:'pushed',message:'GitHub token not configured'});
     const ghHeaders={Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'MAULI-2.0-builder'};
     // Check latest workflow run for this branch/path
-    const runsResp=await fetch('https://api.github.com/repos/'+repo+'/actions/runs?branch='+build.branch+'&per_page=5',{headers:ghHeaders});
+    const runsResp=await fetch('https://api.github.com/repos/'+repo+'/actions/runs?branch='+encodeURIComponent(build.branch)+'&per_page=10',{headers:ghHeaders});
     let status='building';let downloadUrl=null;let conclusion=null;
     if(runsResp.ok){
       const runsData=await runsResp.json();
-      const run=runsData.workflow_runs?.find(r=>r.head_sha?.includes(build.branch)||r.run_attempt===1);
-      if(run){
-        conclusion=run.conclusion;status=run.status;
-        if(conclusion==='success'){
-          // Get artifacts
-          const artResp=await fetch(run.artifacts_url,{headers:ghHeaders});
+      // Find the best run: prefer completed, then in-progress, then queued
+      const runs=runsData.workflow_runs||[];
+      const completed=runs.filter(r=>r.conclusion);
+      const successful=completed.filter(r=>r.conclusion==='success');
+      const inProgress=runs.filter(r=>r.status==='in_progress'||r.status==='queued');
+      // Prefer a successful run, then in-progress, then any completed
+      const bestRun=successful[0]||inProgress[0]||completed[0]||runs[0]||null;
+      if(bestRun){
+        conclusion=bestRun.conclusion||bestRun.status;status=bestRun.status;
+        // Check ALL successful runs for artifacts (not just bestRun)
+        for(const r of successful){
+          if(downloadUrl)break;
+          const artResp=await fetch(r.artifacts_url,{headers:ghHeaders});
           if(artResp.ok){
             const artData=await artResp.json();
-            const apk=artData.artifacts?.find(a=>a.name==='android-apk'||a.name?.includes('apk'));
-            if(apk)downloadUrl=apk.archive_download_url;
+            const apk=artData.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('apk')||a.name.toLowerCase().includes('android')));
+            if(apk&&!apk.expired)downloadUrl=apk.archive_download_url;
           }
         }
       }
