@@ -1119,7 +1119,7 @@ async function checkExistingBuilds() {
       const result = await api("/api/project-builds/" + p.id, { auth: true });
       if (result.bestAPK) {
         buildCache[p.id] = { apk: result.bestAPK, exe: result.bestEXE || null };
-        const buildBtns = document.querySelectorAll(".build-btn[data-project="" + p.id + ""][data-platform="android"]");
+        const buildBtns = document.querySelectorAll('.build-btn[data-project="' + p.id + '"][data-platform="android"]');
         buildBtns.forEach(btn => {
           btn.textContent = "📱 Download APK";
           btn.classList.remove("btn-green");
@@ -1128,7 +1128,7 @@ async function checkExistingBuilds() {
           btn.style.fontWeight = "700";
         });
         if (result.bestEXE) {
-          const exeBtns = document.querySelectorAll(".build-btn[data-project="" + p.id + ""][data-platform="desktop"]");
+          const exeBtns = document.querySelectorAll('.build-btn[data-project="' + p.id + '"][data-platform="desktop"]');
           exeBtns.forEach(btn => {
             btn.textContent = "🖥️ Download EXE";
             btn.classList.remove("btn-accent");
