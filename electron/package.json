@@ -1,0 +1,9 @@
+{
+  "name": "perform-security-review-secure-data-storage-and-encryption",
+  "version": "1.0.0",
+  "main": "main.js",
+  "build": {
+    "appId": "com.mauli.perform-security-review-secure-data-storage-and-encryption",
+    "productName": "Perform security review Secure data storage and encryption"
+  }
+}
