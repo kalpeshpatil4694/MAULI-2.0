@@ -682,7 +682,7 @@ function renderProjects(){
     if(p.state==='completed'){
       const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');
       const dlPath=delivery?.metadata?.downloadPath;
-      if(dlPath) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><button class="btn btn-primary btn-sm download-btn" data-path="'+dlPath+'">📥 Download ZIP</button></div>';
+      if(dlPath) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><button class="btn btn-primary btn-sm download-btn" data-path="'+dlPath+'">📥 Download ZIP</button><button class="btn btn-green btn-sm build-btn" data-project="'+p.id+'" data-platform="android">Build APK</button><button class="btn btn-accent btn-sm build-btn" data-project="'+p.id+'" data-platform="desktop">Build EXE</button></div>';
     }
 
     // Project tasks
