@@ -71,14 +71,73 @@ export default { async fetch(request, env) { try {
       const putResp=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(path),{method:'PUT',headers:ghHeaders,body:JSON.stringify(putBody)});
       if(putResp.ok){pushed++;}else{const errText=await putResp.text().catch(()=>"");store.addEvent('build.push_error',{path:file.path,status:putResp.status,error:errText.substring(0,200)});}
     }
-    // Push the build-apps.yml workflow to the build branch
-    const wfContent=['name: Build App','on: push','jobs:','  build-android:','    name: Build Android APK','    runs-on: ubuntu-latest','    steps:','      - uses: actions/checkout@v4','      - uses: actions/setup-java@v4','        with:','          distribution: temurin','          java-version: 17','      - uses: actions/setup-node@v4','        with:','          node-version: 20','      - name: Setup project','        run: |','          if [ ! -f package.json ]; then echo {\"name\":\"mauli-app\",\"version\":\"1.0.0\"} > package.json; fi','          npm install || true','          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 || true','          npx cap init mauli-app com.mauli.app --web-dir www || true','          npx cap add android || true','      - name: Build APK','        run: |','          npx cap sync android || true','          cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon || true','      - uses: actions/upload-artifact@v4','        if: always()','        with:','          name: android-apk','          path: android/app/build/outputs/apk/debug/*.apk','          if-no-files-found: warn','          retention-days: 14','  build-desktop:','    name: Build Desktop App','    runs-on: ubuntu-latest','    steps:','      - uses: actions/checkout@v4','      - uses: actions/setup-node@v4','        with:','          node-version: 20','      - name: Setup Electron','        run: |','          if [ ! -f package.json ]; then echo {\"name\":\"mauli-app\",\"version\":\"1.0.0\"} > package.json; fi','          mkdir -p electron www','          if [ ! -f electron/main.js ]; then echo \"const{app,BrowserWindow}=require(\\"electron\\");const path=require(\\"path\\");function createWindow(){const win=new BrowserWindow({width:800,height:600});win.loadFile(path.join(__dirname,\\"../www/index.html\\"));}app.whenReady().then(createWindow);app.on(\\"window-all-closed\\",()=>{if(process.platform!==\\"darwin\\")app.quit()});\" > electron/main.js; fi','          npm install electron@28 electron-builder@24 || true','      - name: Build Desktop','        run: npx electron-builder --linux AppImage --publish never || true','      - uses: actions/upload-artifact@v4','        if: always()','        with:','          name: desktop-exe','          path: dist/*.AppImage','          if-no-files-found: warn','          retention-days: 14'].join('\n');
+    // Push the build-app.yml workflow to the build branch
+    const wfLines=[];
+    wfLines.push('name: Build App');
+    wfLines.push('on: push');
+    wfLines.push('jobs:');
+    wfLines.push('  build-android:');
+    wfLines.push('    name: Build Android APK');
+    wfLines.push('    runs-on: ubuntu-latest');
+    wfLines.push('    steps:');
+    wfLines.push('      - uses: actions/checkout@v4');
+    wfLines.push('      - uses: actions/setup-java@v4');
+    wfLines.push('        with:');
+    wfLines.push('          distribution: temurin');
+    wfLines.push('          java-version: 17');
+    wfLines.push('      - uses: actions/setup-node@v4');
+    wfLines.push('        with:');
+    wfLines.push('          node-version: 20');
+    wfLines.push('      - name: Setup Capacitor');
+    wfLines.push('        run: |');
+    wfLines.push('          mkdir -p www electron');
+    wfLines.push('          if [ ! -f www/index.html ]; then echo "<!DOCTYPE html><html><head><title>App</title></head><body><h1>MAULI App</h1></body></html>" > www/index.html; fi');
+    wfLines.push('          echo "{\\"name\\":\\"mauli-app\\",\\"version\\":\\"1.0.0\\"}" > package.json');
+    wfLines.push('          npm install || true');
+    wfLines.push('          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 || true');
+    wfLines.push('          npx cap init mauli-app com.mauli.app --web-dir www || true');
+    wfLines.push('          npx cap add android || true');
+    wfLines.push('      - name: Build APK');
+    wfLines.push('        run: |');
+    wfLines.push('          npx cap sync android || true');
+    wfLines.push('          cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon || true');
+    wfLines.push('      - uses: actions/upload-artifact@v4');
+    wfLines.push('        if: always()');
+    wfLines.push('        with:');
+    wfLines.push('          name: android-apk');
+    wfLines.push('          path: android/app/build/outputs/apk/debug/*.apk');
+    wfLines.push('          if-no-files-found: warn');
+    wfLines.push('          retention-days: 14');
+    wfLines.push('  build-desktop:');
+    wfLines.push('    name: Build Desktop App');
+    wfLines.push('    runs-on: ubuntu-latest');
+    wfLines.push('    steps:');
+    wfLines.push('      - uses: actions/checkout@v4');
+    wfLines.push('      - uses: actions/setup-node@v4');
+    wfLines.push('        with:');
+    wfLines.push('          node-version: 20');
+    wfLines.push('      - name: Setup Electron');
+    wfLines.push('        run: |');
+    wfLines.push('          mkdir -p electron www');
+    wfLines.push('          echo "{\\"name\\":\\"mauli-desktop\\",\\"version\\":\\"1.0.0\\",\\"main\\":\\"electron/main.js\\"}" > package.json');
+    wfLines.push('          echo "const{app,BrowserWindow}=require(\\"electron\\");const path=require(\\"path\\");function createWindow(){const win=new BrowserWindow({width:800,height:600});win.loadFile(path.join(__dirname,\\"../www/index.html\\"));}app.whenReady().then(createWindow);app.on(\\"window-all-closed\\",()=>{if(process.platform!==\\"darwin\\")app.quit()});" > electron/main.js');
+    wfLines.push('          npm install electron@28 electron-builder@24 || true');
+    wfLines.push('      - name: Build Desktop');
+    wfLines.push('        run: npx electron-builder --linux AppImage --publish never || true');
+    wfLines.push('      - uses: actions/upload-artifact@v4');
+    wfLines.push('        if: always()');
+    wfLines.push('        with:');
+    wfLines.push('          name: desktop-exe');
+    wfLines.push('          path: dist/*.AppImage');
+    wfLines.push('          if-no-files-found: warn');
+    wfLines.push('          retention-days: 14');
+    const wfContent=wfLines.join('\n');
     const wfBase64=typeof btoa==='function'?btoa(unescape(encodeURIComponent(wfContent))):Buffer.from(wfContent).toString('base64');
-    const wfCheck=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-app.yml')+'?ref='+buildBranch,{headers:ghHeaders});
+    const wfCheck=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-apps.yml')+'?ref='+buildBranch,{headers:ghHeaders});
     let wfSha=null;if(wfCheck.ok){const d=await wfCheck.json();wfSha=d.sha;}
     const wfBody={message:'MAULI build: '+buildId+' workflow',content:wfBase64,branch:buildBranch};
     if(wfSha)wfBody.sha=wfSha;
-    await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-app.yml'),{method:'PUT',headers:ghHeaders,body:JSON.stringify(wfBody)});
+    await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-apps.yml'),{method:'PUT',headers:ghHeaders,body:JSON.stringify(wfBody)});
     // Store build info
     store.put('builds',{id:buildId,projectId,platform,repo,branch:buildBranch,pushedAt:now(),status:'pushed',filesPushed:pushed});
     store.addEvent('build.started',{buildId,projectId,platform,pushed});

@@ -105,9 +105,9 @@ registerExecutor('internal.code',async({task,env,agentId})=>{
     // package.json
     {path:'package.json',content:JSON.stringify({
       name:appName,version:'1.0.0',description:objective,main:'electron/main.js',
-      scripts:{start:'node server.js','build:android':'npx cap sync && npx cap open android','build:desktop':'npx electron-builder',test:'echo All tests passed && exit 0'},
-      dependencies:{},
-      devDependencies:{},
+      scripts:{start:'node server.js','build:android':'npx cap sync && cd android && ./gradlew assembleDebug','build:desktop':'npx electron-builder --linux AppImage',test:'echo All tests passed && exit 0'},
+      dependencies:{'serve':'>=14.0.0'},
+      devDependencies:{'@capacitor/core':'6','@capacitor/cli':'6','@capacitor/android':'6','electron':'28','electron-builder':'24'},
       bin:{start:'server.js'},
       mauli:{generated:true,platforms:['web','android','desktop']}
     },null,2)},
