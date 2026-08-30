@@ -1,11 +1,9 @@
 import { id, now } from './core.js';
 import { store } from './store.js';
 import { executeTool } from './tools.js';
-import { code } from './ai.js';
 import { registerArtifact } from './artifacts.js';
-import { startTask, markVerifying, completeTask, failTask, assignTask } from './tasks.js';
+import { startTask, markVerifying, completeTask, failTask } from './tasks.js';
 import { verifyResult, retryDecision } from './verification.js';
-import { executeWithAdapter } from './execution-adapter.js';
 import { remember } from './memory.js';
 import { registerExecutor, listExecutors, getExecutor, grantExecutor, getExecutorScope } from './executor-registry.js';
 import './functional-code-executor.js';
@@ -58,7 +56,20 @@ export async function executeTaskLifecycle(task, context = {}) {
   if(currentTask.state==='verifying')return{status:'verifying',task:currentTask};
   if(currentTask.state!=='running')startTask(currentTask.id);
   const execution=await executeTask({...currentTask,state:'running'},lifecycleContext);
-  if(execution.state==='completed'){markVerifying(currentTask.id);const verification=await verifyResult(currentTask,execution,{...lifecycleContext,attempt:execution.attempt});if(verification?.verified){completeTask(currentTask.id,verification.result??execution.result);return{status:'completed',task:store.get('tasks',currentTask.id),execution,verification};}const retry=retryDecision(currentTask,execution,verification);if(retry?.retry){return executeTaskLifecycle(store.get('tasks',currentTask.id)??currentTask,{...lifecycleContext,attempt:(execution.attempt??1)+1});}failTask(currentTask.id,verification?.error??'Verification failed');return{status:'failed',task:store.get('tasks',currentTask.id),execution,verification};}
+  if(execution.state==='completed'){
+    markVerifying(currentTask.id);
+    const verification=verifyResult(currentTask,execution);
+    if(verification?.passed){
+      completeTask(currentTask.id,verification.result??execution.result);
+      return{status:'completed',task:store.get('tasks',currentTask.id),execution,verification};
+    }
+    const retry=retryDecision(currentTask,verification,execution.attempt??1);
+    if(retry?.action==='retry'){
+      return executeTaskLifecycle(store.get('tasks',currentTask.id)??currentTask,{...lifecycleContext,attempt:(execution.attempt??1)+1});
+    }
+    failTask(currentTask.id,verification?.error??'Verification failed');
+    return{status:'failed',task:store.get('tasks',currentTask.id),execution,verification};
+  }
   failTask(currentTask.id,execution.error??'Execution failed');
   return {status:'failed',task:store.get('tasks',currentTask.id),execution};
 }
