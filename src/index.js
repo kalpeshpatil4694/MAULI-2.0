@@ -139,8 +139,9 @@ export default { async fetch(request, env) { try {
     if(wfSha)wfBody.sha=wfSha;
     await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-apps.yml'),{method:'PUT',headers:ghHeaders,body:JSON.stringify(wfBody)});
     // Store build info
-    store.put('builds',{id:buildId,projectId,platform,repo,branch:buildBranch,pushedAt:now(),status:'pushed',filesPushed:pushed});
+    store.put('builds',{id:buildId,projectId,platform,repo,branch:buildBranch,pushedAt:now(),status:pushed>0?'pushed':'failed',filesPushed:pushed});
     store.addEvent('build.started',{buildId,projectId,platform,pushed});
+    if(pushed===0){return fail('GitHub token does not have push permissions. The token may be expired or missing repo scope. Please check the GITHUB_TOKEN in Settings > Environment.',500,{buildId,pushed,repo,branch:buildBranch});}
     return ok({buildId,platform,pushed,repo,branch:buildBranch,status:'pushed',message:pushed+' files pushed to GitHub. Build will start shortly.'});
   }
   // ── BUILD STATUS: Poll GitHub Actions status ──

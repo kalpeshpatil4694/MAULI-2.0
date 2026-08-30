@@ -1091,8 +1091,13 @@ async function startBuild(projectId, platform, btn) {
     btn.textContent = 'Build ' + platform.toUpperCase();
     btn.disabled = false;
     delete activeBuilds[buildKey];
-    toast('Build failed: ' + e.message, 'error');
-    progressDiv.remove();
+    const errMsg = e.message || 'Unknown error';
+    if (errMsg.includes('token') || errMsg.includes('permission') || errMsg.includes('GITHUB_TOKEN')) {
+      toast('GitHub token issue: ' + errMsg, 'error');
+    } else {
+      toast('Build failed: ' + errMsg, 'error');
+    }
+    if (progressDiv) progressDiv.innerHTML = '<div class="build-progress-header"><span class="build-progress-label" style="color:var(--red)">\u274c ' + esc(errMsg) + '</span></div>';
   }
 }
 
