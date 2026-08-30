@@ -53,9 +53,9 @@ export function freePlanFromCommand(command) {
     capabilities.push('product-planning','frontend','backend','database','security','testing');
     requirements.push('Product catalog and product details', 'Shopping cart and checkout flow', 'Order and customer data persistence', 'Basic authentication and security review', 'Responsive user interface');
     acceptanceCriteria.splice(0, acceptanceCriteria.length, 'Product catalog is defined', 'Cart and checkout flow is defined', 'Order persistence is defined', 'Security review is included', 'Testing plan is included');
-  } else if (/(website|web app|application|platform|software|app)/i.test(text)) {
-    capabilities.push('product-planning','frontend','backend','testing');
-    requirements.push('User interface', 'Application/API structure', 'Basic verification');
+  } else if (/(website|web app|application|platform|software|app|game|mobile|bluetooth|barcode|todo|calculator)/i.test(text)) {
+    capabilities.push('product-planning','frontend','backend','database','security','testing');
+    requirements.push('User interface', 'Application/API structure', 'Data persistence', 'Security review', 'Testing plan');
   } else if (/(research|analysis|study)/i.test(text)) {
     capabilities.push('research','verification');
     requirements.push('Research questions and evidence', 'Independent verification');

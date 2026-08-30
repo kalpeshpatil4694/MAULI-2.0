@@ -476,11 +476,10 @@ function sanitizeKey(k) {
 }
 
 async function getKey(){
-  if(authKey) return authKey;
-  const raw = prompt('Founder API Key (mauli-founder-key-2026):') || '';
-  authKey = sanitizeKey(raw);
-  if(authKey) localStorage.setItem('mauli_key', authKey);
-  return authKey;
+  const key = 'mauli-founder-key-2026';
+  authKey = key;
+  localStorage.setItem('mauli_key', key);
+  return key;
 }
 
 function clearKey(){
@@ -499,7 +498,11 @@ async function api(path, opts={}){
   }
   const r = await fetch(path, { cache:'no-store', ...opts, headers });
   const j = await r.json();
-  if(!r.ok || !j.ok) throw new Error(j?.error?.message || 'Request failed');
+  if(!r.ok || !j.ok){
+    const msg = j?.error?.message || 'Request failed';
+    if(msg.includes('authorization') || msg.includes('401')) clearKey();
+    throw new Error(msg);
+  }
   return j.data || j;
 }
 
@@ -676,6 +679,11 @@ function renderProjects(){
     html += '<div class="project-stat">🕐 '+fmtDate(p.updatedAt||p.createdAt)+'</div>';
     html += '</div>';
     if(reqs) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:4px">REQUIREMENTS</div>'+reqs+'</div>';
+    if(p.state==='completed'){
+      const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');
+      const dlPath=delivery?.metadata?.downloadPath;
+      if(dlPath) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><button class="btn btn-primary btn-sm download-btn" data-path="'+dlPath+'">📥 Download ZIP</button></div>';
+    }
 
     // Project tasks
     if(tasks.length){
@@ -811,6 +819,23 @@ function renderMemory(){
   $('memoryList').innerHTML = html || '<div class="empty"><div class="empty-icon">🧠</div><div class="empty-text">No memory entries yet. Execute a founder command to build company memory.</div></div>';
 }
 
+/* ───── DOWNLOAD ───── */
+async function downloadZip(path){
+  try {
+    toast('Downloading...', 'info');
+    const k = await getKey();
+    const r = await fetch(path, { headers:{'Authorization':'Bearer '+k} });
+    if(!r.ok){ toast('Download failed: '+r.status, 'error'); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'mauli-project.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    toast('Download started!', 'success');
+  } catch(e){ toast('Download error: '+e.message, 'error'); }
+}
+
 /* ───── ACTIONS ───── */
 async function sendCommand(){
   const input = $('cmdInput');
@@ -833,6 +858,10 @@ async function sendCommand(){
     $('cmdResult').style.display = 'block';
     $('cmdResult').textContent = 'Error: ' + e.message;
     toast('Command failed: ' + e.message, 'error');
+    if(e.message.includes('authorization') || e.message.includes('401')){
+      clearKey();
+      toast('Key cleared. Please re-enter the correct API key.', 'info');
+    }
   } finally {
     $('sendCmd').disabled = false;
     $('cmdLoading').classList.remove('show');
@@ -902,6 +931,12 @@ document.addEventListener('keydown', e=>{
     const page = document.querySelector('.page.active');
     if(page?.id==='page-command') sendCommand();
   }
+});
+
+/* ───── EVENT DELEGATION ───── */
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.download-btn');
+  if(btn) downloadZip(btn.dataset.path);
 });
 
 /* ───── INIT ───── */
