@@ -1,0 +1,38 @@
+# Temporary targeted patch workflow; self-removes after successful patch.
+name: Fix Dashboard Download Eligibility
+on:
+  push:
+    branches: [fix/dashboard-download-eligibility-v3]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply targeted dashboard patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/dashboard.js')
+          s=p.read_text()
+          old="""    if(p.state==='completed'){\n      const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');\n      const dlPath=delivery?.metadata?.downloadPath;\n      if(dlPath) html += '<div style=\"margin-top:12px;padding-top:12px;border-top:1px solid var(--border)\"><button class=\"btn btn-primary btn-sm download-btn\" data-path=\"'+dlPath+'\">📥 Download ZIP</button>';\n      const hasCodeArtifact = STATE.artifacts.some(a => a.projectId === p.id && a.type === 'code-workspace');\n      if (hasCodeArtifact) html += '<button class=\"btn btn-green btn-sm build-btn\" data-project=\"'+p.id+'\" data-platform=\"android\">Build APK</button><button class=\"btn btn-accent btn-sm build-btn\" data-project=\"'+p.id+'\" data-platform=\"desktop\">Build EXE</button>';\n      html += '</div>';\n    }"""
+          new="""    {\n      const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');\n      const dlPath=delivery?.metadata?.downloadPath;\n      const hasCodeArtifact = STATE.artifacts.some(a => a.projectId === p.id && a.type === 'code-workspace');\n      if(dlPath || hasCodeArtifact) {\n        html += '<div style=\"margin-top:12px;padding-top:12px;border-top:1px solid var(--border)\">';\n        if(dlPath) html += '<button class=\"btn btn-primary btn-sm download-btn\" data-path=\"'+dlPath+'\">📥 Download ZIP</button>';\n        if(hasCodeArtifact) html += '<button class=\"btn btn-green btn-sm build-btn\" data-project=\"'+p.id+'\" data-platform=\"android\">Build APK</button><button class=\"btn btn-accent btn-sm build-btn\" data-project=\"'+p.id+'\" data-platform=\"desktop\">Build EXE</button>';\n        html += '</div>';\n      }\n    }"""
+          if old not in s: raise SystemExit('Target block not found; no edit made')
+          p.write_text(s.replace(old,new,1))
+          PY
+          node --check src/dashboard.js
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/dashboard.js
+          git commit -m 'fix(dashboard): show artifact actions for active projects'
+          git push
+      - name: Remove temporary patch workflow
+        if: always()
+        run: |
+          git rm -f .github/workflows/fix-dashboard-download.yml || true
+          git commit -m 'chore: remove temporary dashboard patch workflow' || true
+          git push || true
