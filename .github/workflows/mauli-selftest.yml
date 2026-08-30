@@ -7,25 +7,25 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: mauli-selftest-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   selftest:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+          cache: npm
       - name: Install dependencies
-        run: npm install || bun install
+        run: npm install --no-audit --no-fund
       - name: Run Node tests
         run: node --test tests/*.test.js
       - name: Run MAULI health check
-        run: |
-          node -e "
-          const { runL1SelfTest } = require('./src/self-test.js');
-          const result = runL1SelfTest();
-          console.log('Self-test:', JSON.stringify(result, null, 2));
-          if (result.status !== 'ready') process.exit(1);
-          "
+        run: node --input-type=module -e "import { runL1SelfTest } from './src/self-test.js'; const result = runL1SelfTest(); console.log('Self-test:', JSON.stringify(result, null, 2)); if (result.status !== 'ready') process.exit(1);"
