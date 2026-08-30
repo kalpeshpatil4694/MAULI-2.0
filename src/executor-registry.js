@@ -1,3 +1,5 @@
+import { listTaskArtifacts } from './artifacts.js';
+
 const handlers = new Map();
 const permissions = new Map();
 
@@ -28,19 +30,13 @@ export function getExecutorScope(name, fallback = 'internal') {
   return permissions.get(name) ?? fallback;
 }
 
-// Built-in deterministic executor used by planning/lifecycle tests and by
-// the orchestration layer before a specialized implementation is selected.
-// It uses the governed health tool when available, preserving the original
-// diagnostics contract without importing tools.js and recreating a cycle.
 registerExecutor('internal.plan', async ({ task, callTool }) => {
   let diagnostics = { healthy: true };
   if (typeof callTool === 'function') {
     try {
       const health = await callTool('health.check', { type: 'planning-diagnostics' });
       if (health && typeof health === 'object') diagnostics = health;
-    } catch (_) {
-      // Planning remains deterministic when the optional health tool is not registered.
-    }
+    } catch (_) {}
   }
   return {
     type: 'plan',
@@ -56,3 +52,31 @@ registerExecutor('internal.plan', async ({ task, callTool }) => {
   capabilities: ['planning']
 });
 grantExecutor('internal.plan', 'internal');
+
+registerExecutor('internal.verify-code', async ({ task }) => {
+  const artifacts = listTaskArtifacts(task?.id);
+  const codeArtifacts = artifacts.filter(a => a.type === 'code-workspace');
+  const checks = [
+    { name: 'artifact_present', passed: codeArtifacts.length > 0 },
+    { name: 'files_present', passed: codeArtifacts.some(a => Array.isArray(a.content?.files) && a.content.files.length > 0) },
+    { name: 'artifact_content_valid', passed: codeArtifacts.some(a => {
+      const files = a.content?.files;
+      return Array.isArray(files) && files.every(f => f && typeof f.path === 'string' && typeof f.content === 'string');
+    }) }
+  ];
+  const passed = checks.every(c => c.passed);
+  return {
+    type: 'verification',
+    taskId: task?.id,
+    passed,
+    checks,
+    artifactId: codeArtifacts[0]?.id ?? null,
+    summary: passed ? 'Code artifact is present and structurally valid.' : 'Code verification failed: required artifact is missing or invalid.'
+  };
+}, {
+  description: 'Verifies generated code artifacts without executing untrusted code',
+  risk: 'low',
+  scope: 'internal',
+  capabilities: ['verification', 'quality-assurance']
+});
+grantExecutor('internal.verify-code', 'internal');
