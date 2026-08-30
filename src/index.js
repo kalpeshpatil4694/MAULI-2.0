@@ -184,5 +184,40 @@ export default { async fetch(request, env) { try {
     store.put('builds',{...build,status:conclusion||status,downloadUrl,checkedAt:now(),id:buildId});
     return ok({buildId,status:conclusion||status,downloadUrl,pushedAt:build.pushedAt,platform:build.platform,filesPushed:build.filesPushed});
   }
+  // ── PROJECT BUILDS: List all builds for a project with download URLs ──
+  if(request.method==='GET'&&url.pathname.startsWith('/api/project-builds/')){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const projectId=url.pathname.split('/').pop();
+    const token=env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT;
+    const repo=env?.GITHUB_RESULT_REPO||'kalpeshpatil4694/MAULI-2.0';
+    if(!token)return ok({builds:[]});
+    const ghHeaders={Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'MAULI-2.0-builder'};
+    // Find builds for this project from our store
+    const localBuilds=store.list('builds').filter(b=>b.projectId===projectId);
+    // Also check GitHub for build/* branches that may match
+    const buildsResp=await fetch('https://api.github.com/repos/'+repo+'/actions/runs?per_page=20',{headers:ghHeaders});
+    const ghBuilds=[];
+    if(buildsResp.ok){
+      const rd=await buildsResp.json();
+      const runs=rd.workflow_runs||[];
+      // Check each successful build run for artifacts
+      for(const r of runs.filter(run=>run.conclusion==='success')){
+        const artResp=await fetch(r.artifacts_url,{headers:ghHeaders});
+        if(artResp.ok){
+          const ad=await artResp.json();
+          const apk=ad.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('apk')||a.name.toLowerCase().includes('android')));
+          const exe=ad.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('exe')||a.name.toLowerCase().includes('desktop')||a.name.toLowerCase().includes('appimage')));
+          if(apk||exe){
+            ghBuilds.push({id:r.id.toString(),branch:r.head_branch||'',status:r.conclusion,conclusion:r.conclusion,completedAt:r.updated_at,downloadUrlAPK:apk&&!apk.expired?apk.archive_download_url:null,downloadUrlEXE:exe&&!exe.expired?exe.archive_download_url:null});
+          }
+        }
+      }
+    }
+    // Merge local + GitHub builds, dedup by best available
+    const allBuilds=[...localBuilds.map(b=>({...b,type:b.platform||'android'})),...ghBuilds];
+    // Return the best build with download URL
+    const withAPK=allBuilds.find(b=>b.downloadUrl||b.downloadUrlAPK);
+    return ok({builds:allBuilds.slice(0,5),bestAPK:withAPK?(withAPK.downloadUrl||withAPK.downloadUrlAPK):null,bestEXE:allBuilds.find(b=>b.downloadUrlEXE)?.downloadUrlEXE||null});
+  }
   return fail('Route not found',404);
 } catch(error){return fail(error.message||'Internal error',500);} } };

@@ -1110,8 +1110,41 @@ document.addEventListener('click', e => {
 });
 
 /* ───── INIT ───── */
-loadState();
-setInterval(loadState, 8000);
+/* ── EXISTING BUILDS CHECK ── */
+const buildCache = {};
+async function checkExistingBuilds() {
+  const completedProjects = STATE.projects.filter(p => p.state === "completed");
+  for (const p of completedProjects) {
+    try {
+      const result = await api("/api/project-builds/" + p.id, { auth: true });
+      if (result.bestAPK) {
+        buildCache[p.id] = { apk: result.bestAPK, exe: result.bestEXE || null };
+        const buildBtns = document.querySelectorAll(".build-btn[data-project="" + p.id + ""][data-platform="android"]");
+        buildBtns.forEach(btn => {
+          btn.textContent = "📱 Download APK";
+          btn.classList.remove("btn-green");
+          btn.classList.add("btn-primary");
+          btn.onclick = () => window.open(result.bestAPK, "_blank");
+          btn.style.fontWeight = "700";
+        });
+        if (result.bestEXE) {
+          const exeBtns = document.querySelectorAll(".build-btn[data-project="" + p.id + ""][data-platform="desktop"]");
+          exeBtns.forEach(btn => {
+            btn.textContent = "🖥️ Download EXE";
+            btn.classList.remove("btn-accent");
+            btn.classList.add("btn-primary");
+            btn.onclick = () => window.open(result.bestEXE, "_blank");
+            btn.style.fontWeight = "700";
+          });
+        }
+      }
+    } catch(e) {}
+  }
+}
+
+/* ── INIT ── */
+loadState().then(() => checkExistingBuilds());
+setInterval(() => { loadState().then(() => checkExistingBuilds()); }, 8000);
 </script>
 </body>
 </html>`;
