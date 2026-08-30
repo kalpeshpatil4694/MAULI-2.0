@@ -1,3 +1,5 @@
+import './functional-code-executor.js';
+
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 function resolveModel(env, options = {}) { return options.model ?? env?.MAULI_MODEL ?? DEFAULT_MODEL; }
@@ -45,7 +47,6 @@ function extractJson(raw) {
 
 export function freePlanFromCommand(command) {
   const text = String(command ?? '').trim();
-  const lower = text.toLowerCase();
   const capabilities = ['planning'];
   const requirements = [text];
   const acceptanceCriteria = ['Clear requirements', 'Execution plan', 'Verification'];
