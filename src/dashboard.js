@@ -933,10 +933,66 @@ document.addEventListener('keydown', e=>{
   }
 });
 
+/* ───── BUILD APP ───── */
+async function startBuild(projectId, platform, btn) {
+  btn.disabled = true;
+  btn.textContent = "Building...";
+  try {
+    const result = await api("/api/build-app", {
+      method: "POST", auth: true,
+      body: JSON.stringify({ projectId, platform })
+    });
+    toast("Build started! Files pushed to GitHub.", "success");
+    // Poll for status
+    const buildId = result.buildId;
+    btn.textContent = "Checking...";
+    let attempts = 0;
+    const poll = async () => {
+      attempts++;
+      try {
+        const status = await api("/api/build-status/" + buildId, { auth: true });
+        if (status.downloadUrl) {
+          btn.textContent = "Download " + platform.toUpperCase();
+          btn.disabled = false;
+          btn.onclick = () => window.open(status.downloadUrl, "_blank");
+          toast(platform.toUpperCase() + " ready for download!", "success");
+          return;
+        }
+        if (status.status === "failure") {
+          btn.textContent = "Build Failed";
+          btn.disabled = false;
+          toast("Build failed. Check GitHub Actions.", "error");
+          return;
+        }
+        if (attempts < 30) {
+          btn.textContent = "Building... (" + attempts + ")";
+          setTimeout(poll, 10000);
+        } else {
+          btn.textContent = "Check GitHub";
+          btn.disabled = false;
+          btn.onclick = () => window.open("https://github.com/kalpeshpatil4694/MAULI-2.0/actions", "_blank");
+          toast("Build still running. Check GitHub Actions.", "info");
+        }
+      } catch(e) {
+        btn.textContent = "Check GitHub";
+        btn.disabled = false;
+        toast("Error checking build: " + e.message, "error");
+      }
+    };
+    setTimeout(poll, 5000);
+  } catch(e) {
+    btn.textContent = "Build " + platform.toUpperCase();
+    btn.disabled = false;
+    toast("Build failed: " + e.message, "error");
+  }
+}
+
 /* ───── EVENT DELEGATION ───── */
-document.addEventListener('click', e => {
-  const btn = e.target.closest('.download-btn');
-  if(btn) downloadZip(btn.dataset.path);
+document.addEventListener(click, e => {
+  const dlBtn = e.target.closest(.download-btn);
+  if(dlBtn) downloadZip(dlBtn.dataset.path);
+  const buildBtn = e.target.closest(.build-btn);
+  if(buildBtn) startBuild(buildBtn.dataset.project, buildBtn.dataset.platform, buildBtn);
 });
 
 /* ───── INIT ───── */
