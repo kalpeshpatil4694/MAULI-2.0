@@ -1,10 +1,11 @@
 name: Deploy MAULI 2.0 Worker
 
 on:
-  workflow_run:
-    workflows: ["MAULI 2.0 L1 CI"]
-    types: [completed]
   workflow_dispatch:
+  workflow_run:
+    workflows:
+      - MAULI 2.0 L1 CI
+    types: [completed]
 
 permissions:
   contents: read
@@ -15,7 +16,9 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    # workflow_run is intentionally gated by the exact successful upstream run.
+    # Manual dispatch is also supported for controlled deployments.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -46,7 +49,7 @@ jobs:
             fi
             if [ "$attempt" -lt 3 ]; then
               wait=$((attempt * 30))
-              echo "Cloudflare API may be throttling. Waiting ${wait}s before retry..."
+              echo "Waiting ${wait}s before deployment retry..."
               sleep "$wait"
             fi
           done
