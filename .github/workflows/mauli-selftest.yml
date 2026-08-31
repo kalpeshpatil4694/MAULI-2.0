@@ -1,33 +1,26 @@
 name: MAULI Self Tests
 
 on:
-  workflow_run:
-    workflows: ["MAULI 2.0 Tests"]
-    types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: mauli-selftest-${{ github.event.workflow_run.head_branch || github.ref }}
+  group: mauli-selftest-manual
   cancel-in-progress: true
 
 jobs:
   selftest:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout tested revision
+      - name: Checkout
         uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Run Node tests
