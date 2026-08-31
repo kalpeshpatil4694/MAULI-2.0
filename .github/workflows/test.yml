@@ -1,27 +1,33 @@
 name: MAULI 2.0 Tests
 
-# Legacy/manual regression entry point. Automatic validation is owned by l1-ci.yml.
 on:
+  workflow_run:
+    workflows: ["MAULI L1 Tests"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: mauli-tests-manual
+  group: mauli-tests-${{ github.event.workflow_run.head_branch || github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout tested revision
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Run tests
