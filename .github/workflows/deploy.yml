@@ -2,7 +2,7 @@ name: Deploy MAULI 2.0 Worker
 
 on:
   workflow_run:
-    workflows: ["MAULI 2.0 L1 CI"]
+    workflows: ["MAULI Self Tests"]
     types: [completed]
   workflow_dispatch:
 
@@ -15,18 +15,17 @@ concurrency:
 
 jobs:
   deploy:
-    # Automatic deployment is allowed only after the canonical L1 CI succeeds.
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout tested revision
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
