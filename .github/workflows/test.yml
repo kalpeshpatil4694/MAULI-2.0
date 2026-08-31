@@ -1,18 +1,28 @@
 name: MAULI 2.0 Tests
 
+# Legacy/manual regression entry point. Automatic validation is owned by l1-ci.yml.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mauli-tests-manual
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - run: npm test
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run tests
+        run: npm test
