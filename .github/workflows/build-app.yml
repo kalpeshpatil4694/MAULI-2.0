@@ -1,0 +1,98 @@
+name: Build App
+on:
+  push:
+    branches: ['build/**']
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/build/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Capacitor
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Init Capacitor
+        run: npx cap init mauli-app com.mauli.app --web-dir www || true
+
+      - name: Add Android platform
+        run: npx cap add android || true
+
+      - name: Sync Capacitor
+        run: npx cap sync
+
+      - name: Build APK
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  build-desktop-linux:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/build/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Electron
+        run: npm install electron electron-builder --save-dev
+
+      - name: Build Linux
+        run: npx electron-builder --linux --dir || true
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-desktop
+          path: dist/
+          if-no-files-found: ignore
+
+  build-desktop-windows:
+    runs-on: windows-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/build/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Electron
+        run: npm install electron electron-builder --save-dev
+
+      - name: Build Windows
+        run: npx electron-builder --win --dir || true
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/
+          if-no-files-found: ignore
