@@ -1,16 +1,10 @@
 import './functional-code-executor.js';
 
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-
 function resolveModel(env, options = {}) { return options.model ?? env?.MAULI_MODEL ?? DEFAULT_MODEL; }
 function getProvider(env, options = {}) { return options.provider ?? env?.MAULI_AI_PROVIDER ?? 'cloudflare'; }
-
-async function cloudflareGenerate(env, messages, options = {}) {
-  if (!env?.AI?.run) throw new Error('Cloudflare AI binding is not configured');
-  const response = await env.AI.run(resolveModel(env, options), { messages, temperature: options.temperature ?? 0.2, max_tokens: options.maxTokens ?? 1200 });
-  return response?.response ?? response;
-}
-export async function generateAI(env, messages, options = {}) { switch (getProvider(env, options)) { case 'cloudflare': return cloudflareGenerate(env, messages, options); default: throw new Error(`Unsupported AI provider: ${getProvider(env, options)}`); } }
+async function cloudflareGenerate(env, messages, options = {}) { if (!env?.AI?.run) throw new Error('Cloudflare AI binding is not configured'); const response = await env.AI.run(resolveModel(env, options), { messages, temperature: options.temperature ?? 0.2, max_tokens: options.maxTokens ?? 1200 }); return response?.response ?? response; }
+export async function generateAI(env, messages, options = {}) { switch (getProvider(env, options)) { case 'cloudflare': return cloudflareGenerate(env, messages, options); default: throw new Error(`Unsupported AI provider: ${getProvider(env)}`); } }
 export async function generate(env, messages, options = {}) { return generateAI(env, messages, options); }
 export async function reason(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 1800 }); }
 export async function code(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 2400 }); }
@@ -21,8 +15,8 @@ function cleanList(value, limit = 30) { return Array.isArray(value) ? value.map(
 export function freePlanFromCommand(command) {
   const text = String(command ?? '').trim();
   const capabilities = ['planning']; const requirements = [text]; const acceptanceCriteria = ['Clear requirements', 'Execution plan', 'Verification'];
-  if (/(e-commerce|ecommerce|online store|online shop|shop|store)/i.test(text)) { capabilities.push('product-planning','frontend','backend','database','security','testing'); requirements.push('Product catalog and product details','Shopping cart and checkout flow','Order and customer data persistence','Basic authentication and security review','Responsive user interface'); acceptanceCriteria.splice(0, acceptanceCriteria.length,'Product catalog is defined','Cart and checkout flow is defined','Order persistence is defined','Security review is included','Testing plan is included'); }
-  else if (/(website|web app|application|platform|software|app|game|mobile|bluetooth|barcode|todo|calculator)/i.test(text)) { capabilities.push('product-planning','frontend','backend','database','security','testing'); requirements.push('User interface','Application/API structure','Data persistence','Security review','Testing plan'); }
+  if (/(e-commerce|ecommerce|online store|online shop|shop|store)/i.test(text)) { capabilities.push('research','product-planning','frontend','backend','database','security','testing'); requirements.push('Product catalog and product details','Shopping cart and checkout flow','Order and customer data persistence','Basic authentication and security review','Responsive user interface'); acceptanceCriteria.splice(0, acceptanceCriteria.length,'Product catalog is defined','Cart and checkout flow is defined','Order persistence is defined','Security review is included','Testing plan is included'); }
+  else if (/(website|web app|application|platform|software|app|game|mobile|bluetooth|barcode|todo|calculator)/i.test(text)) { capabilities.push('research','product-planning','frontend','backend','database','security','testing'); requirements.push('User interface','Application/API structure','Data persistence','Security review','Testing plan'); }
   else if (/(research|analysis|study)/i.test(text)) { capabilities.push('research','verification'); requirements.push('Research questions and evidence','Independent verification'); }
   return { objective:text, requirements, capabilities:[...new Set(capabilities)], risks:['AI model unavailable; deterministic free planning fallback used'], acceptanceCriteria };
 }
@@ -30,9 +24,7 @@ export function freePlanFromCommand(command) {
 function normalizePlan(parsed, command) {
   const aiCapabilities = [...new Set(cleanList(parsed?.capabilities).map(x => x.toLowerCase()).filter(x => CAPABILITIES.includes(x)))];
   const aiRequirements = cleanList(parsed?.requirements); const aiAcceptance = cleanList(parsed?.acceptanceCriteria); const aiRisks = cleanList(parsed?.risks, 20);
-  const fallback = freePlanFromCommand(command);
-  const software = /(e-commerce|ecommerce|online store|online shop|shop|store|website|web app|application|platform|software|app|game|mobile|bluetooth|barcode|todo|calculator)/i.test(String(command));
-  return { objective:String(parsed?.objective ?? command).trim() || String(command), requirements:software?[...new Set([...aiRequirements,...fallback.requirements])]:aiRequirements, capabilities:software?[...new Set([...aiCapabilities,...fallback.capabilities])]:aiCapabilities, risks:[...new Set([...fallback.risks,...aiRisks])], acceptanceCriteria:software?[...new Set([...aiAcceptance,...fallback.acceptanceCriteria])]:aiAcceptance };
+  return { objective:String(parsed?.objective ?? command).trim() || String(command), requirements:aiRequirements, capabilities:aiCapabilities, risks:aiRisks, acceptanceCriteria:aiAcceptance };
 }
 
 function extractJson(raw) { if (raw && typeof raw === 'object') return raw; const text=String(raw??'').trim(); try{return JSON.parse(text);}catch{} const fenced=text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]; if(fenced){try{return JSON.parse(fenced);}catch{}} const first=text.indexOf('{'),last=text.lastIndexOf('}'); if(first>=0&&last>first){try{return JSON.parse(text.slice(first,last+1));}catch{}} return null; }
