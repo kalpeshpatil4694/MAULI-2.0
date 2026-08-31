@@ -2,7 +2,7 @@ name: Deploy MAULI 2.0 Worker
 
 on:
   workflow_run:
-    workflows: ["MAULI Self Tests"]
+    workflows: ["MAULI 2.0 L1 CI"]
     types: [completed]
   workflow_dispatch:
 
@@ -28,7 +28,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
