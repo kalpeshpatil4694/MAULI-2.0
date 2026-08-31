@@ -37,7 +37,8 @@ test('L1 e-commerce security-aware flow gates code work and completes after appr
   seedAgents();
   const command = 'Create a simple e-commerce platform';
   const env = { AI: { async run(_model, request) {
-    const system = request?.find(message => message.role === 'system')?.content ?? '';
+    const messages = request?.messages ?? request;
+    const system = Array.isArray(messages) ? (messages.find(message => message.role === 'system')?.content ?? '') : '';
     if (system.includes('Functional Application Engineer')) return { response: functionalResponse() };
     return { response: JSON.stringify({ objective:command, requirements:['catalog','cart','orders'], capabilities:['product-planning','frontend','backend','database','security','testing'], risks:[], acceptanceCriteria:['Functional product'] }) };
   } } };
