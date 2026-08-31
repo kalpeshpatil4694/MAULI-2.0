@@ -53,7 +53,7 @@ export async function resumeApprovedCommand(approvalId, env = {}) {
   const approval = store.get('approvals', approvalId);
   if (!approval || !isApprovalGranted(approvalId)) return { status:'awaiting_approval', approval };
   const project = store.get('projects', approval.projectId);
-  const tasks = store.list('tasks').filter(t=>t.projectId===approval.projectId&&!t.finalProjectVerification);
+  const tasks = store.list('tasks').filter(t=>t.projectId===approval.projectId);
   const task = tasks.filter(t=>t.state!=='completed').sort((a,b)=>(a.sequence??0)-(b.sequence??0))[0];
   if (!project || !task) return { status:'error', error:'Approved project/task not found' };
   return executePlannedProject({ project, task, selectedAgent:task.assignedAgentId?store.get('agents',task.assignedAgentId):null, env, approved:true, plannedTasks:tasks.map(t=>({task:t,selectedAgent:t.assignedAgentId?store.get('agents',t.assignedAgentId):null})) });
@@ -63,8 +63,6 @@ function addTasks(project, plan, objective, risk) {
   const specs = makeSpecs(plan, objective);
   const made = [];
   for (const spec of specs) {
-    // Planning executors do not execute the task-specific tools they are planning for.
-    // Requiring those tools here caused safe planning to fail on external/read tools.
     const tools = spec.executor === 'internal.plan' ? [] : toolsForTask({ requiredCapabilities:spec.requiredCapabilities }, { scope:'internal', maxRisk:'read' });
     const selected = findAgent(spec, tools);
     const prev = made.at(-1)?.task;
@@ -75,6 +73,14 @@ function addTasks(project, plan, objective, risk) {
       sequence:spec.sequence, dependsOn:prev?[prev.id]:[]
     });
     if (task) made.push({task,selectedAgent:selected,toolNames:tools});
+  }
+  // Final QA is part of the planned project from the beginning. This makes it
+  // visible, persisted, dependency-ordered and impossible to skip during an
+  // approval/resume flow.
+  const last = made.at(-1)?.task;
+  if (last && !made.some(x=>x.task.finalProjectVerification)) {
+    const qa = finalQA(project,last);
+    if (qa) made.push({task:qa,selectedAgent:qa.assignedAgentId?store.get('agents',qa.assignedAgentId):null,toolNames:[]});
   }
   return made;
 }
@@ -97,7 +103,6 @@ function findAgent(spec,tools){
   return selectAgents(spec.requiredCapabilities,null,{requiredTools:tools,requireAllTools:true})[0]??selectAgents(spec.requiredCapabilities,null,{requireAllTools:false})[0]??store.list('agents').find(a=>spec.requiredCapabilities.every(c=>(a.capabilities??[]).includes(c)))??null;
 }
 function allDepsComplete(task){return(task?.dependsOn??[]).every(depId=>{const dep=store.get('tasks',depId);return dep&&dep.state==='completed';});}
-function isLive(taskId){if(!taskId)return false;return store.list('runs').some(r=>r.taskId===taskId&&r.state==='running');}
 function memoryContext(task){return recall({scope:'task',scopeId:task?.id??null,type:'solution',limit:5}).map(m=>m.content);}
 function rememberRun(task,run,check){const base={scope:'task',scopeId:task.id,source:'execution',tags:[task.executor,...(task.requiredCapabilities??[])]};remember({type:'task_result',content:{taskId:task.id,status:run?.state,result:run?.result??null,verificationPassed:check?.passed===true},importance:check?.passed?'normal':'high',...base});if(run?.error)remember({type:'error',content:{taskId:task.id,error:run.error},importance:'high',...base});if(check?.passed)remember({type:'solution',content:{taskId:task.id,summary:'Task execution passed L1 verification.',artifactId:run?.result?.artifactId??null},importance:'normal',...base});}
 function entries(plannedTasks){return(plannedTasks??[]).map(x=>{const t=store.get('tasks',x.task?.id??x.id)??x.task??x;const agent=t?.assignedAgentId?store.get('agents',t.assignedAgentId):x.selectedAgent??null;return{...t,task:t,selectedAgent:agent};});}
