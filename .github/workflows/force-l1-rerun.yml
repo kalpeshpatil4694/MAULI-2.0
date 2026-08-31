@@ -1,11 +1,22 @@
 name: Force L1 CI Rerun
 
-on: [push, workflow_dispatch]
+# Manual diagnostic trigger only. A push must not create a second CI run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mauli-force-rerun
+  cancel-in-progress: true
 
 jobs:
   trigger:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
-      - name: Trigger marker
-        run: echo "L1 CI rerun trigger"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Diagnostic marker
+        run: echo "Manual L1 diagnostic trigger requested"
