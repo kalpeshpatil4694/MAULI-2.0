@@ -34,6 +34,9 @@ function invalid(files) {
 }
 
 async function generateFunctionalArtifact({ task, env, agentId }) {
+  // executeTaskLifecycle passes runtime bindings inside context.env. Accept both
+  // forms so the executor cannot silently lose the Cloudflare AI binding.
+  const runtimeEnv = env?.env?.AI ? env.env : env;
   const objective = text(task.description || task.title || 'Build a software application');
   const acceptance = Array.isArray(task.acceptance) ? task.acceptance : [];
   const system = [
@@ -54,8 +57,9 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   let lastError = '';
   for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
     try {
+      if (!runtimeEnv?.AI?.run) throw new Error('Cloudflare AI binding is not configured for functional code generation');
       const prompt = attempt === 0 ? objective : objective + '\nPrevious generation was invalid. Regenerate the COMPLETE application now. Output JSON only and include all required source files.';
-      parsed = parseModel(await code(env, [{ role: 'system', content: system }, { role: 'user', content: prompt }], { maxTokens: 5000 }));
+      parsed = parseModel(await code(runtimeEnv, [{ role: 'system', content: system }, { role: 'user', content: prompt }], { maxTokens: 5000 }));
       if (!parsed || invalid(filesOf(parsed.files))) parsed = null;
     } catch (e) { lastError = text(e); parsed = null; }
   }
