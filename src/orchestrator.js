@@ -11,14 +11,18 @@ import { verifyResult, retryDecision } from './verification.js';
 import { toolsForTask } from './tools.js';
 import { buildFinalDelivery } from './delivery.js';
 import { completeTask } from './tasks.js';
+import './pdf-executor.js';
+import './native-code-executor.js';
 
-const ORDER = { research:10, 'product-planning':20, backend:30, database:40, frontend:50, security:60, testing:70 };
+const ORDER = { research:10, 'product-planning':20, backend:30, database:40, frontend:50, native:55, pdf:58, security:60, testing:70 };
 const SPECS = [
   ['research','Research and validate requirements',['research','analysis'],'internal.plan'],
   ['product-planning','Define product and architecture plan',['product-planning','planning'],'internal.plan'],
   ['backend','Implement backend code and API',['backend','api'],'internal.code'],
   ['database','Implement database and persistence schema',['database','schema','sql'],'internal.code'],
   ['frontend','Implement frontend code and user experience',['frontend','ui'],'internal.code'],
+  ['native','Implement native platform code',['mobile','android','ios','desktop','native','flutter'],'internal.native'],
+  ['pdf','Generate PDF document',['pdf','document','report','invoice'],'internal.pdf'],
   ['security','Perform security review',['security','audit'],'internal.code'],
   ['testing','Create testing and verification plan',['testing','verification'],'internal.plan']
 ];
@@ -28,6 +32,8 @@ const DEPENDENCIES = {
   backend: ['product-planning'],
   database: ['product-planning'],
   frontend: ['product-planning','backend'],
+  native: ['product-planning'],
+  pdf: ['product-planning'],
   security: ['product-planning'],
   testing: ['product-planning']
 };

@@ -1,7 +1,7 @@
 import { id, now } from './core.js';
 import { store } from './store.js';
 
-export const MEMORY_TYPES = ['founder_rule','founder_preference','company_decision','project_requirement','technical_knowledge','agent_result','task_result','error','solution','approval'];
+export const MEMORY_TYPES = ['founder_rule','founder_preference','company_decision','project_requirement','technical_knowledge','agent_result','task_result','error','solution','approval','agent_communication','task_handoff','agent.task_learning'];
 export const MEMORY_IMPORTANCE = ['low','normal','high','critical'];
 
 export function remember({ type, content, scope = 'company', scopeId = null, importance = 'normal', tags = [], source = 'system' }) {

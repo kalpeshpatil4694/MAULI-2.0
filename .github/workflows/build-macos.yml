@@ -1,0 +1,66 @@
+name: Build macOS App
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mauli-macos-build
+  cancel-in-progress: true
+
+jobs:
+  build-macos:
+    name: Build macOS .dmg
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate source
+        run: |
+          set -e
+          if [ ! -f www/index.html ] && [ ! -f src/main.js ]; then
+            echo "No web or electron source found"
+            exit 1
+          fi
+          test -s package.json
+          echo "Source validated"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Setup Electron
+        run: |
+          mkdir -p electron
+          if [ ! -f electron/main.js ]; then
+            cat > electron/main.js << 'ELECTRON'
+const { app, BrowserWindow } = require('electron');
+const path = require('path');
+function createWindow() {
+  const win = new BrowserWindow({ width: 1200, height: 800 });
+  win.loadFile(path.join(__dirname, '../www/index.html'));
+}
+app.whenReady().then(createWindow);
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+ELECTRON
+          fi
+          npm install --no-audit --no-fund --save-dev electron@28 electron-builder@24
+
+      - name: Build macOS .dmg
+        run: npx electron-builder --mac --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: warn
+          retention-days: 14

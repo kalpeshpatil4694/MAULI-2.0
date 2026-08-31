@@ -628,6 +628,24 @@ function renderOverview(){
   }
   $('ov-taskPipeline').innerHTML = pipeHTML || '<div class="empty"><div class="empty-text">No tasks yet</div></div>';
 
+  // Learning & Skills summary
+  let totalSkills = 0;
+  let totalXP = 0;
+  for (const ag of a) {
+    const skillTree = ag.metadata?.skillTree || {};
+    const skills = Object.values(skillTree);
+    totalSkills += skills.length;
+    totalXP += skills.reduce((sum, s) => sum + (s.xp || 0), 0);
+  }
+  const skillsHTML = '<div style="display:flex;gap:16px;margin-bottom:12px">'
+    + '<div style="flex:1;text-align:center;padding:12px;background:rgba(15,52,96,.3);border-radius:8px"><div style="font-size:24px;font-weight:700;color:var(--accent)">'+totalSkills+'</div><div style="font-size:11px;color:var(--text-dim)">Total Skills</div></div>'
+    + '<div style="flex:1;text-align:center;padding:12px;background:rgba(15,52,96,.3);border-radius:8px"><div style="font-size:24px;font-weight:700;color:var(--green)">'+totalXP+'</div><div style="font-size:11px;color:var(--text-dim)">Total XP</div></div>'
+    + '</div>';
+  const skillsContainer = $('ov-taskPipeline')?.parentElement;
+  if (skillsContainer) {
+    skillsContainer.insertAdjacentHTML('afterend', '<div style="margin-top:16px"><div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:8px">🤖 AGENT LEARNING</div>' + skillsHTML + '</div>');
+  }
+
   // Recent projects
   const sorted = [...STATE.projects].sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
   let projHTML = '';
@@ -661,6 +679,26 @@ function renderAgents(){
     html += '</div>';
     html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">'+tasks+' tasks completed</div>';
     html += '<div class="agent-caps">'+caps+'</div>';
+    // Show skill tree levels
+    const skillTree = meta.skillTree || {};
+    const skillKeys = Object.keys(skillTree).slice(0, 5);
+    if (skillKeys.length > 0) {
+      html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">';
+      html += '<div style="font-size:10px;font-weight:600;color:var(--text-dim);margin-bottom:4px">SKILL LEVELS</div>';
+      for (const sk of skillKeys) {
+        const level = skillTree[sk].level || 0;
+        const xp = skillTree[sk].xp || 0;
+        const bar = Math.min(100, (xp % 50) * 2);
+        html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">';
+        html += '<span style="font-size:10px;color:var(--text-muted);width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(sk)+'</span>';
+        html += '<div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">';
+        html += '<div style="height:100%;width:'+bar+'%;background:var(--accent);border-radius:2px"></div>';
+        html += '</div>';
+        html += '<span style="font-size:10px;color:var(--accent);font-weight:600">L'+level+'</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
     html += '</div>';
   }
   $('agentGrid').innerHTML = html || '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🤖</div><div class="empty-text">No agents found</div></div>';
