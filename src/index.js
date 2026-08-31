@@ -20,6 +20,13 @@ import { processChatMessage, getChatHistory, getActiveConversations, cloneProjec
 import { editFile, getEditHistory, getRecentEdits, undoEdit, getFileChangeSummary, parseEditCommand } from './file-editor.js';
 import { recordActivity, getActivityFeed, getProjectProgress, getLiveStatus, createSubAgent, getSubAgents, requestHelp, getAgentConversation } from './live-monitor.js';
 import { generateProjectDocs } from './docs-generator.js';
+import { searchAPIs, recommendAPIs, getAPICatalog, getAPICategories } from './public-apis.js';
+import { getMCPForAgent, getMCPByCapability, getAllMCPServers, getMCPCategories, suggestMCPForProject } from './mcp-integration.js';
+import { checkOllama, ollamaGenerate, ollamaChat, ollamaCode, getRecommendedModels, getModelForTask } from './ollama-ai.js';
+import { scrapePage, researchTopic } from './scraper.js';
+import { getFreeServices, getServicesByCategory, getServiceCategories, estimateFreeTierCost } from './free-services.js';
+import { generateDesignCSS, getThemes, createDesignSystem } from './design-system.js';
+import { getAgentPatterns, getPatternForProject, getPatternCategories } from './agent-patterns.js';
 
 function artifactJson(artifact) { return artifact ? ok({ artifact }) : fail('Artifact not found',404); }
 function isIsolatedTestEnv(env) { return env?.SKIP_RESULT_PERSISTENCE === true || env?.SKIP_RESULT_PERSISTENCE === 'true' || env?.MAULI_TEST_MODE === true || env?.MAULI_TEST_MODE === 'true'; }
@@ -68,6 +75,30 @@ export default { async fetch(request, env) { try {
   if(request.method==='POST'&&url.pathname==='/api/clone'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const result=cloneProject(body.projectId,body.newObjective);return ok({result});}
   // Documentation API
   if(request.method==='GET'&&url.pathname.startsWith('/api/docs/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const pid=parts[parts.length-1];const docs=generateProjectDocs(pid);return ok({docs});}
+  // Public APIs Integration
+  if(request.method==='GET'&&url.pathname==='/api/apis/search'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const q=url.searchParams.get('q')||'';return ok({apis:searchAPIs(q)});}
+  if(request.method==='GET'&&url.pathname==='/api/apis/recommend'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const obj=url.searchParams.get('objective')||'';return ok({recommendations:recommendAPIs(obj)});}
+  if(request.method==='GET'&&url.pathname==='/api/apis/catalog'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({catalog:getAPICatalog(),categories:getAPICategories()});}
+  // MCP Integration
+  if(request.method==='GET'&&url.pathname==='/api/mcp/servers'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({servers:getAllMCPServers(),categories:getMCPCategories()});}
+  if(request.method==='GET'&&url.pathname==='/api/mcp/for-agent'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const agent=url.searchParams.get('agent');return ok({servers:getMCPForAgent(agent)});}
+  if(request.method==='GET'&&url.pathname==='/api/mcp/suggest'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const obj=url.searchParams.get('objective')||'';return ok({servers:suggestMCPForProject(obj)});}
+  // Ollama Integration
+  if(request.method==='GET'&&url.pathname==='/api/ollama/status'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const status=await checkOllama();return ok({status,models:getRecommendedModels()});}
+  if(request.method==='POST'&&url.pathname==='/api/ollama/generate'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const result=await ollamaGenerate(body.prompt,body.options);return ok({result});}
+  if(request.method==='POST'&&url.pathname==='/api/ollama/chat'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const result=await ollamaChat(body.messages,body.options);return ok({result});}
+  if(request.method==='POST'&&url.pathname==='/api/ollama/code'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const result=await ollamaCode(body.prompt,body.options);return ok({result});}
+  // Scraper
+  if(request.method==='GET'&&url.pathname==='/api/scrape'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const target=url.searchParams.get('url');if(!target)return fail('url required',400);const result=await scrapePage(target);return ok({result});}
+  if(request.method==='GET'&&url.pathname==='/api/research'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const q=url.searchParams.get('q')||'';const result=await researchTopic(q);return ok({result});}
+  // Free Services
+  if(request.method==='GET'&&url.pathname==='/api/free-services'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const type=url.searchParams.get('type')||'web';return ok({services:getFreeServices(type),categories:getServiceCategories(),estimate:estimateFreeTierCost(type)});}
+  // Design System
+  if(request.method==='GET'&&url.pathname==='/api/design/themes'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({themes:getThemes()});}
+  if(request.method==='GET'&&url.pathname==='/api/design/css'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const theme=url.searchParams.get('theme')||'dark';return ok({css:generateDesignCSS(theme)});}
+  // Agent Patterns
+  if(request.method==='GET'&&url.pathname==='/api/patterns'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({patterns:getPatternCategories()});}
+  if(request.method==='GET'&&url.pathname==='/api/patterns/recommend'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const obj=url.searchParams.get('objective')||'';const pattern=getPatternForProject(obj);return ok({pattern});}
   if(request.method==='GET'&&url.pathname==='/api/artifacts'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');const taskId=url.searchParams.get('taskId');const artifacts=projectId?listProjectArtifacts(projectId):taskId?listTaskArtifacts(taskId):store.list('artifacts');return ok({artifacts});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')&&url.pathname.endsWith('/download')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const artifactId=parts[parts.length-2];const artifact=getArtifact(artifactId);if(!artifact)return fail('Artifact not found',404);let files=collectProjectFiles(artifact.projectId,artifact,store);if(!files.length){const tasks=store.list('tasks').filter(t=>t.projectId===artifact.projectId);const summary=[];summary.push({path:'README.md',content:`# MAULI 2.0 — Project Delivery\n\n## Project\n- **ID:** ${artifact.projectId}\n- **Type:** ${artifact.type}\n- **Delivered:** ${new Date().toISOString()}\n\n## Tasks (${tasks.length})\n${tasks.map(t=>`- [${t.state}] ${t.title}${t.assignedAgentId?' (Agent: '+t.assignedAgentId+')':''}`).join('\n')}\n`});summary.push({path:'project-data.json',content:JSON.stringify({projectId:artifact.projectId,type:artifact.type,content:artifact.content,metadata:artifact.metadata},null,2)});files=summary;}const zip=createZip(files);const safeName=String(artifact.projectId).replace(/[^a-zA-Z0-9_-]/g,'_');return new Response(zip,{status:200,headers:{'content-type':'application/zip','content-disposition':`attachment; filename="mauli-${safeName}.zip"`,'cache-control':'no-store'}});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return artifactJson(getArtifact(url.pathname.split('/').pop()));}
