@@ -10,8 +10,8 @@ import './functional-code-executor.js';
 
 export { registerExecutor, listExecutors, grantExecutor } from './executor-registry.js';
 
-function requiredToolNames(task){return [...new Set((task?.toolNames??task?.requiredTools??[]).map(String).filter(Boolean))];}
-async function authorizeRequiredTools(task, context, callTool){const required=requiredToolNames(task);const results=[];for(const name of required){const tool=store.list('tools').find(t=>t.name===name&&t.enabled!==false);if(!tool)throw new Error(`Required tool is not registered: ${name}`);const toolContext={type:'authorization-check',taskId:task.id};const authorization=await callTool(name,toolContext);results.push({name,authorization});}return results;}
+function requiredToolNames(task){return [...new Set((task?.toolNames??task?.requiredTools??[]).map(String).filter(Boolean));}
+async function authorizeRequiredTools(task, context, callTool){const required=requiredToolNames(task);const results=[];for(const name of required){const tool=store.list('tools').find(t=>t.name===name&&t.enabled!==false);if(!tool)throw new Error(`Required tool is not registered: ${name}`);const toolContext={...context,type:'authorization-check',taskId:task.id,projectId:task.projectId,agentId:context.agentId,approved:Boolean(context.approved),approvalId:context.approvalId??null,allowExternal:Boolean(context.allowExternal)};const authorization=await callTool(name,toolContext);results.push({name,authorization});}return results;}
 function persistExecution(record) { store.put('executions', { ...record, status: record.state, executionId: record.id }); return record; }
 function publicExecution(record) { return { ...record, status: record.state, executionId: record.id }; }
 function grantedApprovalForTask(task) { return store.list('approvals').find(approval => approval.state === 'approved' && (approval.taskId === task?.id || (!approval.taskId && approval.projectId === task?.projectId))) ?? null; }
@@ -32,7 +32,7 @@ export async function executeTask(task, context = {}) {
     if (scope === 'external' && !context.allowExternal) throw new Error('External execution permission is not granted');
     if ((executor.risk === 'critical' || task.risk === 'critical') && !context.approved) throw new Error('Critical execution requires explicit approval');
     const callTool=(name,input={})=>executeTool(name,input,{...context,agentId:run.agentId,projectId:task.projectId,approved:context.approved,approvalId:context.approvalId});
-    const requiredTools=await authorizeRequiredTools(task,context,callTool);
+    const requiredTools=await authorizeRequiredTools(task,{...context,agentId:run.agentId,projectId:task.projectId},callTool);
     const result = await executor.handler({ task, ...context, agentId:run.agentId, callTool, requiredTools });
     const completed = { ...run, state:'completed', result, requiredTools, completedAt:now(), recoverable:false };
     store.put('runs',completed); persistExecution(completed); recordExecutionMemory(task,completed); store.addEvent('execution.completed',completed); return publicExecution(completed);
