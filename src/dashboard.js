@@ -1116,8 +1116,10 @@ document.addEventListener('click', e => {
 /* ── EXISTING BUILDS CHECK ── */
 const buildCache = {};
 async function checkExistingBuilds() {
-  const completedProjects = STATE.projects.filter(p => p.state === "completed");
-  for (const p of completedProjects) {
+  const projectsWithCode = STATE.projects.filter(p => {
+    return STATE.artifacts.some(a => a.projectId === p.id && a.type === 'code-workspace');
+  });
+  for (const p of projectsWithCode) {
     try {
       const result = await api("/api/project-builds/" + p.id, { auth: true });
       if (result.bestAPK) {
