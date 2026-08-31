@@ -1,23 +1,35 @@
 name: Deploy MAULI 2.0 Worker
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["MAULI 2.0 L1 CI"]
+    types: [completed]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mauli-deploy-main
+  cancel-in-progress: true
 
 jobs:
   deploy:
+    # Automatic deployment is allowed only after the canonical L1 CI succeeds.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 15
     steps:
-      - name: Checkout
+      - name: Checkout tested revision
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -28,7 +40,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          echo "Deploying MAULI 2.0 Worker..."
+          echo "Deploying tested MAULI 2.0 revision..."
           for attempt in 1 2 3; do
             if npx wrangler deploy; then
               echo "Deployment succeeded on attempt $attempt"
@@ -42,5 +54,3 @@ jobs:
           done
           echo "::error::Cloudflare deployment failed after 3 attempts."
           exit 1
-
-# Direct Wrangler deployment is the source of truth; Cloudflare Workers Builds is intentionally disconnected.
