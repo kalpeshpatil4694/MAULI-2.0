@@ -1,18 +1,10 @@
 name: Build Apps (.apk and .exe)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'www/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/build-apps.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: write
 
 concurrency:
   group: mauli-app-build-latest
@@ -32,32 +24,23 @@ jobs:
         with:
           node-version: 20
 
-      - name: Prepare functional web application
+      - name: Require generated application source
         run: |
-          mkdir -p www
-          if [ ! -s www/index.html ] || [ ! -s www/app.js ] || [ ! -s www/styles.css ]; then
-            cat > www/index.html <<'EOF'
-          <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MAULI Application</title><link rel="stylesheet" href="styles.css"></head><body><main><h1>MAULI Application</h1><p id="status">Application is ready.</p><section><button id="run">Run check</button><button id="reset">Reset</button></section><ul><li><label><input type="checkbox"> User interface ready</label></li><li><label><input type="checkbox"> Application logic ready</label></li><li><label><input type="checkbox"> Build pipeline ready</label></li></ul></main><script src="app.js"></script></body></html>
-          EOF
-            cat > www/styles.css <<'EOF'
-          body{font-family:system-ui,sans-serif;margin:0;padding:24px;background:#111827;color:#f9fafb}main{max-width:720px;margin:auto;padding:24px;border-radius:16px;background:#1f2937}button{padding:12px 18px;margin:6px;border:0;border-radius:10px;cursor:pointer}li{margin:12px 0}
-          EOF
-            cat > www/app.js <<'EOF'
-          const status=document.getElementById('status');document.getElementById('run').addEventListener('click',()=>{const boxes=[...document.querySelectorAll('input[type=checkbox]')];status.textContent=`Checked ${boxes.filter(x=>x.checked).length}/${boxes.length}`});document.getElementById('reset').addEventListener('click',()=>{document.querySelectorAll('input').forEach(x=>x.checked=false);status.textContent='Application is ready.'});
-          EOF
-          fi
+          set -e
           test -s www/index.html
           test -s www/app.js
           test -s www/styles.css
-          grep -q '<button' www/index.html
-          grep -q 'addEventListener' www/app.js
-          ! grep -q '\[object Object\]' www/index.html www/app.js
+          test -s package.json
+          test -s capacitor.config.json
+          ! grep -R -E '\[object Object\]|Application is ready\.|User interface ready|Application logic ready|Build pipeline ready' www
+          test "$(wc -c < www/app.js)" -ge 160
+          grep -Eq 'addEventListener|onclick|function ' www/app.js
+          echo "Real generated application source verified"
 
-      - name: Setup and build Android
+      - name: Build Android from generated source
         run: |
           npm install --no-audit --no-fund
           npm install --no-audit --no-fund @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
-          npx cap init mauli-app com.mauli.app --web-dir www
           npx cap add android
           npx cap sync android
           cd android
@@ -82,33 +65,23 @@ jobs:
         with:
           node-version: 20
 
-      - name: Prepare functional web application
+      - name: Require generated application source
         run: |
-          mkdir -p www
-          if [ ! -s www/index.html ] || [ ! -s www/app.js ] || [ ! -s www/styles.css ]; then
-            cat > www/index.html <<'EOF'
-          <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MAULI Application</title><link rel="stylesheet" href="styles.css"></head><body><main><h1>MAULI Application</h1><p id="status">Application is ready.</p><button id="run">Run check</button><button id="reset">Reset</button><ul><li><label><input type="checkbox"> User interface ready</label></li><li><label><input type="checkbox"> Application logic ready</label></li><li><label><input type="checkbox"> Build pipeline ready</label></li></ul></main><script src="app.js"></script></body></html>
-          EOF
-            cat > www/styles.css <<'EOF'
-          body{font-family:system-ui,sans-serif;margin:0;padding:24px;background:#111827;color:#f9fafb}main{max-width:720px;margin:auto;padding:24px;border-radius:16px;background:#1f2937}button{padding:12px 18px;margin:6px;border:0;border-radius:10px;cursor:pointer}li{margin:12px 0}
-          EOF
-            cat > www/app.js <<'EOF'
-          const status=document.getElementById('status');document.getElementById('run').addEventListener('click',()=>{const boxes=[...document.querySelectorAll('input[type=checkbox]')];status.textContent=`Checked ${boxes.filter(x=>x.checked).length}/${boxes.length}`});document.getElementById('reset').addEventListener('click',()=>{document.querySelectorAll('input').forEach(x=>x.checked=false);status.textContent='Application is ready.'});
-          EOF
-          fi
+          set -e
           test -s www/index.html
           test -s www/app.js
           test -s www/styles.css
-          grep -q '<button' www/index.html
-          grep -q 'addEventListener' www/app.js
-          ! grep -q '\[object Object\]' www/index.html www/app.js
+          ! grep -R -E '\[object Object\]|Application is ready\.|User interface ready|Application logic ready|Build pipeline ready' www
+          test "$(wc -c < www/app.js)" -ge 160
+          grep -Eq 'addEventListener|onclick|function ' www/app.js
+          echo "Real generated application source verified"
 
       - name: Setup project
         run: |
-          test -s package.json || printf '%s\n' '{"name":"mauli-desktop","version":"1.0.0","main":"electron/main.js"}' > package.json
+          test -s package.json
           mkdir -p electron
           test -s electron/main.js || printf '%s\n' 'const{app,BrowserWindow}=require("electron");const path=require("path");function createWindow(){const win=new BrowserWindow({width:800,height:600});win.loadFile(path.join(__dirname,"../www/index.html"));}app.whenReady().then(createWindow);app.on("window-all-closed",()=>{if(process.platform!=="darwin")app.quit()});' > electron/main.js
-          npm install --no-audit --no-fund electron@28 electron-builder@24
+          npm install --no-audit --no-fund --save-dev electron@28 electron-builder@24
       - name: Build Desktop
         run: npx electron-builder --linux AppImage --publish never
       - name: Verify Desktop Artifact
