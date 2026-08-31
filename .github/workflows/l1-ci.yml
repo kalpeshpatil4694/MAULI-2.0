@@ -42,3 +42,40 @@ jobs:
 
       - name: Validate Wrangler configuration and Worker bundle
         run: npx wrangler deploy --dry-run
+
+  deploy:
+    name: Deploy tested revision
+    needs: l1-test
+    if: ${{ github.event_name != 'pull_request' && needs.l1-test.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - name: Checkout validated revision
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if npx wrangler deploy; then
+              echo "Deployment succeeded on attempt $attempt"
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 30))
+            fi
+          done
+          echo "::error::Cloudflare deployment failed after 3 attempts."
+          exit 1
