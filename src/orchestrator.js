@@ -74,9 +74,6 @@ function addTasks(project, plan, objective, risk) {
     });
     if (task) made.push({task,selectedAgent:selected,toolNames:tools});
   }
-  // Final QA is part of the planned project from the beginning. This makes it
-  // visible, persisted, dependency-ordered and impossible to skip during an
-  // approval/resume flow.
   const last = made.at(-1)?.task;
   if (last && !made.some(x=>x.task.finalProjectVerification)) {
     const qa = finalQA(project,last);
@@ -106,7 +103,7 @@ function allDepsComplete(task){return(task?.dependsOn??[]).every(depId=>{const d
 function memoryContext(task){return recall({scope:'task',scopeId:task?.id??null,type:'solution',limit:5}).map(m=>m.content);}
 function rememberRun(task,run,check){const base={scope:'task',scopeId:task.id,source:'execution',tags:[task.executor,...(task.requiredCapabilities??[])]};remember({type:'task_result',content:{taskId:task.id,status:run?.state,result:run?.result??null,verificationPassed:check?.passed===true},importance:check?.passed?'normal':'high',...base});if(run?.error)remember({type:'error',content:{taskId:task.id,error:run.error},importance:'high',...base});if(check?.passed)remember({type:'solution',content:{taskId:task.id,summary:'Task execution passed L1 verification.',artifactId:run?.result?.artifactId??null},importance:'normal',...base});}
 function entries(plannedTasks){return(plannedTasks??[]).map(x=>{const t=store.get('tasks',x.task?.id??x.id)??x.task??x;const agent=t?.assignedAgentId?store.get('agents',t.assignedAgentId):x.selectedAgent??null;return{...t,task:t,selectedAgent:agent};});}
-function finalQA(project,task){if(store.list('tasks').some(t=>t.projectId===project.id&&t.finalProjectVerification))return null;const agent=findAgent({key:'testing',requiredCapabilities:['testing','verification']},[]);return addTaskToProject(project.id,{title:'Final project verification and QA',description:`Verify completed project ${project.id}`,requiredCapabilities:['testing','verification'],risk:'low',acceptance:[{field:'type',equals:'plan'}],assignedAgentId:agent?.id??null,toolNames:[],executor:'internal.plan',maxAttempts:1,sequence:999,dependsOn:[task.id],finalProjectVerification:true});}
+function finalQA(project,task){if(store.list('tasks').some(t=>t.projectId===project.id&&t.finalProjectVerification))return null;seedAgents();let agent=store.list('agents').find(a=>a.name==='QA Agent'&&(a.state==='available'||a.state==='registered'));if(!agent)agent=selectAgents(['testing','verification'],null,{requireAllTools:false})[0];if(!agent)agent=registerAgent({name:'QA Agent',role:'Tester',department:'Quality',capabilities:['testing','verification'],tools:['test.run','code.execute']});else agent=updateAgent(agent.id,{state:'available',currentTaskId:null,heartbeatAt:now(),capabilities:[...new Set([...(agent.capabilities??[]),'testing','verification'])],tools:[...new Set([...(agent.tools??[]),'test.run','code.execute'])]});return addTaskToProject(project.id,{title:'Final project verification and QA',description:`Verify completed project ${project.id}`,requiredCapabilities:['testing','verification'],risk:'low',acceptance:[{field:'type',equals:'plan'}],assignedAgentId:agent?.id??null,toolNames:[],executor:'internal.plan',maxAttempts:1,sequence:999,dependsOn:[task.id],finalProjectVerification:true});}
 
 export async function executePlannedProject({project,task,selectedAgent,env={},approved=false,plannedTasks=[]}){
   if(!task)return{project,status:'error',error:'No executable task was created',tasks:entries(plannedTasks)};
