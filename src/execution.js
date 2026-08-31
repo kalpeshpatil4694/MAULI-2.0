@@ -16,6 +16,8 @@ function persistExecution(record) { store.put('executions', { ...record, status:
 function publicExecution(record) { return { ...record, status: record.state, executionId: record.id }; }
 function grantedApprovalForTask(task) { return store.list('approvals').find(approval => approval.state === 'approved' && (approval.taskId === task?.id || (!approval.taskId && approval.projectId === task?.projectId))) ?? null; }
 function recordExecutionMemory(task, execution) { const base={scope:'task',scopeId:task?.id??null,source:'execution',tags:[task?.executor,...(task?.requiredCapabilities??[])].filter(Boolean)}; remember({type:'task_result',content:{taskId:task?.id??null,status:execution?.state??'unknown',result:execution?.result??null,executionId:execution?.executionId??execution?.id??null},importance:execution?.state==='completed'?'normal':'high',...base}); if(execution?.state==='completed'){remember({type:'solution',content:{taskId:task?.id??null,summary:'Task execution completed successfully.',executionId:execution?.executionId??execution?.id??null},importance:'normal',...base});} else if(execution?.error){remember({type:'error',content:{taskId:task?.id??null,error:execution.error},importance:'high',...base});} }
+function latestExecutionForTask(taskId){return store.list('executions').filter(execution=>execution.taskId===taskId).sort((a,b)=>String(b.completedAt??b.startedAt??'').localeCompare(String(a.completedAt??a.startedAt??'')))[0]??null;}
+function completedLifecycleResponse(task){const execution=latestExecutionForTask(task.id);const verification=execution?verifyResult(task,execution):null;return {status:'completed',task,execution:execution?publicExecution(execution):null,verification:verification??{passed:true,result:task.result??task.output??null}};}
 
 export async function executeTask(task, context = {}) {
   const executorName = task.executor ?? 'internal.plan';
@@ -52,7 +54,7 @@ export async function executeTaskLifecycle(task, context = {}) {
     const ready=store.put('tasks',{...currentTask,state:'queued',blockedReason:null,id:currentTask.id});
     currentTask=ready;
   }
-  if(currentTask.state==='completed')return{status:'completed',task:currentTask};
+  if(currentTask.state==='completed')return completedLifecycleResponse(currentTask);
   if(currentTask.state==='verifying')return{status:'verifying',task:currentTask};
   if(currentTask.state!=='running')startTask(currentTask.id);
   const execution=await executeTask({...currentTask,state:'running'},lifecycleContext);
