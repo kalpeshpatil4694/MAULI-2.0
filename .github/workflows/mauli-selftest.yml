@@ -1,14 +1,14 @@
 name: MAULI Self Tests
 
+# Manual deep-health suite. The canonical automatic gate remains l1-ci.yml.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: mauli-selftest-${{ github.workflow }}-${{ github.ref }}
+  group: mauli-selftest-manual
   cancel-in-progress: true
 
 jobs:
