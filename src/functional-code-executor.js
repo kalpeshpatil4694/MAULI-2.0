@@ -1,6 +1,7 @@
 import { code } from './ai.js';
 import { registerArtifact } from './artifacts.js';
 import { registerExecutor, grantExecutor } from './executor-registry.js';
+import { generateFromTemplate } from './app-templates.js';
 
 const WEB_REQUIRED = ['www/index.html', 'www/app.js', 'www/styles.css'];
 const COMMON_REQUIRED = ['package.json', 'README.md'];
@@ -33,7 +34,15 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
     try{const prompt=attempt===0?objective:objective+'\nPrevious generation was invalid. Regenerate the COMPLETE task implementation now. Output JSON only and include substantive source files for this task type.';parsed=parseModel(await code(runtimeEnv,[{role:'system',content:system},{role:'user',content:prompt}],{maxTokens:5000}));if(!parsed||invalid(filesOf(parsed.files),task))parsed=null;}catch(e){lastError=text(e);parsed=null;}
   }
   const files=filesOf(parsed?.files);
-  if(invalid(files,task))throw new Error('Functional code generation failed: incomplete or placeholder implementation.'+(lastError?` ${lastError}`:''));
+  if(invalid(files,task)){
+    const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
+    const templateFiles = templateResult.files || [];
+    if(templateFiles.length > 0){
+      const artifact = registerArtifact({projectId:task.projectId,taskId:task.id,agentId,type:'code-workspace',content:{summary:templateResult.summary,files:templateFiles,tests:templateResult.tests||[],notes:templateResult.notes||[]},metadata:{generatedBy:'app-templates',template:templateResult.projectType,fileCount:templateFiles.length}});
+      return{type:'code',artifactId:artifact.id,summary:artifact.content.summary,files:templateFiles,tests:templateResult.tests||[],notes:templateResult.notes||[],acceptance};
+    }
+    throw new Error('Functional code generation failed: incomplete or placeholder implementation.'+(lastError?` ${lastError}`:''));
+  }
   const tests=Array.isArray(parsed.tests)?parsed.tests.map(text).filter(Boolean).slice(0,20):[];
   const notes=Array.isArray(parsed.notes)?parsed.notes.map(text).filter(Boolean).slice(0,20):[];
   const artifact=registerArtifact({projectId:task.projectId,taskId:task.id,agentId,type:'code-workspace',content:{summary:text(parsed.summary||`Functional implementation generated for ${objective}`),files,tests,notes},metadata:{generatedBy:'functional-code-executor',functional:true,placeholderFallback:false,fileCount:files.length,taskType:webTask?'web-ui':'backend-or-service'}});

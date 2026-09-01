@@ -348,5 +348,34 @@ export default { async fetch(request, env) { try {
     const fileName=url.searchParams.get('name')||'mauli-build.zip';
     return new Response(artResp.body,{status:200,headers:{'content-type':'application/zip','content-disposition':'attachment; filename="'+fileName+'"','cache-control':'no-store'}});
   }
-  return fail('Route not found',404);
+  if(request.method==='GET'&&url.pathname==='/api/app-files'){
+    const projectId=url.searchParams.get('projectId');
+    if(!projectId)return fail('projectId required',400);
+    const artifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
+    if(artifacts.length===0)return fail('No code artifacts',404);
+    const files=[];
+    for(const artifact of artifacts){
+      const ac=artifact.content||{};
+      if(Array.isArray(ac.files)){
+        for(const f of ac.files){files.push({path:f.path,content:f.content})}
+      }
+    }
+    if(files.length===0)return fail('No files found',404);
+    return ok({files,projectId,count:files.length});
+  }
+  if(request.method==='GET'&&url.pathname==='/api/preview-app'){
+    const projectId=url.searchParams.get('projectId');
+    if(!projectId)return fail('projectId required',400);
+    const artifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
+    if(artifacts.length===0)return fail('No code artifacts',404);
+    for(const artifact of artifacts){
+      const ac=artifact.content||{};
+      if(Array.isArray(ac.files)){
+        for(const f of ac.files){if(f.path.endsWith('.html'))return new Response(f.content,{headers:{'content-type':'text/html;charset=utf-8'}})}
+      }
+    }
+    return fail('No HTML files',404);
+  }
+  
+    return fail('Route not found',404);
 } catch(error){return fail(error.message||'Internal error',500);} } };
