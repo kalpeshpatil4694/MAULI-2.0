@@ -631,7 +631,7 @@ function renderActivity(){
   let html='';for(const ev of STATE.events.slice(-50).reverse()){
     const color=ev.type?.includes('error')?'var(--red)':ev.type?.includes('task_result')?'var(--green)':ev.type?.includes('command')?'var(--accent)':'var(--blue)';
     const payload=typeof ev.payload==='object'?JSON.stringify(ev.payload,null,2):String(ev.payload||'');
-    html+='<div class="activity-item"><div class="activity-dot" style="background:'+color+'"></div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong style="font-size:13px">'+esc(ev.type||'event')+'</strong><span class="activity-time">'+fmtDate(ev.at)+'</span></div><pre style="font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;max-height:80px;overflow:hidden;font-family:\'JetBrains Mono\',monospace">'+esc(payload)+'</pre></div></div>';
+    html+='<div class="activity-item"><div class="activity-dot" style="background:'+color+'"></div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong style="font-size:13px">'+esc(ev.type||'event')+'</strong><span class="activity-time">'+fmtDate(ev.at)+'</span></div><pre style="font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;max-height:80px;overflow:hidden;font-family:monospace">'+esc(payload)+'</pre></div></div>';
   }
   $('activityList').innerHTML=html||'<div class="empty"><div class="empty-icon">📡</div><div class="empty-text">No activity yet</div></div>';
 }
@@ -655,7 +655,7 @@ function renderMemory(){
   const all=[...events,...memEvents].sort((a,b)=>String(b.at||'').localeCompare(String(a.at||''))).slice(0,30);
   let html='';for(const ev of all){
     const payload=typeof ev.payload==='object'?JSON.stringify(ev.payload,null,2):String(ev.payload||'');
-    html+='<div style="padding:12px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><span class="badge badge-accent" style="font-size:10px">'+esc(ev.type)+'</span><span style="font-size:11px;color:var(--text-dim)">'+fmtDate(ev.at)+'</span></div><pre style="font-size:11px;color:var(--text-muted);margin-top:6px;white-space:pre-wrap;word-break:break-all;max-height:100px;overflow:hidden;font-family:\'JetBrains Mono\',monospace">'+esc(payload)+'</pre></div>';
+    html+='<div style="padding:12px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><span class="badge badge-accent" style="font-size:10px">'+esc(ev.type)+'</span><span style="font-size:11px;color:var(--text-dim)">'+fmtDate(ev.at)+'</span></div><pre style="font-size:11px;color:var(--text-muted);margin-top:6px;white-space:pre-wrap;word-break:break-all;max-height:100px;overflow:hidden;font-family:monospace">'+esc(payload)+'</pre></div>';
   }
   $('memoryList').innerHTML=html||'<div class="empty"><div class="empty-icon">🧠</div><div class="empty-text">No memory entries yet</div></div>';
 }
@@ -882,7 +882,7 @@ async function runDiagnostic(){
 async function generateDocs(){
   toast('Generating docs...','info');
   try{const result=await api('/api/docs/generate',{method:'POST',auth:true,body:JSON.stringify({})});
-    $('docsContent').innerHTML='<pre style="font-size:12px;white-space:pre-wrap;font-family:\'JetBrains Mono\',monospace;background:var(--bg-1);padding:16px;border-radius:8px;max-height:600px;overflow:auto">'+esc(JSON.stringify(result.docs||result,null,2))+'</pre>';
+    $('docsContent').innerHTML='<pre style="font-size:12px;white-space:pre-wrap;font-family:monospace;background:var(--bg-1);padding:16px;border-radius:8px;max-height:600px;overflow:auto">'+esc(JSON.stringify(result.docs||result,null,2))+'</pre>';
     toast('Docs generated!','success');
   }catch(e){$('docsContent').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
 }
