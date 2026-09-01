@@ -1,21 +1,19 @@
 name: MAULI L1 Tests
 
+# Manual regression workflow. Automatic L1 validation is owned by l1-ci.yml.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: mauli-l1-tests-manual
+  group: mauli-manual-tests
   cancel-in-progress: true
 
 jobs:
   test:
+    name: L1 regression tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
