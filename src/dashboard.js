@@ -473,7 +473,7 @@ const $=id=>document.getElementById(id);
 async function getKey(){return localStorage.getItem('mauli-api-key')}
 async function setKey(k){localStorage.setItem('mauli-api-key',k)}
 function clearKey(){localStorage.removeItem('mauli-api-key');toast('API key cleared','info')}
-const PUBLIC_ENDPOINTS=['/api/state','/api/health','/api/heartbeat','/api/agents/best'];
+const PUBLIC_ENDPOINTS=['/api/state','/api/health','/api/heartbeat','/api/agents/best','/api/self-test','/api/result-diagnostic'];
 async function api(path,opts={}){
   const isPublic=PUBLIC_ENDPOINTS.some(ep=>path.startsWith(ep));
   const k=await getKey();
