@@ -1,10 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mauli-2-0",
-  "main": "src/index.js",
+  "main": "src/worker.js",
   "compatibility_date": "2026-08-19",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  "triggers": { "crons": ["*/1 * * * *"] },
   "secrets": { "required": ["GITHUB_TOKEN"] },
   "vars": {
     "APP_NAME": "MAULI 2.0",
