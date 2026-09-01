@@ -1,21 +1,19 @@
 name: MAULI Self Tests
 
+# Manual diagnostic workflow. l1-ci.yml runs the same deep validation automatically.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: mauli-selftest-manual
+  group: mauli-manual-tests
   cancel-in-progress: true
 
 jobs:
   selftest:
+    name: Deep self-test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
