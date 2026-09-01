@@ -173,15 +173,17 @@ td{padding:10px 12px;border-bottom:1px solid rgba(30,45,74,.3);font-size:13px}
 .spinner{width:24px;height:24px;border:3px solid var(--bg-3);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin:0 auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar-thumb:hover{background:var(--accent);box-shadow:0 0 8px rgba(0,212,255,.3)}
-.hamburger{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px}
-.hamburger:hover{background:var(--glass-border)}
-@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar-title{font-size:13px}.btn-sm{font-size:11px;padding:4px 8px}}
+.hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:10px 12px;border-radius:8px;min-width:44px;min-height:44px;touch-action:manipulation}
+.sidebar-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:99;backdrop-filter:blur(4px)}
+.sidebar-overlay.show{display:block}
+@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%);z-index:200}.sidebar.open{transform:translateX(0);box-shadow:4px 0 30px rgba(0,0,0,.6)}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 12px}.topbar-title{font-size:13px}.topbar-right .btn-sm{font-size:11px;padding:5px 10px}.content{padding:12px}}
 </style>
 </head>
 <body>
 <canvas class="bg-canvas" id="bgCanvas"></canvas>
 <div class="bg-gradient"></div>
 <div class="grid-overlay"></div>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <div class="layout">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
@@ -511,11 +513,12 @@ function toast(msg,type='info'){
   resize();createParticles();draw();window.addEventListener('resize',()=>{resize();createParticles()});
 })();
 let currentPage='command';
-function toggleSidebar(){$('sidebar')?.classList.toggle('open');}
+function toggleSidebar(){$('sidebar')?.classList.toggle('open');$('sidebarOverlay')?.classList.toggle('show');}
+function closeSidebar(){$('sidebar')?.classList.remove('open');$('sidebarOverlay')?.classList.remove('show');}
 const pageTitles={command:'Command Center',chat:'Chat with MAULI',overview:'Overview',agents:'Agent Hive',monitor:'Live Monitor',projects:'Projects',tasks:'Tasks',docs:'Documentation',approvals:'Approvals',activity:'Activity Feed',health:'System Health',memory:'Memory Bank',integrations:'Integrations',shortcuts:'Keyboard Shortcuts',editor:'File Editor',changelog:'Change History',learning:'Learning & Skills',builds:'Build Manager',subagents:'Sub-Agents',messaging:'Agent Messaging',apiexplorer:'API Explorer'};
 function navigateTo(page){
   currentPage=page;
-  $('sidebar')?.classList.remove('open');
+  closeSidebar();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const pg=$('page-'+page);if(pg)pg.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -525,7 +528,7 @@ function navigateTo(page){
   if(page==='tasks')renderTasks();if(page==='activity')renderActivity();if(page==='health')renderHealth();
   if(page==='memory')renderMemory();if(page==='monitor')renderMonitor();if(page==='integrations')renderIntegrations();if(page==='learning')renderLearning();if(page==='editor')loadRecentEdits();if(page==='changelog')loadChangeHistory();if(page==='builds')loadBuildStatus();if(page==='subagents')loadSubAgents();if(page==='messaging')loadMessages();if(page==='apiexplorer')loadMCPServers();
 }
-document.querySelectorAll('.nav-item[data-page]').forEach(el=>{el.addEventListener('click',()=>navigateTo(el.dataset.page))});
+document.querySelectorAll('.nav-item[data-page]').forEach(el=>{el.addEventListener('click',e=>{e.preventDefault();navigateTo(el.dataset.page)});el.addEventListener('touchend',e=>{e.preventDefault();navigateTo(el.dataset.page)})});
 const navPages=['command','chat','overview','agents','monitor','projects','tasks','docs','approvals','activity','health','memory','integrations','editor','changelog','learning','builds','subagents','messaging','apiexplorer','shortcuts'];
 document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();togglePalette();return}
