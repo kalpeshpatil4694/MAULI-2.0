@@ -959,7 +959,7 @@ async function checkHeartbeat(){
   }catch(e){heartbeatFailures++;if(heartbeatFailures>=3){$('heartbeatDot')?.classList.add('dead');if($('heartbeatText'))$('heartbeatText').textContent='System Offline';}}
 }
 setInterval(checkHeartbeat,5000);checkHeartbeat();
-loadState().then(()=>checkExistingBuilds());setInterval(()=>{loadState().then(()=>checkExistingBuilds())},8000);
+loadState().then(()=>checkExistingBuilds()).catch(()=>{});setInterval(()=>{loadState().then(()=>checkExistingBuilds()).catch(()=>{})},8000);
 </script>
 </body>
 </html>`;
