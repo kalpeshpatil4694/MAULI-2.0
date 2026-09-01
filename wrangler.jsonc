@@ -10,8 +10,7 @@
   "vars": {
     "APP_NAME": "MAULI 2.0",
     "ENVIRONMENT": "production",
-    "MAULI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    "FOUNDER_API_KEY": "mauli-founder-key-2026"
+    "MAULI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
   },
   "d1_databases": [
     {
