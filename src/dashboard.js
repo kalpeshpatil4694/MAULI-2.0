@@ -354,6 +354,12 @@ body.sidebar-open{overflow:hidden!important}@media(max-width:768px){.hamburger{d
         <div class="card"><div class="card-header"><div class="card-title">🔗 Active Integrations</div></div><div class="grid grid-3" id="integrationsList"></div></div>
         <div class="card"><div class="card-header"><div class="card-title">🌐 API Catalog</div></div><div id="apiCatalog"></div></div>
       </div>
+      <div class="page" id="page-downloads">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📥 Download Generated Apps</div><button class="btn btn-sm btn-green" onclick="loadDownloads()">↻ Refresh</button></div>
+          <div id="downloadsList"></div>
+        </div>
+      </div>
       <div class="page" id="page-shortcuts">
       <div class="page" id="page-editor">
         <div class="grid grid-2">
@@ -467,6 +473,7 @@ body.sidebar-open{overflow:hidden!important}@media(max-width:768px){.hamburger{d
   </div>
 </div>
 <div class="toast-container" id="toastContainer"></div>
+<div class="palette-overlay" id="downloadModalOverlay" onclick="if(event.target===this)this.classList.remove('show')"><div class="palette-panel" style="max-width:600px"><div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:600;font-size:15px">📥 Download Files</div><div id="downloadModal" style="padding:16px 20px">Loading...</div><div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right"><button class="btn btn-sm" onclick="this.closest('.palette-overlay').classList.remove('show')">Close</button></div></div></div>
 <script>
 const STATE={projects:[],tasks:[],artifacts:[],agents:[],events:[],approvals:[],tools:[]};
 const $=id=>document.getElementById(id);
@@ -515,7 +522,7 @@ function toast(msg,type='info'){
 let currentPage='command';
 function toggleSidebar(){$('sidebar')?.classList.toggle('open');$('sidebarOverlay')?.classList.toggle('show');document.body.classList.toggle('sidebar-open',document.getElementById('sidebar')?.classList.contains('open'))}
 function closeSidebar(){$('sidebar')?.classList.remove('open');$('sidebarOverlay')?.classList.remove('show');document.body.classList.remove('sidebar-open')}
-const pageTitles={command:'Command Center',chat:'Chat with MAULI',overview:'Overview',agents:'Agent Hive',monitor:'Live Monitor',projects:'Projects',tasks:'Tasks',docs:'Documentation',approvals:'Approvals',activity:'Activity Feed',health:'System Health',memory:'Memory Bank',integrations:'Integrations',shortcuts:'Keyboard Shortcuts',editor:'File Editor',changelog:'Change History',learning:'Learning & Skills',builds:'Build Manager',subagents:'Sub-Agents',messaging:'Agent Messaging',apiexplorer:'API Explorer'};
+const pageTitles={command:'Command Center',chat:'Chat with MAULI',overview:'Overview',agents:'Agent Hive',monitor:'Live Monitor',projects:'Projects',tasks:'Tasks',docs:'Documentation',approvals:'Approvals',activity:'Activity Feed',health:'System Health',memory:'Memory Bank',integrations:'Integrations',shortcuts:'Keyboard Shortcuts',editor:'File Editor',changelog:'Change History',learning:'Learning & Skills',builds:'Build Manager',subagents:'Sub-Agents',messaging:'Agent Messaging',apiexplorer:'API Explorer',downloads:'Downloads'};
 function navigateTo(page){
   currentPage=page;
   closeSidebar();
@@ -526,10 +533,10 @@ function navigateTo(page){
   $('pageTitle').textContent=pageTitles[page]||page;
   if(page==='overview')renderOverview();if(page==='agents')renderAgents();if(page==='projects')renderProjects();
   if(page==='tasks')renderTasks();if(page==='activity')renderActivity();if(page==='health')renderHealth();
-  if(page==='memory')renderMemory();if(page==='monitor')renderMonitor();if(page==='integrations')renderIntegrations();if(page==='learning')renderLearning();if(page==='editor')loadRecentEdits();if(page==='changelog')loadChangeHistory();if(page==='builds')loadBuildStatus();if(page==='subagents')loadSubAgents();if(page==='messaging')loadMessages();if(page==='apiexplorer')loadMCPServers();
+  if(page==='memory')renderMemory();if(page==='monitor')renderMonitor();if(page==='integrations')renderIntegrations();if(page==='learning')renderLearning();if(page==='editor')loadRecentEdits();if(page==='changelog')loadChangeHistory();if(page==='builds')loadBuildStatus();if(page==='subagents')loadSubAgents();if(page==='messaging')loadMessages();if(page==='apiexplorer')loadMCPServers();if(page==='downloads')loadDownloads();
 }
 document.querySelectorAll('.nav-item[data-page]').forEach(el=>{el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();navigateTo(el.dataset.page)})});
-const navPages=['command','chat','overview','agents','monitor','projects','tasks','docs','approvals','activity','health','memory','integrations','editor','changelog','learning','builds','subagents','messaging','apiexplorer','shortcuts'];
+const navPages=['command','chat','overview','agents','monitor','projects','tasks','docs','approvals','activity','health','memory','integrations','editor','changelog','learning','builds','subagents','messaging','apiexplorer','downloads','shortcuts'];
 document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();togglePalette();return}
   if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){const page=document.querySelector('.page.active');if(page?.id==='page-command')sendCommand();return}
@@ -612,7 +619,7 @@ function renderProjects(){
   for(const p of STATE.projects){
     const badge=stateBadge(p.state);const hasCode=STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
     html+='<tr><td><strong>'+esc(p.name||p.objective||p.id)+'</strong></td><td><span class="badge badge-'+badge+'">'+esc(p.state)+'</span></td><td>'+(p.taskCount||'—')+'</td><td style="display:flex;gap:4px">';
-    html+='<button class="btn btn-sm btn-accent download-btn" data-path="/api/download/'+p.id+'">📥 ZIP</button>';
+    html+='<button class="btn btn-sm btn-green download-btn" data-project="'+p.id+'" style="cursor:pointer">📥 Download</button>';
     if(hasCode){html+='<button class="btn btn-sm btn-green build-btn" data-project="'+p.id+'" data-platform="android">📱 APK</button><button class="btn btn-sm btn-accent build-btn" data-project="'+p.id+'" data-platform="desktop">🖥️ EXE</button>'}
     html+='</td></tr>';
   }
@@ -853,6 +860,18 @@ async function sendCommand(){
     if(e.message.includes('authorization')||e.message.includes('401')){clearKey();toast('Key cleared','info')}
   }finally{$('sendCmd').disabled=false;$('cmdLoading').classList.remove('show')}
 }
+function loadDownloads(){
+  let html='';
+  for(const p of STATE.projects){
+    const hasCode=STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
+    const badge=stateBadge(p.state);
+    html+='<div style="padding:14px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;align-items:center;justify-content:space-between"><div style="flex:1"><div style="font-weight:600;font-size:14px">'+esc(p.name||p.objective||p.id)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px"><span class="badge badge-'+badge+'">'+esc(p.state)+'</span> '+(p.taskCount?p.taskCount+' tasks':'')+'</div></div><div style="display:flex;gap:6px;flex-shrink:0">';
+    if(hasCode){html+='<button class="btn btn-sm btn-green download-btn" data-project="'+p.id+'">📥 Download</button>'}
+    else{html+='<span style="font-size:11px;color:var(--text-dim)">No code</span>'}
+    html+='</div></div>';
+  }
+  $('downloadsList').innerHTML=html||'<div class="empty"><div class="empty-icon">📥</div><div class="empty-text">No projects with code artifacts yet.<br>Send a command to build something!</div></div>';
+}
 function quickCmd(cmd){$('cmdInput').value=cmd;sendCommand()}
 async function sendChat(){
   const input=$('chatInput');const msg=input.value.trim();if(!msg)return;
@@ -886,12 +905,19 @@ async function generateDocs(){
     toast('Docs generated!','success');
   }catch(e){$('docsContent').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
 }
-async function downloadZip(path){
-  try{toast('Downloading...','info');const k=await getKey();const r=await fetch(path,{headers:{'Authorization':'Bearer '+k}});
-    if(!r.ok){toast('Failed: '+r.status,'error');return}const blob=await r.blob();const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download='mauli-project.zip';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);toast('Downloaded!','success');
+async function downloadZip(projectIdOrPath){
+  try{toast('Preparing download...','info');
+    const projectId=projectIdOrPath.includes('/')?projectIdOrPath.split('/').pop():projectIdOrPath;
+    const r=await fetch('/api/app-files?projectId='+encodeURIComponent(projectId));
+    if(!r.ok){toast('No code artifacts for this project','error');return}
+    const data=await r.json();const files=data.files||[];
+    if(files.length===0){toast('No files to download','error');return}
+    if(files.length===1){const f=files[0];const blob=new Blob([f.content],{type:'text/plain'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=f.path.split('/').pop()||'index.html';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);toast('Downloaded!','success');return}
+    let html='<div style="max-height:60vh;overflow:auto">';for(const f of files){const preview=(f.content||'').substring(0,200);html+='<div style="padding:10px;border-bottom:1px solid var(--border);cursor:pointer" onclick="downloadSingleFile(this.dataset.path,this.dataset.content)" data-path="'+esc(f.path)+'" data-content="'+esc(btoa(unescape(encodeURIComponent(f.content))))+'"><div style="font-weight:600;font-size:13px">📄 '+esc(f.path)+'</div><div style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(preview)+'</div></div>'}html+='</div>';html+='<div style="padding:12px;border-top:1px solid var(--border);text-align:center"><button class="btn btn-green" onclick="downloadAllFiles()">📥 Download All ('+files.length+' files)</button></div>';$('downloadModal').innerHTML=html;$('downloadModalOverlay').classList.add('show');$('downloadModalOverlay')._files=files;toast('Found '+files.length+' files','success');
   }catch(e){toast('Error: '+e.message,'error');}
 }
+function downloadSingleFile(path,content){try{const decoded=decodeURIComponent(escape(atob(content)));const blob=new Blob([decoded],{type:'text/plain'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=path.split('/').pop()||'file.txt';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);toast('Downloaded '+path,'success')}catch(e){toast('Error: '+e.message,'error')}}
+function downloadAllFiles(){const files=$('downloadModalOverlay')?._files||[];if(!files.length){toast('No files','error');return}for(const f of files){const blob=new Blob([f.content],{type:'text/plain'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=f.path.split('/').pop()||'file.txt';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}toast('Downloading '+files.length+' files','success');$('downloadModalOverlay').classList.remove('show')}
 let activeBuilds={};
 async function startBuild(projectId,platform,btn){
   const buildKey=projectId+'_'+platform;if(activeBuilds[buildKey]){toast('Build in progress','info');return}
