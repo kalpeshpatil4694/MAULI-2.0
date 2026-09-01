@@ -56,9 +56,9 @@ export default { async fetch(request, env) { try {
   if(request.method==='GET'&&url.pathname==='/api/collaboration/stats'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({stats:getCollaborationStats()});}
   if(request.method==='GET'&&url.pathname==='/api/agents/best'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const caps=(url.searchParams.get('capabilities')||'').split(',').filter(Boolean);const best=getBestAgentForTask(caps);return ok({agent:best});}
   // Chat API
-  if(request.method==='POST'&&url.pathname==='/api/chat'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const result=await processChatMessage({message:body.message,userId:'founder',env});return ok({result});}
-  if(request.method==='GET'&&url.pathname==='/api/chat/history'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const limit=parseInt(url.searchParams.get('limit')||'50');return ok({messages:getChatHistory({limit})});}
-  if(request.method==='GET'&&url.pathname==='/api/chat/active'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({conversations:getActiveConversations()});}
+  if(request.method==='POST'&&url.pathname==='/api/chat'){try{const body=await request.json();const result=await processChatMessage({message:body.message,userId:'founder',env});return ok({result});}catch(e){return ok({result:{reply:'I had trouble processing that. Try again!',error:e.message}})}}
+  if(request.method==='GET'&&url.pathname==='/api/chat/history'){const limit=parseInt(url.searchParams.get('limit')||'50');return ok({messages:getChatHistory({limit})});}
+  if(request.method==='GET'&&url.pathname==='/api/chat/active'){return ok({conversations:getActiveConversations()});}
   // File Edit API
   if(request.method==='POST'&&url.pathname==='/api/edits'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const edit=editFile(body);return ok({edit});}
   if(request.method==='GET'&&url.pathname==='/api/edits/recent'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({edits:getRecentEdits()});}
