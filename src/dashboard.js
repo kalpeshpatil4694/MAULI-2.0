@@ -53,7 +53,7 @@ a{color:var(--accent);text-decoration:none}
 .sidebar-nav{flex:1;padding:12px 8px;overflow-y:auto}
 .nav-section{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-dim);padding:14px 12px 6px;display:flex;align-items:center;gap:8px}
 .nav-section::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:var(--transition);font-size:13px;color:var(--text-muted);position:relative}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:var(--transition);font-size:13px;color:var(--text-muted);position:relative;z-index:201;-webkit-tap-highlight-color:transparent}
 .nav-item:hover{background:var(--bg-2);color:var(--text)}
 .nav-item.active{background:var(--cyan-bg);color:var(--accent);font-weight:600}
 .nav-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:20px;background:var(--accent);border-radius:0 3px 3px 0;box-shadow:0 0 8px var(--accent)}
@@ -174,9 +174,9 @@ td{padding:10px 12px;border-bottom:1px solid rgba(30,45,74,.3);font-size:13px}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar-thumb:hover{background:var(--accent);box-shadow:0 0 8px rgba(0,212,255,.3)}
 .hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:10px 12px;border-radius:8px;min-width:44px;min-height:44px;touch-action:manipulation}
-.sidebar-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:99}
+.sidebar-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:99;pointer-events:none}.sidebar-overlay.show{pointer-events:auto}
 .sidebar-overlay.show{display:block}
-@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%);z-index:200;height:100vh;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y}.sidebar.open{transform:translateX(0);box-shadow:4px 0 30px rgba(0,0,0,.6)}.sidebar-nav{overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y}.sidebar-overlay.show~.main{overflow:hidden;position:fixed;width:100%}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 12px}.topbar-title{font-size:13px}.topbar-right .btn-sm{font-size:11px;padding:5px 10px}.content{padding:12px}}
+body.sidebar-open{overflow:hidden!important;position:fixed;width:100%;height:100%}@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%);z-index:200;height:100vh;max-height:100vh;overflow-y:auto!important;-webkit-overflow-scrolling:touch;touch-action:pan-y!important}.sidebar.open{transform:translateX(0);box-shadow:4px 0 30px rgba(0,0,0,.6)}.sidebar-nav{flex:1;overflow-y:auto!important;-webkit-overflow-scrolling:touch;touch-action:pan-y!important;padding-bottom:40px}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 12px}.topbar-title{font-size:13px}.topbar-right .btn-sm{font-size:11px;padding:5px 10px}.content{padding:12px}}
 </style>
 </head>
 <body>
@@ -513,8 +513,8 @@ function toast(msg,type='info'){
   resize();createParticles();draw();window.addEventListener('resize',()=>{resize();createParticles()});
 })();
 let currentPage='command';
-function toggleSidebar(){$('sidebar')?.classList.toggle('open');$('sidebarOverlay')?.classList.toggle('show');}
-function closeSidebar(){$('sidebar')?.classList.remove('open');$('sidebarOverlay')?.classList.remove('show');}
+function toggleSidebar(){$('sidebar')?.classList.toggle('open');$('sidebarOverlay')?.classList.toggle('show');document.body.classList.toggle('sidebar-open',document.getElementById('sidebar')?.classList.contains('open'))}
+function closeSidebar(){$('sidebar')?.classList.remove('open');$('sidebarOverlay')?.classList.remove('show');document.body.classList.remove('sidebar-open')}
 const pageTitles={command:'Command Center',chat:'Chat with MAULI',overview:'Overview',agents:'Agent Hive',monitor:'Live Monitor',projects:'Projects',tasks:'Tasks',docs:'Documentation',approvals:'Approvals',activity:'Activity Feed',health:'System Health',memory:'Memory Bank',integrations:'Integrations',shortcuts:'Keyboard Shortcuts',editor:'File Editor',changelog:'Change History',learning:'Learning & Skills',builds:'Build Manager',subagents:'Sub-Agents',messaging:'Agent Messaging',apiexplorer:'API Explorer'};
 function navigateTo(page){
   currentPage=page;
@@ -637,10 +637,10 @@ function renderActivity(){
 }
 function renderHealth(){loadHealth();renderTools()}
 function loadHealth(){
-  api('/api/health').then(h=>{
+  api('/api/health').then(r=>{const h=r.data||r;
     let html=healthRow('Service',h.service||'—')+healthRow('Status','<span style="color:var(--green)">'+esc(h.status||'unknown')+'</span>')+healthRow('D1 Persistence',h.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory Only</span>')+healthRow('Hydrated',h.hydrated?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--text-dim)">No</span>')+healthRow('AI Binding',h.ai?'<span style="color:var(--green)">Available</span>':'<span style="color:var(--yellow)">Unavailable</span>')+healthRow('Recovered Runs',h.recoveredRuns||0)+healthRow('Time',fmtDate(h.time));
     if($('healthDetail'))$('healthDetail').innerHTML=html;if($('healthInfo'))$('healthInfo').innerHTML=html;
-  }).catch(e=>{if($('healthDetail'))$('healthDetail').innerHTML='<div style="color:var(--red)">Failed: '+esc(e.message)+'</div>'});
+  }).catch(e=>{console.warn('Health check failed:',e.message)});
 }
 function healthRow(label,value){return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:12px;color:var(--text-muted)">'+label+'</span><span style="font-size:12px">'+value+'</span></div>';}
 function renderTools(){
@@ -865,14 +865,14 @@ async function sendChat(){
   }catch(e){container.innerHTML+='<div class="chat-msg mauli" style="border-color:var(--red)"><div class="msg-role">Error</div>'+esc(e.message)+'</div>';container.scrollTop=container.scrollHeight}
 }
 async function runSelfTest(){
-  try{const result=await api('/api/self-test',{auth:true});const r=result.result||result;
+  try{const result=await api('/api/self-test');const r=result.result||result;
     let html='<div style="margin-bottom:8px"><span class="badge badge-'+(r.status==='ready'?'green':r.status==='degraded'?'yellow':'red')+'">'+r.status.toUpperCase()+' — '+r.score+'%</span></div>';
     for(const c of (r.checks||[])){html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="color:'+(c.passed?'var(--green)':'var(--red)')+'">'+(c.passed?'✅':'❌')+'</span><span style="font-size:13px">'+esc(c.name)+'</span><span style="font-size:11px;color:var(--text-dim);margin-left:auto">'+esc(c.details||'')+'</span></div>'}
     $('selfTestResult').innerHTML=html;toast('Self-test: '+r.status,r.status==='ready'?'success':'info');
   }catch(e){$('selfTestResult').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
 }
 async function runDiagnostic(){
-  try{const result=await api('/api/result-diagnostic',{auth:true});const r=result.result||result;
+  try{const result=await api('/api/result-diagnostic');const r=result.result||result;
     let html=healthRow('Token',r.tokenConfigured?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--red)">No</span>');
     if(r.repo)html+=healthRow('Repository',r.repo);if(r.path)html+=healthRow('Path',r.path);
     html+=healthRow('Status',r.ok?'<span style="color:var(--green)">OK</span>':'<span style="color:var(--red)">Issue</span>');
