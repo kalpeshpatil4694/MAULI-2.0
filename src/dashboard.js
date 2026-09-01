@@ -219,6 +219,7 @@ body.sidebar-open{overflow:hidden!important}@media(max-width:768px){.hamburger{d
       <div class="nav-item" data-page="subagents"><span class="nav-icon">🤖</span>Sub-Agents</div>
       <div class="nav-item" data-page="messaging"><span class="nav-icon">💌</span>Messaging</div>
       <div class="nav-item" data-page="apiexplorer"><span class="nav-icon">🌐</span>API Explorer</div>
+      <div class="nav-item" data-page="downloads"><span class="nav-icon">📥</span>Downloads</div>
       <div class="nav-section">Settings</div>
       <div class="nav-item" data-page="shortcuts"><span class="nav-icon">⌨️</span>Shortcuts</div>
       <div class="nav-item" onclick="clearKey()"><span class="nav-icon">🔑</span>Reset API Key</div>
