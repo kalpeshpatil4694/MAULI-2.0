@@ -176,7 +176,7 @@ td{padding:10px 12px;border-bottom:1px solid rgba(30,45,74,.3);font-size:13px}
 .hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:10px 12px;border-radius:8px;min-width:44px;min-height:44px;touch-action:manipulation}
 .sidebar-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:99;pointer-events:none}.sidebar-overlay.show{pointer-events:auto}
 .sidebar-overlay.show{display:block}
-body.sidebar-open{overflow:hidden!important;position:fixed;width:100%;height:100%}@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%);z-index:200;height:100vh;max-height:100vh;overflow-y:auto!important;-webkit-overflow-scrolling:touch;touch-action:pan-y!important}.sidebar.open{transform:translateX(0);box-shadow:4px 0 30px rgba(0,0,0,.6)}.sidebar-nav{flex:1;overflow-y:auto!important;-webkit-overflow-scrolling:touch;touch-action:pan-y!important;padding-bottom:40px}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 12px}.topbar-title{font-size:13px}.topbar-right .btn-sm{font-size:11px;padding:5px 10px}.content{padding:12px}}
+body.sidebar-open{overflow:hidden!important}@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%);z-index:200;height:100vh;max-height:100vh;overflow:hidden!important;display:flex;flex-direction:column}.sidebar.open{transform:translateX(0);box-shadow:4px 0 30px rgba(0,0,0,.6)}.sidebar-nav{flex:1;overflow-y:auto!important;-webkit-overflow-scrolling:touch;padding-bottom:40px}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 12px}.topbar-title{font-size:13px}.topbar-right .btn-sm{font-size:11px;padding:5px 10px}.content{padding:12px}}
 </style>
 </head>
 <body>
@@ -842,7 +842,7 @@ async function loadMCPServers(){
     $('mcpServersList').innerHTML=html||'<div class="empty"><div class="empty-text">No MCP servers available</div></div>';
   }catch(e){$('mcpServersList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
 }
-
+async function sendCommand(){
   const input=$('cmdInput');const cmd=input.value.trim();
   if(!cmd){toast('Enter a founder command first','error');return}
   $('sendCmd').disabled=true;$('cmdLoading').classList.add('show');$('cmdResult').style.display='none';
