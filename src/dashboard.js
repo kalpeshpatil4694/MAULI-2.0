@@ -176,7 +176,7 @@ td{padding:10px 12px;border-bottom:1px solid rgba(30,45,74,.3);font-size:13px}
 .hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:10px 12px;border-radius:8px;min-width:44px;min-height:44px;touch-action:manipulation}
 .sidebar-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:99}
 .sidebar-overlay.show{display:block}
-@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%);z-index:200}.sidebar.open{transform:translateX(0);box-shadow:4px 0 30px rgba(0,0,0,.6)}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 12px}.topbar-title{font-size:13px}.topbar-right .btn-sm{font-size:11px;padding:5px 10px}.content{padding:12px}}
+@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%);z-index:200;max-height:100vh;overflow:hidden}.sidebar.open{transform:translateX(0);box-shadow:4px 0 30px rgba(0,0,0,.6)}.sidebar-nav{overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:calc(100vh - 70px);scroll-behavior:smooth}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 12px}.topbar-title{font-size:13px}.topbar-right .btn-sm{font-size:11px;padding:5px 10px}.content{padding:12px}}
 </style>
 </head>
 <body>
@@ -528,7 +528,7 @@ function navigateTo(page){
   if(page==='tasks')renderTasks();if(page==='activity')renderActivity();if(page==='health')renderHealth();
   if(page==='memory')renderMemory();if(page==='monitor')renderMonitor();if(page==='integrations')renderIntegrations();if(page==='learning')renderLearning();if(page==='editor')loadRecentEdits();if(page==='changelog')loadChangeHistory();if(page==='builds')loadBuildStatus();if(page==='subagents')loadSubAgents();if(page==='messaging')loadMessages();if(page==='apiexplorer')loadMCPServers();
 }
-document.querySelectorAll('.nav-item[data-page]').forEach(el=>{el.addEventListener('click',e=>{e.preventDefault();navigateTo(el.dataset.page)});el.addEventListener('touchend',e=>{e.preventDefault();navigateTo(el.dataset.page)})});
+document.querySelectorAll('.nav-item[data-page]').forEach(el=>{el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();navigateTo(el.dataset.page)})});
 const navPages=['command','chat','overview','agents','monitor','projects','tasks','docs','approvals','activity','health','memory','integrations','editor','changelog','learning','builds','subagents','messaging','apiexplorer','shortcuts'];
 document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();togglePalette();return}
