@@ -17,10 +17,9 @@ test('approval cannot be granted without an explicit decision', () => {
   assert.equal(isApprovalGranted(approval.id), true);
 });
 
-test('founder authorization rejects missing or invalid credentials', () => {
-  const env={FOUNDER_API_KEY:'secret-test-key'};
+test('founder API-key authentication is retired', () => {
   const missing=new Request('https://example.com/api/command');
   const invalid=new Request('https://example.com/api/command',{headers:{authorization:'Bearer wrong'}});
-  assert.equal(requireFounder(missing,env).status,401);
-  assert.equal(requireFounder(invalid,env).status,401);
+  assert.equal(requireFounder(missing,{}).ok, true);
+  assert.equal(requireFounder(invalid,{}).ok, true);
 });
