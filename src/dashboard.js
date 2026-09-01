@@ -4,11 +4,13 @@ return `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MAULI 2.0 — AI Command Center</title>    <style>
+<title>MAULI 2.0 — AI Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg-0:#060a14;--bg-1:#0b1120;--bg-2:#111a2e;--bg-3:#182240;
-  --border:#1e2d4a;--border-light:#293b64;
+  --border:#1e2d4a;--border-light:#293b64;--border-glow:rgba(0,212,255,.15);
   --text:#e8ecf4;--text-muted:#8899bb;--text-dim:#556688;
   --accent:#00d4ff;--accent-2:#7c5cff;--accent-3:#ff6b9d;
   --green:#22c55e;--green-bg:rgba(34,197,94,.12);
@@ -16,1180 +18,908 @@ return `<!DOCTYPE html>
   --red:#ef4444;--red-bg:rgba(239,68,68,.12);
   --blue:#3b82f6;--blue-bg:rgba(59,130,246,.12);
   --cyan-bg:rgba(0,212,255,.08);
-  --radius:12px;--radius-sm:8px;
+  --radius:12px;--radius-sm:8px;--radius-lg:16px;
   --shadow:0 4px 24px rgba(0,0,0,.4);
-  --transition:all .2s ease;
+  --shadow-lg:0 8px 48px rgba(0,0,0,.6);
+  --transition:all .2s cubic-bezier(.4,0,.2,1);
+  --glass:rgba(11,17,32,.7);
+  --glass-border:rgba(30,45,74,.5);
 }
 html{font-size:15px}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-0);color:var(--text);line-height:1.6;min-height:100vh;overflow-x:hidden}
 a{color:var(--accent);text-decoration:none}
 ::selection{background:var(--accent);color:var(--bg-0)}
-
-/* SCROLLBAR */
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:var(--bg-1)}
 ::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
-
-/* LAYOUT */
-.layout{display:flex;min-height:100vh}
-.sidebar{width:240px;background:var(--bg-1);border-right:1px solid var(--border);position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;transition:transform .3s ease}
-.sidebar-header{padding:20px;border-bottom:1px solid var(--border)}
+.bg-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.bg-gradient{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse at 20% 50%,rgba(0,212,255,.04) 0%,transparent 50%),
+  radial-gradient(ellipse at 80% 20%,rgba(124,92,255,.04) 0%,transparent 50%),
+  radial-gradient(ellipse at 50% 80%,rgba(255,107,157,.03) 0%,transparent 50%);
+  animation:bgShift 20s ease-in-out infinite alternate}
+@keyframes bgShift{0%{opacity:.6;filter:hue-rotate(0deg)}50%{opacity:1;filter:hue-rotate(10deg)}100%{opacity:.7;filter:hue-rotate(-5deg)}}
+.grid-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,212,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.03) 1px,transparent 1px);
+  background-size:60px 60px;animation:gridMove 30s linear infinite}
+@keyframes gridMove{0%{transform:translate(0,0)}100%{transform:translate(60px,60px)}}
+.layout{display:flex;min-height:100vh;position:relative;z-index:1}
+.sidebar{width:260px;background:var(--glass);backdrop-filter:blur(20px);border-right:1px solid var(--glass-border);position:fixed;top:0;left:0;bottom:0;z-index:100;display:flex;flex-direction:column;transition:transform .3s ease}
+.sidebar-header{padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
 .sidebar-brand{display:flex;align-items:center;gap:10px}
-.sidebar-logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:var(--bg-0)}
+.sidebar-logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;color:var(--bg-0);box-shadow:0 0 20px rgba(0,212,255,.3)}
 .sidebar-title{font-size:14px;font-weight:700;letter-spacing:.5px}
 .sidebar-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
 .sidebar-nav{flex:1;padding:12px 8px;overflow-y:auto}
-.nav-section{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-dim);padding:12px 12px 6px}
+.nav-section{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-dim);padding:14px 12px 6px;display:flex;align-items:center;gap:8px}
+.nav-section::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent)}
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:var(--transition);font-size:13px;color:var(--text-muted);position:relative}
 .nav-item:hover{background:var(--bg-2);color:var(--text)}
 .nav-item.active{background:var(--cyan-bg);color:var(--accent);font-weight:600}
-.nav-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:20px;background:var(--accent);border-radius:0 3px 3px 0}
+.nav-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:20px;background:var(--accent);border-radius:0 3px 3px 0;box-shadow:0 0 8px var(--accent)}
 .nav-icon{width:18px;text-align:center;font-size:14px;flex-shrink:0}
 .nav-badge{margin-left:auto;background:var(--accent-2);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600}
-
-.main{flex:1;margin-left:240px;min-height:100vh}
+.nav-badge.live{animation:badgePulse 2s infinite}
+@keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,.4)}50%{box-shadow:0 0 0 4px rgba(124,92,255,0)}}
+.main{flex:1;margin-left:260px;min-height:100vh}
 .topbar{position:sticky;top:0;z-index:50;background:rgba(6,10,20,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 28px;height:56px;display:flex;align-items:center;justify-content:space-between}
 .topbar-left{display:flex;align-items:center;gap:12px}
 .topbar-title{font-size:15px;font-weight:600}
 .topbar-right{display:flex;align-items:center;gap:12px}
 .topbar-status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)}
-.status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;box-shadow:0 0 6px var(--green)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.status-dot.dead{background:var(--red);animation:pulse-fast 0.5s infinite}
+.status-dot.dead{background:var(--red);animation:pulse-fast .5s infinite;box-shadow:0 0 6px var(--red)}
 @keyframes pulse-fast{0%,100%{opacity:1}50%{opacity:.2}}
 .topbar-time{font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums}
-
-/* BUILD PROGRESS */
-.build-progress{background:var(--bg-0);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-top:12px}
-.build-progress-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.build-progress-label{font-size:12px;font-weight:600;color:var(--accent)}
-.build-progress-status{font-size:11px;color:var(--text-muted)}
-.build-progress-bar{height:4px;background:var(--bg-3);border-radius:2px;overflow:hidden}
-.build-progress-fill{height:100%;border-radius:2px;transition:width 1s ease;background:linear-gradient(90deg,var(--accent),var(--accent-2));animation:progressPulse 1.5s ease-in-out infinite}
-@keyframes progressPulse{0%,100%{opacity:1}50%{opacity:.7}}
-.build-progress-fill.done{background:var(--green);animation:none}
-.build-progress-fill.error{background:var(--red);animation:none}
-
+.shortcut-hint{font-size:10px;color:var(--text-dim);background:var(--bg-3);padding:3px 8px;border-radius:4px;border:1px solid var(--border);cursor:pointer;transition:var(--transition)}
+.shortcut-hint:hover{border-color:var(--accent);color:var(--accent)}
 .content{padding:24px 28px 40px}
-.page{display:none}
+.page{display:none;animation:fadeIn .3s ease}
 .page.active{display:block}
-
-/* CARDS */
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .card{background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;transition:var(--transition)}
-.card:hover{border-color:var(--border-light)}
+.card:hover{border-color:var(--border-light);box-shadow:0 4px 16px rgba(0,0,0,.2)}
 .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .card-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
 .card-subtitle{font-size:12px;color:var(--text-muted)}
 .card-body{position:relative}
-
-/* GRID */
 .grid{display:grid;gap:16px}
 .grid-2{grid-template-columns:repeat(2,1fr)}
 .grid-3{grid-template-columns:repeat(3,1fr)}
 .grid-4{grid-template-columns:repeat(4,1fr)}
+.grid-5{grid-template-columns:repeat(5,1fr)}
 .grid-auto{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
-@media(max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}}
-
-/* STAT CARDS */
-.stat{text-align:center;padding:20px}
+@media(max-width:900px){.grid-2,.grid-3,.grid-4,.grid-5{grid-template-columns:1fr}}
+.stat{text-align:center;padding:20px;position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:60px;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);border-radius:1px}
 .stat-value{font-size:32px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.2}
 .stat-label{font-size:12px;color:var(--text-muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
 .stat-icon{font-size:24px;margin-bottom:8px;opacity:.7}
-
-/* AGENT CARDS */
-.agent-card{position:relative;overflow:hidden}
-.agent-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
-.agent-card[data-state="available"]::before{background:var(--green)}
-.agent-card[data-state="working"]::before{background:var(--accent)}
-.agent-card[data-state="blocked"],.agent-card[data-state="escalated"]::before{background:var(--red)}
-.agent-card[data-state="assigned"]::before{background:var(--yellow)}
-.agent-name{font-weight:600;font-size:14px;margin-bottom:2px}
-.agent-role{font-size:12px;color:var(--text-muted);margin-bottom:10px}
-.agent-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-.agent-dept{font-size:11px;padding:3px 8px;border-radius:6px;background:var(--bg-3);color:var(--text-muted)}
-.agent-state{font-size:11px;padding:3px 8px;border-radius:6px;font-weight:600}
-.state-available{background:var(--green-bg);color:var(--green)}
-.state-working{background:var(--cyan-bg);color:var(--accent)}
-.state-assigned{background:var(--yellow-bg);color:var(--yellow)}
-.state-blocked,.state-escalated{background:var(--red-bg);color:var(--red)}
-.state-offline{background:var(--bg-3);color:var(--text-dim)}
-.agent-caps{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
-.cap-tag{font-size:10px;padding:2px 6px;border-radius:4px;background:var(--bg-3);color:var(--text-dim)}
-.agent-score{position:absolute;top:12px;right:12px;font-size:11px;font-weight:700;color:var(--accent);background:var(--bg-0);padding:3px 8px;border-radius:6px}
-
-/* PROGRESS BAR */
-.progress-bar{height:6px;background:var(--bg-3);border-radius:3px;overflow:hidden;margin-top:8px}
-.progress-fill{height:100%;border-radius:3px;transition:width .6s ease}
-.progress-green{background:linear-gradient(90deg,var(--green),#4ade80)}
-.progress-blue{background:linear-gradient(90deg,var(--blue),var(--accent))}
-.progress-yellow{background:linear-gradient(90deg,var(--yellow),#facc15)}
-.progress-red{background:linear-gradient(90deg,var(--red),#f87171)}
-
-/* BUTTONS */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-2);color:var(--text);font-size:13px;cursor:pointer;transition:var(--transition);font-family:inherit}
-.btn:hover{border-color:var(--accent);background:var(--bg-3)}
-.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:var(--bg-0);border:none;font-weight:600}
-.btn-primary:hover{opacity:.9;transform:translateY(-1px)}
-.btn-green{background:var(--green);color:var(--bg-0);border:none;font-weight:600}
-.btn-red{background:var(--red);color:#fff;border:none}
+.btn{padding:8px 16px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-3);color:var(--text);font-size:13px;cursor:pointer;transition:var(--transition);font-weight:500;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--border-light);transform:translateY(-1px)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));border:none;color:#fff;font-weight:600;box-shadow:0 2px 12px rgba(0,212,255,.3)}
+.btn-primary:hover{box-shadow:0 4px 20px rgba(0,212,255,.4);transform:translateY(-2px)}
+.btn-green{background:var(--green-bg);border-color:rgba(34,197,94,.3);color:var(--green)}
+.btn-red{background:var(--red-bg);border-color:rgba(239,68,68,.3);color:var(--red)}
+.btn-accent{background:var(--cyan-bg);border-color:rgba(0,212,255,.3);color:var(--accent)}
 .btn-sm{padding:5px 10px;font-size:11px}
-.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
-
-/* INPUTS */
-.input,.textarea{width:100%;background:var(--bg-0);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;font-family:inherit;transition:var(--transition);outline:none}
-.input:focus,.textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,.1)}
-.textarea{min-height:100px;resize:vertical;line-height:1.5}
-
-/* BADGES */
-.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 8px;border-radius:6px;font-weight:600}
+.input{width:100%;padding:10px 14px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:14px;font-family:inherit;transition:var(--transition)}
+.input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,.1)}
+textarea.input{min-height:100px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:13px}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
 .badge-green{background:var(--green-bg);color:var(--green)}
-.badge-yellow{background:var(--yellow-bg);color:var(--yellow)}
 .badge-red{background:var(--red-bg);color:var(--red)}
+.badge-yellow{background:var(--yellow-bg);color:var(--yellow)}
 .badge-blue{background:var(--blue-bg);color:var(--blue)}
 .badge-accent{background:var(--cyan-bg);color:var(--accent)}
-
-/* TASK LIST */
-.task-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);transition:var(--transition)}
-.task-row:last-child{border-bottom:none}
-.task-row:hover{background:var(--bg-3)}
-.task-title{font-size:13px;font-weight:500;flex:1}
-.task-meta{font-size:11px;color:var(--text-dim);display:flex;gap:10px;align-items:center}
-
-/* ACTIVITY FEED */
-.event-row{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid rgba(30,45,74,.4);font-size:13px}
-.event-row:last-child{border-bottom:none}
-.event-dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0}
-.event-content{flex:1}
-.event-type{font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
-.event-detail{color:var(--text-muted);font-size:12px}
-.event-time{font-size:11px;color:var(--text-dim);white-space:nowrap;margin-top:2px}
-
-/* COMMAND CENTER */
-.cmd-area{position:relative}
-.cmd-result{background:var(--bg-0);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-top:12px;font-family:'JetBrains Mono','Fira Code',monospace;font-size:12px;line-height:1.6;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;color:var(--text-muted)}
-.cmd-loading{display:none;align-items:center;gap:8px;padding:16px;color:var(--accent);font-size:13px}
-.cmd-loading.show{display:flex}
-.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);padding:10px 12px;border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid rgba(30,45,74,.3);font-size:13px}
+.agent-card{position:relative;overflow:hidden}
+.agent-card::after{content:'';position:absolute;top:0;right:0;width:80px;height:80px;background:radial-gradient(circle,var(--accent-2),transparent);opacity:.05;border-radius:0 0 0 80px}
+.agent-avatar{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.agent-name{font-weight:600;font-size:14px}
+.agent-role{font-size:11px;color:var(--text-muted);margin-top:2px}
+.agent-status{display:flex;align-items:center;gap:6px;margin-top:8px}
+.agent-skill-bar{height:4px;background:var(--bg-3);border-radius:2px;flex:1;overflow:hidden}
+.agent-skill-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .5s ease}
+.activity-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid rgba(30,45,74,.3)}
+.activity-dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0}
+.activity-text{font-size:13px;flex:1}
+.activity-time{font-size:11px;color:var(--text-dim);flex-shrink:0}
+.progress-bar{height:6px;background:var(--bg-3);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .5s ease}
+.progress-fill.done{background:var(--green)}
+.progress-fill.error{background:var(--red)}
+.chat-container{display:flex;flex-direction:column;height:calc(100vh - 160px)}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.chat-msg{max-width:80%;padding:12px 16px;border-radius:12px;font-size:13px;line-height:1.5;animation:msgIn .2s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.chat-msg.user{align-self:flex-end;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;border-bottom-right-radius:4px}
+.chat-msg.mauli{align-self:flex-start;background:var(--bg-2);border:1px solid var(--border);border-bottom-left-radius:4px}
+.chat-msg .msg-role{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;opacity:.7}
+.chat-input-wrap{display:flex;gap:8px;padding:16px;border-top:1px solid var(--border);background:var(--bg-1)}
+.chat-input-wrap .input{flex:1}
+.monitor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.monitor-card{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;transition:var(--transition)}
+.monitor-card.active{border-color:var(--accent);box-shadow:0 0 12px rgba(0,212,255,.1)}
+.monitor-label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.monitor-value{font-size:20px;font-weight:700;margin-top:4px}
+.palette-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:1000;display:none;align-items:flex-start;justify-content:center;padding-top:15vh;backdrop-filter:blur(4px)}
+.palette-overlay.show{display:flex}
+.palette-panel{background:var(--bg-1);border:1px solid var(--border);border-radius:var(--radius-lg);width:560px;box-shadow:var(--shadow-lg);overflow:hidden}
+.palette-input{width:100%;padding:16px 20px;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--text);font-size:16px;font-family:inherit}
+.palette-input:focus{outline:none}
+.palette-results{max-height:320px;overflow-y:auto}
+.palette-item{padding:10px 20px;cursor:pointer;display:flex;align-items:center;gap:12px;transition:var(--transition)}
+.palette-item:hover,.palette-item.selected{background:var(--cyan-bg)}
+.palette-item-icon{font-size:16px;width:24px;text-align:center}
+.palette-item-text{font-size:13px;flex:1}
+.palette-item-shortcut{font-size:11px;color:var(--text-dim)}
+.toast-container{position:fixed;top:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:8px}
+.toast{padding:12px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;animation:toastIn .3s ease;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow-lg)}
+.toast.success{background:var(--green-bg);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+.toast.error{background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+.toast.info{background:var(--blue-bg);border:1px solid rgba(59,130,246,.3);color:var(--blue)}
+@keyframes toastIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.empty{text-align:center;padding:40px 20px}
+.empty-icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.empty-text{font-size:14px;color:var(--text-muted)}
+.loading{display:none;padding:20px;text-align:center}
+.loading.show{display:block}
+.spinner{width:24px;height:24px;border:3px solid var(--bg-3);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin:0 auto}
 @keyframes spin{to{transform:rotate(360deg)}}
-
-/* PROJECT CARD */
-.project-card{border-left:3px solid var(--accent-2);position:relative}
-.project-name{font-weight:600;font-size:14px;margin-bottom:4px}
-.project-obj{font-size:12px;color:var(--text-muted);margin-bottom:12px}
-.project-stats{display:flex;gap:16px;font-size:12px;color:var(--text-dim)}
-.project-stat{display:flex;align-items:center;gap:4px}
-
-/* APPROVAL CARD */
-.approval-card{border-left:3px solid var(--yellow)}
-.approval-action{font-size:13px;font-weight:500;margin-bottom:4px}
-.approval-meta{font-size:11px;color:var(--text-dim);margin-bottom:10px;display:flex;gap:10px}
-.approval-actions{display:flex;gap:8px}
-
-/* HEALTH */
-.health-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3);font-size:13px}
-.health-row:last-child{border-bottom:none}
-.health-label{flex:1;color:var(--text-muted)}
-.health-value{font-weight:600}
-
-/* EMPTY STATE */
-.empty{text-align:center;padding:40px 20px;color:var(--text-dim)}
-.empty-icon{font-size:40px;margin-bottom:12px;opacity:.3}
-.empty-text{font-size:14px}
-
-/* TOAST */
-.toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
-.toast{padding:12px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;animation:slideIn .3s ease;box-shadow:var(--shadow);max-width:400px}
-.toast-success{background:var(--green);color:var(--bg-0)}
-.toast-error{background:var(--red);color:#fff}
-.toast-info{background:var(--accent);color:var(--bg-0)}
-@keyframes slideIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
-
-/* RESPONSIVE */
-@media(max-width:768px){
-  .sidebar{transform:translateX(-100%)}
-  .sidebar.open{transform:translateX(0)}
-  .main{margin-left:0}
-  .content{padding:16px}
-  .topbar{padding:0 16px}
-  .grid-4,.grid-3{grid-template-columns:repeat(2,1fr)}
-  .mobile-menu{display:flex!important}
-}
-.mobile-menu{display:none;align-items:center;justify-content:center;width:36px;height:36px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-2);cursor:pointer;font-size:18px}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99}
-.sidebar-overlay.open{display:block}
-
-/* FADE IN */
-.fade-in{animation:fadeIn .4s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+::-webkit-scrollbar-thumb:hover{background:var(--accent);box-shadow:0 0 8px rgba(0,212,255,.3)}
+@media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.main{margin-left:0}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
+<canvas class="bg-canvas" id="bgCanvas"></canvas>
+<div class="bg-gradient"></div>
+<div class="grid-overlay"></div>
 <div class="layout">
-  <!-- SIDEBAR -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-brand">
         <div class="sidebar-logo">M</div>
-        <div>
-          <div class="sidebar-title">MAULI 2.0</div>
-          <div class="sidebar-sub">AI Command Center</div>
-        </div>
+        <div><div class="sidebar-title">MAULI 2.0</div><div class="sidebar-sub">AI Command Center</div></div>
       </div>
     </div>
     <nav class="sidebar-nav">
       <div class="nav-section">Command</div>
       <div class="nav-item active" data-page="command"><span class="nav-icon">⚡</span>Command Center</div>
-      <div class="nav-section">Company</div>
+      <div class="nav-item" data-page="chat"><span class="nav-icon">💬</span>Chat with MAULI</div>
+      <div class="nav-section">Intelligence</div>
       <div class="nav-item" data-page="overview"><span class="nav-icon">📊</span>Overview</div>
-      <div class="nav-item" data-page="agents"><span class="nav-icon">🤖</span>Agent Hive<span class="nav-badge" id="nav-agent-count">0</span></div>
+      <div class="nav-item" data-page="agents"><span class="nav-icon">🤖</span>Agent Hive<span class="nav-badge live" id="nav-agent-count">0</span></div>
+      <div class="nav-item" data-page="monitor"><span class="nav-icon">📡</span>Live Monitor</div>
+      <div class="nav-section">Workspace</div>
       <div class="nav-item" data-page="projects"><span class="nav-icon">📁</span>Projects<span class="nav-badge" id="nav-project-count">0</span></div>
       <div class="nav-item" data-page="tasks"><span class="nav-icon">📋</span>Tasks<span class="nav-badge" id="nav-task-count">0</span></div>
+      <div class="nav-item" data-page="docs"><span class="nav-icon">📚</span>Documentation</div>
       <div class="nav-section">Governance</div>
       <div class="nav-item" data-page="approvals"><span class="nav-icon">🛡️</span>Approvals<span class="nav-badge" id="nav-approval-count" style="background:var(--yellow)">0</span></div>
       <div class="nav-section">System</div>
-      <div class="nav-item" data-page="activity"><span class="nav-icon">📡</span>Activity</div>
-      <div class="nav-item" data-page="health"><span class="nav-icon">💚</span>Health</div>
-      <div class="nav-item" data-page="memory"><span class="nav-icon">🧠</span>Memory</div>
+      <div class="nav-item" data-page="activity"><span class="nav-icon">📡</span>Activity Feed</div>
+      <div class="nav-item" data-page="health"><span class="nav-icon">💚</span>System Health</div>
+      <div class="nav-item" data-page="memory"><span class="nav-icon">🧠</span>Memory Bank</div>
+      <div class="nav-item" data-page="integrations"><span class="nav-icon">🔗</span>Integrations</div>
+      <div class="nav-section">Tools</div>
+      <div class="nav-item" data-page="editor"><span class="nav-icon">✏️</span>File Editor</div>
+      <div class="nav-item" data-page="changelog"><span class="nav-icon">📝</span>Change History</div>
+      <div class="nav-item" data-page="learning"><span class="nav-icon">🎓</span>Learning & Skills</div>
+      <div class="nav-item" data-page="builds"><span class="nav-icon">🔨</span>Build Manager</div>
+      <div class="nav-item" data-page="subagents"><span class="nav-icon">🤖</span>Sub-Agents</div>
+      <div class="nav-item" data-page="messaging"><span class="nav-icon">💌</span>Messaging</div>
+      <div class="nav-item" data-page="apiexplorer"><span class="nav-icon">🌐</span>API Explorer</div>
       <div class="nav-section">Settings</div>
+      <div class="nav-item" data-page="shortcuts"><span class="nav-icon">⌨️</span>Shortcuts</div>
       <div class="nav-item" onclick="clearKey()"><span class="nav-icon">🔑</span>Reset API Key</div>
     </nav>
   </aside>
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-  <!-- MAIN -->
   <div class="main">
-    <div class="topbar">
+    <header class="topbar">
       <div class="topbar-left">
-        <div class="mobile-menu" id="mobileMenuBtn">☰</div>
-        <div class="topbar-title" id="pageTitle">Command Center</div>
+        <div class="topbar-status"><span class="status-dot" id="heartbeatDot"></span><span id="heartbeatText">Connecting...</span></div>
+        <span class="topbar-title" id="pageTitle">Command Center</span>
       </div>
       <div class="topbar-right">
-        <div class="topbar-status"><span class="status-dot" id="heartbeatDot"></span><span id="heartbeatText">System Online</span></div>
-        <div class="topbar-time" id="topbarTime"></div>
+        <span class="shortcut-hint" onclick="togglePalette()" title="Command Palette (Ctrl+K)">⌘K</span>
+        <span class="topbar-time" id="topbarTime"></span>
       </div>
-    </div>
-
+    </header>
     <div class="content">
-      <!-- COMMAND CENTER PAGE -->
       <div class="page active" id="page-command">
-        <div class="card fade-in">
-          <div class="card-header">
-            <div class="card-title">⚡ Founder Command</div>
-            <div class="card-subtitle">Send instructions to the MAULI autonomous company</div>
-          </div>
+        <div class="grid grid-4" style="margin-bottom:20px">
+          <div class="card stat"><div class="stat-icon">📁</div><div class="stat-value" id="stat-projects">0</div><div class="stat-label">Projects</div></div>
+          <div class="card stat"><div class="stat-icon">📋</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-label">Tasks</div></div>
+          <div class="card stat"><div class="stat-icon">🤖</div><div class="stat-value" id="stat-agents">0</div><div class="stat-label">Agents</div></div>
+          <div class="card stat"><div class="stat-icon">📦</div><div class="stat-value" id="stat-artifacts">0</div><div class="stat-label">Artifacts</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚡ Founder Command</div><div class="card-subtitle">Tell MAULI what to build</div></div>
           <div class="card-body">
-            <div class="cmd-area">
-              <textarea class="textarea" id="cmdInput" placeholder="Enter a founder command...&#10;Example: Create a full-stack e-commerce platform with product catalog, shopping cart, checkout, and admin dashboard"></textarea>
-              <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-                <button class="btn btn-primary" id="sendCmd" onclick="sendCommand()">🚀 Execute Command</button>
-                <button class="btn" onclick="runSelfTest()">🧪 Self-Test</button>
-                <button class="btn" onclick="runDiagnostic()">🔍 Diagnostics</button>
-              </div>
+            <textarea class="input" id="cmdInput" placeholder="Example: Build a weather app for Android with live forecasts, radar maps, and severe weather alerts..." rows="4"></textarea>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn btn-primary" id="sendCmd" onclick="sendCommand()">⚡ Execute Command</button>
+              <span class="loading" id="cmdLoading"><span class="spinner"></span></span>
             </div>
-            <div class="cmd-loading" id="cmdLoading">
-              <div class="spinner"></div>
-              <span>Executing founder command...</span>
-            </div>
-            <div class="cmd-result" id="cmdResult" style="display:none"></div>
+            <pre class="card" id="cmdResult" style="display:none;margin-top:12px;font-size:12px;max-height:300px;overflow:auto;font-family:'JetBrains Mono',monospace;background:var(--bg-1)"></pre>
           </div>
         </div>
-
-        <div class="card fade-in" style="animation-delay:.1s">
-          <div class="card-header">
-            <div class="card-title">📊 Quick Stats</div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🚀 Quick Actions</div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sm btn-accent" onclick="quickCmd('Build a weather app for Android')">🌤️ Weather App</button>
+            <button class="btn btn-sm btn-accent" onclick="quickCmd('Create an e-commerce platform')">🛒 E-Commerce</button>
+            <button class="btn btn-sm btn-accent" onclick="quickCmd('Build a calculator app')">🔢 Calculator</button>
+            <button class="btn btn-sm btn-accent" onclick="quickCmd('Create a music player app')">🎵 Music Player</button>
+            <button class="btn btn-sm btn-accent" onclick="quickCmd('Build a chat application')">💬 Chat App</button>
+            <button class="btn btn-sm btn-accent" onclick="quickCmd('Create a PDF report generator')">📄 PDF Generator</button>
+            <button class="btn btn-sm btn-accent" onclick="quickCmd('Build a task management system')">✅ Task Manager</button>
+            <button class="btn btn-sm btn-accent" onclick="quickCmd('Create a portfolio website')">🌐 Portfolio</button>
           </div>
-          <div class="card-body">
-            <div class="grid grid-4" id="quickStats">
-              <div class="stat"><div class="stat-icon">🤖</div><div class="stat-value" id="stat-agents">0</div><div class="stat-label">Agents</div></div>
-              <div class="stat"><div class="stat-icon">📁</div><div class="stat-value" id="stat-projects">0</div><div class="stat-label">Projects</div></div>
-              <div class="stat"><div class="stat-icon">📋</div><div class="stat-value" id="stat-tasks">0</div><div class="stat-label">Tasks</div></div>
-              <div class="stat"><div class="stat-icon">🛡️</div><div class="stat-value" id="stat-approvals">0</div><div class="stat-label">Approvals</div></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card fade-in" style="animation-delay:.2s">
-          <div class="card-header">
-            <div class="card-title">📡 Recent Activity</div>
-            <button class="btn btn-sm" onclick="navigateTo('activity')">View All</button>
-          </div>
-          <div class="card-body" id="cmdActivity"></div>
         </div>
       </div>
-
-      <!-- OVERVIEW PAGE -->
+      <div class="page" id="page-chat">
+        <div class="card" style="padding:0;overflow:hidden;height:calc(100vh - 140px)">
+          <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+              <div class="chat-msg mauli"><div class="msg-role">MAULI</div>Hello! I'm MAULI 2.0, your AI command center. Tell me what you want to build and I'll create it for you.</div>
+            </div>
+            <div class="chat-input-wrap">
+              <input class="input" id="chatInput" placeholder="Type a message or command..." onkeydown="if(event.key==='Enter')sendChat()">
+              <button class="btn btn-primary" onclick="sendChat()">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="page" id="page-overview">
-        <div class="grid grid-4 fade-in">
-          <div class="card stat"><div class="stat-icon">🤖</div><div class="stat-value" id="ov-agents">0</div><div class="stat-label">Total Agents</div></div>
-          <div class="card stat"><div class="stat-icon">✅</div><div class="stat-value" id="ov-available">0</div><div class="stat-label">Available</div></div>
-          <div class="card stat"><div class="stat-icon">⚙️</div><div class="stat-value" id="ov-working">0</div><div class="stat-label">Working</div></div>
-          <div class="card stat"><div class="stat-icon">🚨</div><div class="stat-value" id="ov-issues">0</div><div class="stat-label">Escalated</div></div>
+        <div class="grid grid-5" style="margin-bottom:20px">
+          <div class="card stat"><div class="stat-icon">📁</div><div class="stat-value" id="ov-projects">0</div><div class="stat-label">Projects</div></div>
+          <div class="card stat"><div class="stat-icon">✅</div><div class="stat-value" id="ov-completed">0</div><div class="stat-label">Completed</div></div>
+          <div class="card stat"><div class="stat-icon">⚡</div><div class="stat-value" id="ov-active">0</div><div class="stat-label">Active</div></div>
+          <div class="card stat"><div class="stat-icon">🤖</div><div class="stat-value" id="ov-agents">0</div><div class="stat-label">Agents</div></div>
+          <div class="card stat"><div class="stat-icon">📦</div><div class="stat-value" id="ov-artifacts">0</div><div class="stat-label">Artifacts</div></div>
         </div>
-        <div class="grid grid-2 fade-in" style="margin-top:16px">
-          <div class="card">
-            <div class="card-header"><div class="card-title">📊 Agent Distribution</div></div>
-            <div class="card-body" id="ov-agentDist"></div>
-          </div>
-          <div class="card">
-            <div class="card-header"><div class="card-title">📋 Task Pipeline</div></div>
-            <div class="card-body" id="ov-taskPipeline"></div>
-          </div>
-        </div>
-        <div class="card fade-in" style="margin-top:16px">
-          <div class="card-header"><div class="card-title">📁 Recent Projects</div></div>
-          <div class="card-body" id="ov-projects"></div>
+        <div class="grid grid-2">
+          <div class="card"><div class="card-header"><div class="card-title">📈 Activity Feed</div></div><div id="overviewActivity" style="max-height:400px;overflow-y:auto"></div></div>
+          <div class="card"><div class="card-header"><div class="card-title">🛡️ System Health</div></div><div id="healthInfo"></div></div>
         </div>
       </div>
-
-      <!-- AGENTS PAGE -->
-      <div class="page" id="page-agents">
-        <div class="card fade-in">
-          <div class="card-header">
-            <div class="card-title">🤖 Agent Hive</div>
-            <div style="display:flex;gap:8px">
-              <select class="input" style="width:auto;padding:6px 10px;font-size:12px" id="agentFilter" onchange="renderAgents()">
-                <option value="all">All Agents</option>
-                <option value="available">Available</option>
-                <option value="working">Working</option>
-                <option value="blocked">Blocked</option>
-              </select>
-            </div>
-          </div>
-          <div class="card-body">
-            <div class="grid grid-auto" id="agentGrid"></div>
-          </div>
+      <div class="page" id="page-agents"><div class="grid grid-auto" id="agentsList"></div></div>
+      <div class="page" id="page-monitor">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📡 Real-Time System Monitor</div><button class="btn btn-sm btn-accent" onclick="refreshMonitor()">↻ Refresh</button></div>
+          <div class="monitor-grid" id="monitorGrid"></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card"><div class="card-header"><div class="card-title">🤖 Agent Activity</div></div><div id="agentActivity" style="max-height:400px;overflow-y:auto"></div></div>
+          <div class="card"><div class="card-header"><div class="card-title">📊 Task Progress</div></div><div id="taskProgress" style="max-height:400px;overflow-y:auto"></div></div>
         </div>
       </div>
-
-      <!-- PROJECTS PAGE -->
       <div class="page" id="page-projects">
-        <div class="card fade-in">
-          <div class="card-header">
-            <div class="card-title">📁 Projects</div>
-          </div>
-          <div class="card-body" id="projectList"></div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📁 All Projects</div><div class="card-subtitle" id="projectCount">0 projects</div></div>
+          <div id="projectsList"></div>
         </div>
       </div>
-
-      <!-- TASKS PAGE -->
       <div class="page" id="page-tasks">
-        <div class="card fade-in">
-          <div class="card-header">
-            <div class="card-title">📋 All Tasks</div>
-            <select class="input" style="width:auto;padding:6px 10px;font-size:12px" id="taskFilter" onchange="renderTasks()">
-              <option value="all">All States</option>
-              <option value="working">Working</option>
-              <option value="completed">Completed</option>
-              <option value="failed">Failed</option>
-              <option value="blocked">Blocked</option>
-            </select>
-          </div>
-          <div class="card-body" id="taskList"></div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📋 Task Overview</div><div class="card-subtitle" id="taskCount">0 tasks</div></div>
+          <div id="tasksList"></div>
         </div>
       </div>
-
-      <!-- APPROVALS PAGE -->
+      <div class="page" id="page-docs">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📚 Auto-Generated Documentation</div><button class="btn btn-sm btn-accent" onclick="generateDocs()">📄 Generate Docs</button></div>
+          <div id="docsContent"><div class="empty"><div class="empty-icon">📚</div><div class="empty-text">Select a project to generate documentation</div></div></div>
+        </div>
+      </div>
       <div class="page" id="page-approvals">
-        <div class="card fade-in">
-          <div class="card-header">
-            <div class="card-title">🛡️ Approvals</div>
-            <div class="card-subtitle">Founder approval required for high-risk actions</div>
-          </div>
-          <div class="card-body" id="approvalList"></div>
-        </div>
+        <div class="card"><div class="card-header"><div class="card-title">🛡️ Pending Approvals</div></div><div id="approvalsList"></div></div>
       </div>
-
-      <!-- ACTIVITY PAGE -->
       <div class="page" id="page-activity">
-        <div class="card fade-in">
-          <div class="card-header">
-            <div class="card-title">📡 Activity Feed</div>
-            <div class="card-subtitle">Live system event stream</div>
-          </div>
-          <div class="card-body" id="activityFeed" style="max-height:600px;overflow-y:auto"></div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📡 Full Activity Log</div><button class="btn btn-sm btn-accent" onclick="loadState()">↻ Refresh</button></div>
+          <div id="activityList" style="max-height:600px;overflow-y:auto"></div>
         </div>
       </div>
-
-      <!-- HEALTH PAGE -->
       <div class="page" id="page-health">
-        <div class="grid grid-2 fade-in">
+        <div class="grid grid-2">
           <div class="card">
-            <div class="card-header">
-              <div class="card-title">💚 System Health</div>
-              <button class="btn btn-sm" onclick="loadHealth()">Refresh</button>
-            </div>
-            <div class="card-body" id="healthInfo"></div>
+            <div class="card-header"><div class="card-title">💚 System Health</div><button class="btn btn-sm btn-green" onclick="runSelfTest()">▶ Run Self-Test</button></div>
+            <div id="healthDetail"></div><div id="selfTestResult" style="margin-top:12px"></div>
           </div>
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">🧪 Self-Test</div>
-              <button class="btn btn-sm" onclick="runSelfTest()">Run Test</button>
-            </div>
-            <div class="card-body" id="selfTestResult"></div>
-          </div>
+          <div class="card"><div class="card-header"><div class="card-title">🔧 Tools</div></div><div id="toolsList"></div></div>
         </div>
-        <div class="card fade-in" style="margin-top:16px">
-          <div class="card-header">
-            <div class="card-title">🔍 Result Persistence Diagnostic</div>
-            <button class="btn btn-sm" onclick="runDiagnostic()">Check</button>
-          </div>
-          <div class="card-body" id="diagResult"></div>
-        </div>
-        <div class="card fade-in" style="margin-top:16px">
-          <div class="card-header"><div class="card-title">🔧 Tools Registry</div></div>
-          <div class="card-body" id="toolsList"></div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🔍 Diagnostics</div><button class="btn btn-sm btn-accent" onclick="runDiagnostic()">▶ Run Diagnostic</button></div>
+          <div id="diagResult"></div>
         </div>
       </div>
-
-      <!-- MEMORY PAGE -->
       <div class="page" id="page-memory">
-        <div class="card fade-in">
-          <div class="card-header">
-            <div class="card-title">🧠 Company Memory</div>
-            <div class="card-subtitle">Persistent knowledge and decision history</div>
+        <div class="card"><div class="card-header"><div class="card-title">🧠 Company Memory</div></div><div id="memoryList" style="max-height:600px;overflow-y:auto"></div></div>
+      </div>
+      <div class="page" id="page-integrations">
+        <div class="card"><div class="card-header"><div class="card-title">🔗 Active Integrations</div></div><div class="grid grid-3" id="integrationsList"></div></div>
+        <div class="card"><div class="card-header"><div class="card-title">🌐 API Catalog</div></div><div id="apiCatalog"></div></div>
+      </div>
+      <div class="page" id="page-shortcuts">
+      <div class="page" id="page-editor">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header"><div class="card-title">✏️ File Editor</div><button class="btn btn-sm btn-accent" onclick="loadRecentEdits()">↻ Refresh</button></div>
+            <div style="margin-bottom:12px">
+              <select class="input" id="editorProject" style="margin-bottom:8px" onchange="loadProjectFiles(this.value)"><option value="">Select project...</option></select>
+              <input class="input" id="editorFile" placeholder="File path (e.g. src/index.js)" style="margin-bottom:8px">
+              <textarea class="input" id="editorContent" rows="12" placeholder="File content..."></textarea>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" onclick="saveFile()">💾 Save File</button>
+              <button class="btn btn-accent" onclick="loadFile()">📂 Load File</button>
+            </div>
           </div>
-          <div class="card-body" id="memoryList"></div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">📋 Recent Edits</div></div>
+            <div id="recentEditsList" style="max-height:500px;overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
+      <div class="page" id="page-changelog">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📝 Change History</div><button class="btn btn-sm btn-accent" onclick="loadChangeHistory()">↻ Refresh</button></div>
+          <div id="changeHistoryList" style="max-height:600px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div class="page" id="page-learning">
+        <div class="grid grid-3" style="margin-bottom:16px">
+          <div class="card stat"><div class="stat-icon">🎓</div><div class="stat-value" id="learn-tasks">0</div><div class="stat-label">Tasks Learned</div></div>
+          <div class="card stat"><div class="stat-icon">⭐</div><div class="stat-value" id="learn-patterns">0</div><div class="stat-label">Patterns Found</div></div>
+          <div class="card stat"><div class="stat-icon">🧬</div><div class="stat-value" id="learn-skills">0</div><div class="stat-label">Skills Tracked</div></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card"><div class="card-header"><div class="card-title">🌳 Skill Tree</div></div><div id="skillTreeList" style="max-height:400px;overflow-y:auto"></div></div>
+          <div class="card"><div class="card-header"><div class="card-title">📊 Learning Stats</div></div><div id="learningStatsList" style="max-height:400px;overflow-y:auto"></div></div>
+        </div>
+      </div>
+      <div class="page" id="page-builds">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🔨 Build Manager</div><button class="btn btn-sm btn-accent" onclick="loadBuildStatus()">↻ Refresh</button></div>
+          <div id="buildManagerList" style="max-height:600px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div class="page" id="page-subagents">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🤖 Sub-Agent System</div><button class="btn btn-sm btn-accent" onclick="loadSubAgents()">↻ Refresh</button></div>
+          <div id="subAgentsList" style="max-height:600px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div class="page" id="page-messaging">
+        <div class="card">
+          <div class="card-header"><div class="card-title">💌 Agent Messaging</div><button class="btn btn-sm btn-accent" onclick="loadMessages()">↻ Refresh</button></div>
+          <div id="messagesList" style="max-height:500px;overflow-y:auto"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📤 Send Message</div></div>
+          <div>
+            <select class="input" id="msgFrom" style="margin-bottom:8px"><option value="">From agent...</option></select>
+            <select class="input" id="msgTo" style="margin-bottom:8px"><option value="">To agent...</option></select>
+            <textarea class="input" id="msgContent" rows="3" placeholder="Message content..." style="margin-bottom:8px"></textarea>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" onclick="sendAgentMessage()">📤 Send</button>
+              <button class="btn btn-accent" onclick="broadcastMessage()">📡 Broadcast</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="page" id="page-apiexplorer">
+        <div class="card">
+          <div class="card-header"><div class="card-title">🌐 API Explorer</div></div>
+          <div style="margin-bottom:12px;display:flex;gap:8px">
+            <input class="input" id="apiSearchQ" placeholder="Search APIs (e.g. weather, finance...)" style="flex:1">
+            <button class="btn btn-primary" onclick="searchAPIs()">🔍 Search</button>
+          </div>
+          <div id="apiSearchResults" style="max-height:400px;overflow-y:auto"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🔌 MCP Servers</div></div>
+          <div id="mcpServersList" style="max-height:400px;overflow-y:auto"></div>
+        </div>
+      </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">⌨️ Keyboard Shortcuts</div></div>
+          <div class="card-body">
+            <div style="margin-bottom:16px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:8px">Navigation</div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Open Command Palette</span><div style="display:flex;gap:4px"><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">Ctrl+K</kbd></div></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Command Center</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">1</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Chat</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">2</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Overview</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">3</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Agents</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">4</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Monitor</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">5</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Projects</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">6</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Tasks</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">7</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Activity</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">8</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0"><span>Health</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">9</kbd></div></div>
+            <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:8px">Actions</div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Send Command</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">Ctrl+↵</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span>Refresh Data</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">R</kbd></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0"><span>Help</span><kbd style="background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--accent)">?</kbd></div></div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
-
+<div class="palette-overlay" id="paletteOverlay" onclick="if(event.target===this)togglePalette()">
+  <div class="palette-panel">
+    <input class="palette-input" id="paletteInput" placeholder="Type a command..." oninput="filterPalette(this.value)">
+    <div class="palette-results" id="paletteResults"></div>
+  </div>
+</div>
 <div class="toast-container" id="toastContainer"></div>
-
 <script>
-/* ───── STATE ───── */
-let STATE = { agents:[], projects:[], tasks:[], approvals:[], tools:[], artifacts:[], events:[] };
-let authKey = sanitizeKey(localStorage.getItem('mauli_key') || '');
-if(authKey) localStorage.setItem('mauli_key', authKey);
-
-/* ───── UTILS ───── */
-function $(id){ return document.getElementById(id); }
-function fmtDate(s){ if(!s) return '—'; try{return new Date(s).toLocaleString()}catch{return s} }
-function fmtShort(s){ if(!s) return ''; try{const d=new Date(s);return d.toLocaleTimeString()}catch{return ''} }
-function toast(msg, type='info'){
-  const el=document.createElement('div'); el.className='toast toast-'+type; el.textContent=msg;
-  $('toastContainer').appendChild(el); setTimeout(()=>el.remove(), 4000);
+const STATE={projects:[],tasks:[],artifacts:[],agents:[],events:[],approvals:[],tools:[]};
+const $=id=>document.getElementById(id);
+async function getKey(){return localStorage.getItem('mauli-api-key')}
+async function setKey(k){localStorage.setItem('mauli-api-key',k)}
+function clearKey(){localStorage.removeItem('mauli-api-key');toast('API key cleared','info')}
+async function api(path,opts={}){
+  const k=await getKey();if(!k){const pk=prompt('Enter MAULI API Key:');if(!pk)throw new Error('No key');await setKey(pk);return api(path,opts)}
+  const headers={'Content-Type':'application/json','Authorization':'Bearer '+k,...(opts.headers||{})};
+  const r=await fetch(path,{...opts,headers});
+  if(!r.ok){const t=await r.text();throw new Error(t||r.status)}
+  return r.json();
 }
-function eventColor(type){
-  if(!type) return 'var(--text-dim)';
-  if(type.includes('completed')||type.includes('success')) return 'var(--green)';
-  if(type.includes('failed')||type.includes('error')||type.includes('rejected')) return 'var(--red)';
-  if(type.includes('started')||type.includes('working')||type.includes('command')) return 'var(--accent)';
-  if(type.includes('created')||type.includes('registered')) return 'var(--blue)';
-  if(type.includes('approval')) return 'var(--yellow)';
-  return 'var(--text-dim)';
+function toast(msg,type='info'){
+  const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;
+  $('toastContainer').appendChild(el);setTimeout(()=>el.remove(),4000);
 }
-
-/* ───── AUTH ───── */
-function sanitizeKey(k) {
-  // Keep ONLY safe ASCII printable chars — anything else breaks fetch headers
-  return String(k || '').replace(/[^a-zA-Z0-9\-_. ]/g, '').trim();
-}
-
-async function getKey(){
-  const key = 'mauli-founder-key-2026';
-  authKey = key;
-  localStorage.setItem('mauli_key', key);
-  return key;
-}
-
-function clearKey(){
-  authKey = '';
-  localStorage.removeItem('mauli_key');
-  toast('API key cleared. Refresh the page.', 'info');
-}
-
-/* ───── API ───── */
-async function api(path, opts={}){
-  const headers = {'content-type':'application/json', ...opts.headers};
-  if(opts.auth){
-    const k = await getKey();
-    if(!k) throw new Error('Auth cancelled');
-    headers.authorization = 'Bearer ' + k;
+(function initBg(){
+  const c=$('bgCanvas');if(!c)return;const ctx=c.getContext('2d');
+  let w,h,particles=[];
+  function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight}
+  function createParticles(){
+    particles=[];const count=Math.min(60,Math.floor(w*h/25000));
+    for(let i=0;i<count;i++){particles.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*2+1,a:Math.random()*.3+.1})}
   }
-  const r = await fetch(path, { cache:'no-store', ...opts, headers });
-  const j = await r.json();
-  if(!r.ok || !j.ok){
-    const msg = j?.error?.message || 'Request failed';
-    if(msg.includes('authorization') || msg.includes('401')) clearKey();
-    throw new Error(msg);
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    for(const p of particles){
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0)p.x=w;if(p.x>w)p.x=0;if(p.y<0)p.y=h;if(p.y>h)p.y=0;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(0,212,255,'+p.a+')';ctx.fill();
+    }
+    for(let i=0;i<particles.length;i++){
+      for(let j=i+1;j<particles.length;j++){
+        const dx=particles[i].x-particles[j].x;const dy=particles[i].y-particles[j].y;const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<120){ctx.beginPath();ctx.moveTo(particles[i].x,particles[i].y);ctx.lineTo(particles[j].x,particles[j].y);ctx.strokeStyle='rgba(0,212,255,'+(0.08*(1-dist/120))+')';ctx.lineWidth=.5;ctx.stroke()}
+      }
+    }
+    requestAnimationFrame(draw);
   }
-  return j.data || j;
-}
-
-/* ───── NAVIGATION ───── */
+  resize();createParticles();draw();window.addEventListener('resize',()=>{resize();createParticles()});
+})();
+let currentPage='command';
+const pageTitles={command:'Command Center',chat:'Chat with MAULI',overview:'Overview',agents:'Agent Hive',monitor:'Live Monitor',projects:'Projects',tasks:'Tasks',docs:'Documentation',approvals:'Approvals',activity:'Activity Feed',health:'System Health',memory:'Memory Bank',integrations:'Integrations',shortcuts:'Keyboard Shortcuts',editor:'File Editor',changelog:'Change History',learning:'Learning shortcuts:'Keyboard Shortcuts'}; Skills',builds:'Build Manager',subagents:'Sub-Agents',messaging:'Agent Messaging',apiexplorer:'API Explorer'};
 function navigateTo(page){
+  currentPage=page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const pg=$('page-'+page);if(pg)pg.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  const pageEl = $('page-'+page);
-  const navEl = document.querySelector('.nav-item[data-page="'+page+'"]');
-  if(pageEl) pageEl.classList.add('active');
-  if(navEl) navEl.classList.add('active');
-  const titles = {command:'Command Center',overview:'Company Overview',agents:'Agent Hive',projects:'Projects',tasks:'Tasks',approvals:'Approvals',activity:'Activity Feed',health:'System Health',memory:'Company Memory'};
-  $('pageTitle').textContent = titles[page] || page;
-  // Close mobile sidebar
-  $('sidebar').classList.remove('open');
-  $('sidebarOverlay').classList.remove('open');
+  const navEl=document.querySelector('.nav-item[data-page="'+page+'"]');if(navEl)navEl.classList.add('active');
+  $('pageTitle').textContent=pageTitles[page]||page;
+  if(page==='overview')renderOverview();if(page==='agents')renderAgents();if(page==='projects')renderProjects();
+  if(page==='tasks')renderTasks();if(page==='activity')renderActivity();if(page==='health')renderHealth();
+  if(page==='memory')renderMemory();if(page==='monitor')renderMonitor();if(page==='integrations')renderIntegrations();if(page==='learning')renderLearning();if(page==='editor')loadRecentEdits();if(page==='changelog')loadChangeHistory();if(page==='builds')loadBuildStatus();if(page==='subagents')loadSubAgents();if(page==='messaging')loadMessages();if(page==='apiexplorer')loadMCPServers();
 }
-document.querySelectorAll('.nav-item[data-page]').forEach(el=>{
-  el.addEventListener('click',()=>navigateTo(el.dataset.page));
+document.querySelectorAll('.nav-item[data-page]').forEach(el=>{el.addEventListener('click',()=>navigateTo(el.dataset.page))});
+const navPages=['command','chat','overview','agents','monitor','projects','tasks','docs','approvals','activity','health','memory','integrations','editor','changelog','learning','builds','subagents','messaging','apiexplorer','shortcuts'];
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();togglePalette();return}
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){const page=document.querySelector('.page.active');if(page?.id==='page-command')sendCommand();return}
+  if(!e.ctrlKey&&!e.metaKey&&!e.altKey&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='TEXTAREA'){
+    const num=parseInt(e.key);if(num>=1&&num<=navPages.length){navigateTo(navPages[num-1]);return}
+    if(e.key==='r'||e.key==='R'){e.preventDefault();loadState();return}
+  }
 });
-
-/* ───── MOBILE ───── */
-$('mobileMenuBtn').addEventListener('click',()=>{
-  $('sidebar').classList.toggle('open');
-  $('sidebarOverlay').classList.toggle('open');
-});
-$('sidebarOverlay').addEventListener('click',()=>{
-  $('sidebar').classList.remove('open');
-  $('sidebarOverlay').classList.remove('open');
-});
-
-/* ───── LOAD STATE ───── */
+const paletteCommands=[
+  {icon:'⚡',text:'Command Center',action:()=>navigateTo('command'),shortcut:'1'},
+  {icon:'💬',text:'Chat with MAULI',action:()=>navigateTo('chat'),shortcut:'2'},
+  {icon:'📊',text:'Overview',action:()=>navigateTo('overview'),shortcut:'3'},
+  {icon:'🤖',text:'Agent Hive',action:()=>navigateTo('agents'),shortcut:'4'},
+  {icon:'📡',text:'Live Monitor',action:()=>navigateTo('monitor'),shortcut:'5'},
+  {icon:'📁',text:'Projects',action:()=>navigateTo('projects'),shortcut:'6'},
+  {icon:'📋',text:'Tasks',action:()=>navigateTo('tasks'),shortcut:'7'},
+  {icon:'📚',text:'Documentation',action:()=>navigateTo('docs')},
+  {icon:'🛡️',text:'Approvals',action:()=>navigateTo('approvals')},
+  {icon:'📡',text:'Activity Feed',action:()=>navigateTo('activity'),shortcut:'8'},
+  {icon:'💚',text:'System Health',action:()=>navigateTo('health'),shortcut:'9'},
+  {icon:'🧠',text:'Memory Bank',action:()=>navigateTo('memory')},
+  {icon:'🔗',text:'Integrations',action:()=>navigateTo('integrations')},
+  {icon:'↻',text:'Refresh All Data',action:()=>loadState(),shortcut:'R'},
+  {icon:'▶',text:'Run Self-Test',action:()=>{navigateTo('health');setTimeout(runSelfTest,300)}},
+  {icon:'🔍',text:'Run Diagnostic',action:()=>{navigateTo('health');setTimeout(runDiagnostic,300)}},
+  {icon:'🔑',text:'Reset API Key',action:clearKey},
+  {icon:'✏️',text:'File Editor',action:()=>navigateTo('editor')},
+  {icon:'📝',text:'Change History',action:()=>navigateTo('changelog')},
+  {icon:'🎓',text:'Learning & Skills',action:()=>navigateTo('learning')},
+  {icon:'🔨',text:'Build Manager',action:()=>navigateTo('builds')},
+  {icon:'🤖',text:'Sub-Agents',action:()=>navigateTo('subagents')},
+  {icon:'💌',text:'Agent Messaging',action:()=>navigateTo('messaging')},
+  {icon:'🌐',text:'API Explorer',action:()=>navigateTo('apiexplorer')},
+];
+function togglePalette(){const o=$('paletteOverlay');o.classList.toggle('show');if(o.classList.contains('show')){$('paletteInput').value='';$('paletteInput').focus();filterPalette('')}}
+function filterPalette(q){const results=paletteCommands.filter(c=>c.text.toLowerCase().includes(q.toLowerCase()));$('paletteResults').innerHTML=results.map((c,i)=>'<div class="palette-item'+(i===0?' selected':'')+'" onclick="paletteSelect('+paletteCommands.indexOf(c)+')"><span class="palette-item-icon">'+c.icon+'</span><span class="palette-item-text">'+c.text+'</span>'+(c.shortcut?'<span class="palette-item-shortcut"><kbd>'+c.shortcut+'</kbd></span>':'')+'</div>').join('')}
+function paletteSelect(i){paletteCommands[i]?.action();$('paletteOverlay').classList.remove('show')}
+$('paletteInput')?.addEventListener('keydown',e=>{const items=document.querySelectorAll('.palette-item');const sel=document.querySelector('.palette-item.selected');let idx=[...items].indexOf(sel);if(e.key==='ArrowDown'){e.preventDefault();if(sel)sel.classList.remove('selected');if(idx<items.length-1)idx++;items[idx]?.classList.add('selected')}else if(e.key==='ArrowUp'){e.preventDefault();if(sel)sel.classList.remove('selected');if(idx>0)idx--;items[idx]?.classList.add('selected')}else if(e.key==='Enter'&&sel){sel.click()}else if(e.key==='Escape'){$('paletteOverlay').classList.remove('show')}});
 async function loadState(){
-  try {
-    const data = await api('/api/state');
-    STATE = { agents:data.agents||[], projects:data.projects||[], tasks:data.tasks||[], approvals:data.approvals||[], tools:data.tools||[], artifacts:data.artifacts||[], events:data.events||[] };
-    renderAll();
-  } catch(e){
-    console.error('State load failed:', e);
-  }
+  try{const result=await api('/api/state');const d=result.data||result;
+    STATE.projects=d.projects||[];STATE.tasks=d.tasks||[];STATE.artifacts=d.artifacts||[];STATE.agents=d.agents||[];STATE.events=d.events||[];
+    STATE.approvals=(d.approvals||[]).filter(a=>a.state==='pending');STATE.tools=d.tools||[];
+    updateStats();renderCurrentPage();
+  }catch(e){console.error('Load state error:',e)}
 }
-
-/* ───── RENDER ALL ───── */
-function renderAll(){
-  const agents = STATE.agents;
-  const tasks = STATE.tasks;
-  const projects = STATE.projects;
-  const approvals = STATE.approvals;
-  const events = STATE.events;
-
-  // Nav badges
-  $('nav-agent-count').textContent = agents.length;
-  $('nav-project-count').textContent = projects.length;
-  $('nav-task-count').textContent = tasks.length;
-  const pending = approvals.filter(a=>a.state==='pending').length;
-  $('nav-approval-count').textContent = pending;
-  $('nav-approval-count').style.display = pending > 0 ? '' : 'none';
-
-  // Quick stats
-  $('stat-agents').textContent = agents.length;
-  $('stat-projects').textContent = projects.length;
-  $('stat-tasks').textContent = tasks.length;
-  $('stat-approvals').textContent = approvals.length;
-
-  // Overview
-  renderOverview();
-  renderAgents();
-  renderProjects();
-  renderTasks();
-  renderApprovals();
-  renderActivity();
-  renderHealth();
-  renderMemory();
+function updateStats(){
+  const completed=STATE.projects.filter(p=>p.state==='completed').length;const active=STATE.projects.filter(p=>p.state==='active').length;
+  $('stat-projects').textContent=STATE.projects.length;$('stat-tasks').textContent=STATE.tasks.length;
+  $('stat-agents').textContent=STATE.agents.length;$('stat-artifacts').textContent=STATE.artifacts.length;
+  if($('ov-projects'))$('ov-projects').textContent=STATE.projects.length;if($('ov-completed'))$('ov-completed').textContent=completed;
+  if($('ov-active'))$('ov-active').textContent=active;if($('ov-agents'))$('ov-agents').textContent=STATE.agents.length;
+  if($('ov-artifacts'))$('ov-artifacts').textContent=STATE.artifacts.length;
+  $('nav-agent-count').textContent=STATE.agents.length;$('nav-project-count').textContent=STATE.projects.length;
+  $('nav-task-count').textContent=STATE.tasks.filter(t=>t.state==='working').length||STATE.tasks.length;
+  $('nav-approval-count').textContent=STATE.approvals.length;
+  if($('projectCount'))$('projectCount').textContent=STATE.projects.length+' projects';
+  if($('taskCount'))$('taskCount').textContent=STATE.tasks.length+' tasks';
 }
-
-/* ───── OVERVIEW ───── */
+function renderCurrentPage(){navigateTo(currentPage)}
 function renderOverview(){
-  const a = STATE.agents;
-  const t = STATE.tasks;
-  const states = {};
-  a.forEach(ag=>{ states[ag.state] = (states[ag.state]||0)+1; });
-  $('ov-agents').textContent = a.length;
-  $('ov-available').textContent = states.available||0;
-  $('ov-working').textContent = (states.working||0)+(states.assigned||0);
-  $('ov-issues').textContent = (states.blocked||0)+(states.escalated||0);
-
-  // Agent distribution by department
-  const depts = {};
-  a.forEach(ag=>{ depts[ag.department||'General'] = (depts[ag.department||'General']||0)+1; });
-  let distHTML = '';
-  const colors = ['var(--accent)','var(--accent-2)','var(--green)','var(--yellow)','var(--accent-3)','var(--blue)'];
-  let ci = 0;
-  for(const [dept, count] of Object.entries(depts)){
-    const pct = Math.round(count / a.length * 100);
-    distHTML += '<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>'+dept+'</span><span style="color:var(--text-muted)">'+count+' agents ('+pct+'%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+colors[ci%colors.length]+'"></div></div></div>';
-    ci++;
-  }
-  $('ov-agentDist').innerHTML = distHTML || '<div class="empty"><div class="empty-text">No agents registered</div></div>';
-
-  // Task pipeline
-  const taskStates = {};
-  t.forEach(tk=>{ taskStates[tk.state] = (taskStates[tk.state]||0)+1; });
-  let pipeHTML = '';
-  const stateOrder = ['queued','assigned','working','verifying','completed','failed','blocked'];
-  const stateColors = {queued:'var(--text-dim)',assigned:'var(--yellow)',working:'var(--accent)',verifying:'var(--accent-2)',completed:'var(--green)',failed:'var(--red)',blocked:'var(--red)'};
-  for(const s of stateOrder){
-    const count = taskStates[s]||0;
-    if(!count) continue;
-    const pct = Math.round(count / t.length * 100);
-    pipeHTML += '<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span style="text-transform:capitalize">'+s+'</span><span style="color:var(--text-muted)">'+count+' ('+pct+'%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+stateColors[s]+'"></div></div></div>';
-  }
-  $('ov-taskPipeline').innerHTML = pipeHTML || '<div class="empty"><div class="empty-text">No tasks yet</div></div>';
-
-  // Learning & Skills summary
-  let totalSkills = 0;
-  let totalXP = 0;
-  for (const ag of a) {
-    const skillTree = ag.metadata?.skillTree || {};
-    const skills = Object.values(skillTree);
-    totalSkills += skills.length;
-    totalXP += skills.reduce((sum, s) => sum + (s.xp || 0), 0);
-  }
-  const skillsHTML = '<div style="display:flex;gap:16px;margin-bottom:12px">'
-    + '<div style="flex:1;text-align:center;padding:12px;background:rgba(15,52,96,.3);border-radius:8px"><div style="font-size:24px;font-weight:700;color:var(--accent)">'+totalSkills+'</div><div style="font-size:11px;color:var(--text-dim)">Total Skills</div></div>'
-    + '<div style="flex:1;text-align:center;padding:12px;background:rgba(15,52,96,.3);border-radius:8px"><div style="font-size:24px;font-weight:700;color:var(--green)">'+totalXP+'</div><div style="font-size:11px;color:var(--text-dim)">Total XP</div></div>'
-    + '</div>';
-  const skillsContainer = $('ov-taskPipeline')?.parentElement;
-  if (skillsContainer) {
-    skillsContainer.insertAdjacentHTML('afterend', '<div style="margin-top:16px"><div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:8px">🤖 AGENT LEARNING</div>' + skillsHTML + '</div>');
-  }
-
-  // Recent projects
-  const sorted = [...STATE.projects].sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
-  let projHTML = '';
-  for(const p of sorted.slice(0,5)){
-    const tasks = STATE.tasks.filter(t=>t.projectId===p.id);
-    const done = tasks.filter(t=>t.state==='completed').length;
-    projHTML += '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="flex:1"><div style="font-weight:600;font-size:13px">'+esc(p.name||p.id)+'</div><div style="font-size:11px;color:var(--text-dim)">'+esc(p.objective||'').slice(0,80)+'</div></div><span class="badge badge-'+stateBadge(p.state)+'">'+p.state+'</span><span style="font-size:11px;color:var(--text-dim)">'+done+'/'+tasks.length+' tasks</span></div>';
-  }
-  $('ov-projects').innerHTML = projHTML || '<div class="empty"><div class="empty-icon">📁</div><div class="empty-text">No projects yet. Send a founder command to begin.</div></div>';
-}
-
-/* ───── AGENTS ───── */
-function renderAgents(){
-  const filter = $('agentFilter')?.value || 'all';
-  let agents = STATE.agents;
-  if(filter !== 'all') agents = agents.filter(a=>a.state===filter);
-
-  let html = '';
-  for(const ag of agents){
-    const caps = (ag.capabilities||[]).map(c=>'<span class="cap-tag">'+esc(c)+'</span>').join('');
-    const meta = ag.metadata||{};
-    const score = meta.reliabilityScore != null ? meta.reliabilityScore+'%' : (meta.successRate != null ? Math.round(meta.successRate*100)+'%' : '—');
-    const tasks = meta.outcomeCount != null ? meta.outcomeCount : 0;
-    html += '<div class="card agent-card" data-state="'+ag.state+'">';
-    html += '<div class="agent-score">Score: '+score+'</div>';
-    html += '<div class="agent-name">'+esc(ag.name)+'</div>';
-    html += '<div class="agent-role">'+esc(ag.role)+'</div>';
-    html += '<div class="agent-meta">';
-    html += '<span class="agent-dept">'+esc(ag.department)+'</span>';
-    html += '<span class="agent-state state-'+ag.state+'">'+ag.state+'</span>';
-    html += '</div>';
-    html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">'+tasks+' tasks completed</div>';
-    html += '<div class="agent-caps">'+caps+'</div>';
-    // Show skill tree levels
-    const skillTree = meta.skillTree || {};
-    const skillKeys = Object.keys(skillTree).slice(0, 5);
-    if (skillKeys.length > 0) {
-      html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">';
-      html += '<div style="font-size:10px;font-weight:600;color:var(--text-dim);margin-bottom:4px">SKILL LEVELS</div>';
-      for (const sk of skillKeys) {
-        const level = skillTree[sk].level || 0;
-        const xp = skillTree[sk].xp || 0;
-        const bar = Math.min(100, (xp % 50) * 2);
-        html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">';
-        html += '<span style="font-size:10px;color:var(--text-muted);width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(sk)+'</span>';
-        html += '<div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">';
-        html += '<div style="height:100%;width:'+bar+'%;background:var(--accent);border-radius:2px"></div>';
-        html += '</div>';
-        html += '<span style="font-size:10px;color:var(--accent);font-weight:600">L'+level+'</span>';
-        html += '</div>';
-      }
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-  $('agentGrid').innerHTML = html || '<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🤖</div><div class="empty-text">No agents found</div></div>';
-}
-
-/* ───── PROJECTS ───── */
-function renderProjects(){
-  const sorted = [...STATE.projects].sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
-  let html = '';
-  for(const p of sorted){
-    const tasks = STATE.tasks.filter(t=>t.projectId===p.id);
-    const done = tasks.filter(t=>t.state==='completed').length;
-    const failed = tasks.filter(t=>t.state==='failed').length;
-    const total = tasks.length;
-    const pct = total ? Math.round(done/total*100) : 0;
-    const reqs = (p.requirements||[]).map(r=>'<div style="font-size:12px;color:var(--text-muted);padding:3px 0">• '+esc(r)+'</div>').join('');
-
-    html += '<div class="card project-card fade-in">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:start">';
-    html += '<div><div class="project-name">'+esc(p.name||p.id)+'</div><div class="project-obj">'+esc(p.objective||'')+'</div></div>';
-    html += '<span class="badge badge-'+stateBadge(p.state)+'">'+p.state+'</span>';
-    html += '</div>';
-    html += '<div class="progress-bar" style="margin:12px 0"><div class="progress-fill progress-blue" style="width:'+pct+'%"></div></div>';
-    html += '<div class="project-stats">';
-    html += '<div class="project-stat">📋 '+done+'/'+total+' tasks</div>';
-    if(failed) html += '<div class="project-stat" style="color:var(--red)">❌ '+failed+' failed</div>';
-    html += '<div class="project-stat">📁 '+(STATE.artifacts.filter(a=>a.projectId===p.id).length)+' artifacts</div>';
-    html += '<div class="project-stat">🕐 '+fmtDate(p.updatedAt||p.createdAt)+'</div>';
-    html += '</div>';
-    if(reqs) html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:4px">REQUIREMENTS</div>'+reqs+'</div>';
-    {
-      const delivery=STATE.artifacts.find(a=>a.projectId===p.id&&a.type==='final-delivery');
-      const dlPath=delivery?.metadata?.downloadPath;
-      const hasCodeArtifact = STATE.artifacts.some(a => a.projectId === p.id && a.type === 'code-workspace');
-      if(dlPath || hasCodeArtifact) {
-        html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
-        if(dlPath) html += '<button class="btn btn-primary btn-sm download-btn" data-path="'+dlPath+'">📥 Download ZIP</button>';
-        if(hasCodeArtifact) html += '<button class="btn btn-green btn-sm build-btn" data-project="'+p.id+'" data-platform="android">Build APK</button><button class="btn btn-accent btn-sm build-btn" data-project="'+p.id+'" data-platform="desktop">Build EXE</button>';
-        html += '</div>';
-      }
-    }
-
-    // Project tasks
-    if(tasks.length){
-      html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">';
-      for(const tk of tasks){
-        html += '<div class="task-row"><div class="task-title">'+esc(tk.title||tk.id)+'</div><div class="task-meta"><span class="badge badge-'+taskBadge(tk.state)+'">'+tk.state+'</span></div></div>';
-      }
-      html += '</div>';
-    }
-    html += '</div>';
-  }
-  $('projectList').innerHTML = html || '<div class="empty"><div class="empty-icon">📁</div><div class="empty-text">No projects yet. Send a founder command to create one.</div></div>';
-}
-
-/* ───── TASKS ───── */
-function renderTasks(){
-  const filter = $('taskFilter')?.value || 'all';
-  let tasks = STATE.tasks;
-  if(filter !== 'all') tasks = tasks.filter(t=>t.state===filter);
-  tasks = [...tasks].sort((a,b)=>(a.sequence||0)-(b.sequence||0));
-
-  let html = '';
-  for(const tk of tasks){
-    const agent = tk.assignedAgentId ? STATE.agents.find(a=>a.id===tk.assignedAgentId) : null;
-    const caps = (tk.requiredCapabilities||[]).map(c=>'<span class="cap-tag">'+esc(c)+'</span>').join(' ');
-    html += '<div class="task-row">';
-    html += '<div style="flex:1"><div class="task-title">'+esc(tk.title||tk.id)+'</div>';
-    html += '<div style="font-size:11px;color:var(--text-dim);margin-top:2px">'+caps+'</div></div>';
-    html += '<div class="task-meta">';
-    if(agent) html += '<span style="color:var(--text-muted)">🤖 '+esc(agent.name)+'</span>';
-    html += '<span class="badge badge-'+taskBadge(tk.state)+'">'+tk.state+'</span>';
-    if(tk.attempts) html += '<span style="color:var(--text-dim)">Attempt '+tk.attempts+'</span>';
-    html += '</div></div>';
-  }
-  $('taskList').innerHTML = html || '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No tasks found</div></div>';
-}
-
-/* ───── APPROVALS ───── */
-function renderApprovals(){
-  const sorted = [...STATE.approvals].sort((a,b)=>String(b.requestedAt||'').localeCompare(String(a.requestedAt||'')));
-  let html = '';
-  for(const ap of sorted){
-    const badgeClass = ap.state==='approved'?'badge-green':ap.state==='rejected'?'badge-red':'badge-yellow';
-    html += '<div class="card approval-card">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:start">';
-    html += '<div><div class="approval-action">'+esc(ap.action||'Unknown action')+'</div>';
-    html += '<div class="approval-meta"><span>Risk: <strong>'+esc(ap.risk)+'</strong></span><span>'+fmtDate(ap.requestedAt)+'</span></div></div>';
-    html += '<span class="badge '+badgeClass+'">'+ap.state+'</span>';
-    html += '</div>';
-    if(ap.state==='pending'){
-      html += '<div class="approval-actions">';
-      html += '<button class="btn btn-green btn-sm" onclick="decideApproval(\\''+ap.id+'\\', true)">✅ Approve</button>';
-      html += '<button class="btn btn-red btn-sm" onclick="decideApproval(\\''+ap.id+'\\', false)">❌ Reject</button>';
-      html += '</div>';
-    }
-    if(ap.note) html += '<div style="margin-top:8px;font-size:12px;color:var(--text-dim)">Note: '+esc(ap.note)+'</div>';
-    html += '</div>';
-  }
-  $('approvalList').innerHTML = html || '<div class="empty"><div class="empty-icon">🛡️</div><div class="empty-text">No approvals pending</div></div>';
-}
-
-/* ───── ACTIVITY ───── */
-function renderActivity(){
-  const events = [...STATE.events].slice(-50).reverse();
-  let html = '';
+  const events=STATE.events.slice(-20).reverse();let html='';
   for(const ev of events){
-    const detail = typeof ev.payload === 'object' ? Object.entries(ev.payload).slice(0,3).map(([k,v])=>k+': '+String(v).slice(0,40)).join(', ') : String(ev.payload||'').slice(0,80);
-    html += '<div class="event-row">';
-    html += '<div class="event-dot" style="background:'+eventColor(ev.type)+'"></div>';
-    html += '<div class="event-content"><div class="event-type" style="color:'+eventColor(ev.type)+'">'+esc(ev.type||'unknown')+'</div><div class="event-detail">'+esc(detail)+'</div></div>';
-    html += '<div class="event-time">'+fmtShort(ev.at)+'</div>';
-    html += '</div>';
+    const color=ev.type?.includes('error')?'var(--red)':ev.type?.includes('task_result')?'var(--green)':ev.type?.includes('command')?'var(--accent)':'var(--blue)';
+    html+='<div class="activity-item"><div class="activity-dot" style="background:'+color+'"></div><div class="activity-text"><strong>'+esc(ev.type||'event')+'</strong></div><div class="activity-time">'+fmtDate(ev.at)+'</div></div>';
   }
-  $('activityFeed').innerHTML = html || '<div class="empty"><div class="empty-icon">📡</div><div class="empty-text">No events yet</div></div>';
-  // Also render mini version on command page
-  $('cmdActivity').innerHTML = events.slice(0,8).map(ev=>{
-    const detail = typeof ev.payload==='object' ? Object.keys(ev.payload||{}).slice(0,2).join(', ') : '';
-    return '<div class="event-row"><div class="event-dot" style="background:'+eventColor(ev.type)+'"></div><div class="event-content"><div class="event-type" style="color:'+eventColor(ev.type)+'">'+esc(ev.type||'')+'</div></div><div class="event-time">'+fmtShort(ev.at)+'</div></div>';
-  }).join('') || '<div class="empty"><div class="empty-text">No recent activity</div></div>';
-}
-
-/* ───── HEALTH ───── */
-async function loadHealth(){
-  try {
-    const h = await api('/api/health');
-    let html = '';
-    html += healthRow('Service', h.service || '—');
-    html += healthRow('Status', '<span style="color:var(--green)">'+h.status+'</span>');
-    html += healthRow('D1 Persistence', h.persistence ? '<span style="color:var(--green)">Connected</span>' : '<span style="color:var(--yellow)">Memory Only</span>');
-    html += healthRow('Hydrated', h.hydrated ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--text-dim)">No</span>');
-    html += healthRow('AI Binding', h.ai ? '<span style="color:var(--green)">Available</span>' : '<span style="color:var(--yellow)">Unavailable</span>');
-    html += healthRow('Recovered Runs', h.recoveredRuns || 0);
-    html += healthRow('Time', fmtDate(h.time));
-    $('healthInfo').innerHTML = html;
-  } catch(e){
-    $('healthInfo').innerHTML = '<div style="color:var(--red)">Failed to load health: '+esc(e.message)+'</div>';
-  }
-}
-function healthRow(label, value){
-  return '<div class="health-row"><span class="health-label">'+label+'</span><span class="health-value">'+value+'</span></div>';
-}
-function renderHealth(){
+  $('overviewActivity').innerHTML=html||'<div class="empty"><div class="empty-text">No recent activity</div></div>';
   loadHealth();
-  renderTools();
 }
-
+function renderAgents(){
+  let html='';
+  for(const a of STATE.agents){
+    const skills=a.skills||a.capabilities||[];const skillPct=Math.min(100,((a.tasksCompleted||0)*10+50));
+    html+='<div class="card agent-card"><div style="display:flex;gap:12px;align-items:flex-start"><div class="agent-avatar" style="background:var(--bg-3)">'+(a.emoji||'🤖')+'</div><div style="flex:1"><div class="agent-name">'+esc(a.name||a.id)+'</div><div class="agent-role">'+esc(a.role||a.type||'Agent')+'</div><div class="agent-status"><span class="badge badge-green">Active</span></div></div></div><div style="margin-top:12px"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:11px;color:var(--text-dim)">Skill Level</span><span style="font-size:11px;color:var(--accent)">'+skillPct+'%</span></div><div class="agent-skill-bar"><div class="agent-skill-fill" style="width:'+skillPct+'%"></div></div></div><div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">'+skills.map(s=>'<span class="badge badge-accent" style="font-size:9px">'+esc(s)+'</span>').join('')+'</div></div>';
+  }
+  $('agentsList').innerHTML=html||'<div class="empty"><div class="empty-icon">🤖</div><div class="empty-text">No agents registered yet</div></div>';
+}
+function renderProjects(){
+  let html='<div class="table-wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
+  for(const p of STATE.projects){
+    const badge=stateBadge(p.state);const hasCode=STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
+    html+='<tr><td><strong>'+esc(p.name||p.objective||p.id)+'</strong></td><td><span class="badge badge-'+badge+'">'+esc(p.state)+'</span></td><td>'+(p.taskCount||'—')+'</td><td style="display:flex;gap:4px">';
+    html+='<button class="btn btn-sm btn-accent download-btn" data-path="/api/download/'+p.id+'">📥 ZIP</button>';
+    if(hasCode){html+='<button class="btn btn-sm btn-green build-btn" data-project="'+p.id+'" data-platform="android">📱 APK</button><button class="btn btn-sm btn-accent build-btn" data-project="'+p.id+'" data-platform="desktop">🖥️ EXE</button>'}
+    html+='</td></tr>';
+  }
+  html+='</tbody></table></div>';
+  $('projectsList').innerHTML=html||'<div class="empty"><div class="empty-icon">📁</div><div class="empty-text">No projects yet. Send a founder command!</div></div>';
+}
+function renderTasks(){
+  let html='<div class="table-wrap"><table><thead><tr><th>Task</th><th>Status</th><th>Agent</th><th>Progress</th></tr></thead><tbody>';
+  for(const t of STATE.tasks.slice(-50).reverse()){
+    html+='<tr><td>'+esc(t.title||t.id)+'</td><td><span class="badge badge-'+taskBadge(t.state)+'">'+esc(t.state)+'</span></td><td style="font-size:12px;color:var(--text-muted)">'+esc(t.agentId||'—')+'</td><td><div class="progress-bar" style="width:100px"><div class="progress-fill'+(t.state==='completed'?' done':t.state==='failed'?' error':'')+'" style="width:'+progressPct(t.state)+'%"></div></div></td></tr>';
+  }
+  html+='</tbody></table></div>';
+  $('tasksList').innerHTML=html||'<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No tasks yet</div></div>';
+}
+function renderActivity(){
+  let html='';for(const ev of STATE.events.slice(-50).reverse()){
+    const color=ev.type?.includes('error')?'var(--red)':ev.type?.includes('task_result')?'var(--green)':ev.type?.includes('command')?'var(--accent)':'var(--blue)';
+    const payload=typeof ev.payload==='object'?JSON.stringify(ev.payload,null,2):String(ev.payload||'');
+    html+='<div class="activity-item"><div class="activity-dot" style="background:'+color+'"></div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><strong style="font-size:13px">'+esc(ev.type||'event')+'</strong><span class="activity-time">'+fmtDate(ev.at)+'</span></div><pre style="font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;max-height:80px;overflow:hidden;font-family:\'JetBrains Mono\',monospace">'+esc(payload)+'</pre></div></div>';
+  }
+  $('activityList').innerHTML=html||'<div class="empty"><div class="empty-icon">📡</div><div class="empty-text">No activity yet</div></div>';
+}
+function renderHealth(){loadHealth();renderTools()}
+function loadHealth(){
+  api('/api/health').then(h=>{
+    let html=healthRow('Service',h.service||'—')+healthRow('Status','<span style="color:var(--green)">'+esc(h.status||'unknown')+'</span>')+healthRow('D1 Persistence',h.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory Only</span>')+healthRow('Hydrated',h.hydrated?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--text-dim)">No</span>')+healthRow('AI Binding',h.ai?'<span style="color:var(--green)">Available</span>':'<span style="color:var(--yellow)">Unavailable</span>')+healthRow('Recovered Runs',h.recoveredRuns||0)+healthRow('Time',fmtDate(h.time));
+    if($('healthDetail'))$('healthDetail').innerHTML=html;if($('healthInfo'))$('healthInfo').innerHTML=html;
+  }).catch(e=>{if($('healthDetail'))$('healthDetail').innerHTML='<div style="color:var(--red)">Failed: '+esc(e.message)+'</div>'});
+}
+function healthRow(label,value){return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:12px;color:var(--text-muted)">'+label+'</span><span style="font-size:12px">'+value+'</span></div>';}
 function renderTools(){
-  let html = '';
-  for(const tool of STATE.tools){
-    html += '<div class="health-row">';
-    html += '<span style="font-size:14px">🔧</span>';
-    html += '<span class="health-label"><strong>'+esc(tool.name)+'</strong><br><span style="font-size:11px;color:var(--text-dim)">'+esc(tool.description||'')+'</span></span>';
-    html += '<span class="badge badge-'+(tool.risk==='read'?'green':tool.risk==='write'?'yellow':'red')+'">'+esc(tool.risk)+'</span>';
-    html += '</div>';
+  let html='';for(const tool of STATE.tools){
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:14px">🔧</span><div style="flex:1"><strong style="font-size:13px">'+esc(tool.name)+'</strong><div style="font-size:11px;color:var(--text-dim)">'+esc(tool.description||'')+'</div></div><span class="badge badge-'+(tool.risk==='read'?'green':tool.risk==='write'?'yellow':'red')+'">'+esc(tool.risk)+'</span></div>';
   }
-  $('toolsList').innerHTML = html || '<div class="empty"><div class="empty-text">No tools registered</div></div>';
+  $('toolsList').innerHTML=html||'<div class="empty"><div class="empty-text">No tools registered</div></div>';
 }
-
-/* ───── MEMORY ───── */
 function renderMemory(){
-  const events = STATE.events.filter(e=>e.type&&e.type.includes('memory')).slice(-20).reverse();
-  const memEvents = STATE.events.filter(e=>e.type&&(e.type.includes('task_result')||e.type.includes('solution')||e.type.includes('error')||e.type.includes('project_requirement')||e.type.includes('command'))).slice(-20).reverse();
-  const all = [...events,...memEvents].sort((a,b)=>String(b.at||'').localeCompare(String(a.at||''))).slice(0,30);
-
-  let html = '';
-  for(const ev of all){
-    const payload = typeof ev.payload==='object' ? JSON.stringify(ev.payload,null,2) : String(ev.payload||'');
-    html += '<div style="padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3)">';
-    html += '<div style="display:flex;justify-content:space-between"><span class="badge badge-accent" style="font-size:10px">'+esc(ev.type)+'</span><span style="font-size:11px;color:var(--text-dim)">'+fmtDate(ev.at)+'</span></div>';
-    html += '<pre style="font-size:11px;color:var(--text-muted);margin-top:6px;white-space:pre-wrap;word-break:break-all;max-height:100px;overflow:hidden">'+esc(payload)+'</pre>';
-    html += '</div>';
+  const events=STATE.events.filter(e=>e.type&&e.type.includes('memory')).slice(-20).reverse();
+  const memEvents=STATE.events.filter(e=>e.type&&(e.type.includes('task_result')||e.type.includes('solution')||e.type.includes('error')||e.type.includes('project_requirement')||e.type.includes('command'))).slice(-20).reverse();
+  const all=[...events,...memEvents].sort((a,b)=>String(b.at||'').localeCompare(String(a.at||''))).slice(0,30);
+  let html='';for(const ev of all){
+    const payload=typeof ev.payload==='object'?JSON.stringify(ev.payload,null,2):String(ev.payload||'');
+    html+='<div style="padding:12px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><span class="badge badge-accent" style="font-size:10px">'+esc(ev.type)+'</span><span style="font-size:11px;color:var(--text-dim)">'+fmtDate(ev.at)+'</span></div><pre style="font-size:11px;color:var(--text-muted);margin-top:6px;white-space:pre-wrap;word-break:break-all;max-height:100px;overflow:hidden;font-family:\'JetBrains Mono\',monospace">'+esc(payload)+'</pre></div>';
   }
-  $('memoryList').innerHTML = html || '<div class="empty"><div class="empty-icon">🧠</div><div class="empty-text">No memory entries yet. Execute a founder command to build company memory.</div></div>';
+  $('memoryList').innerHTML=html||'<div class="empty"><div class="empty-icon">🧠</div><div class="empty-text">No memory entries yet</div></div>';
 }
-
-/* ───── DOWNLOAD ───── */
-async function downloadZip(path){
-  try {
-    toast('Downloading...', 'info');
-    const k = await getKey();
-    const r = await fetch(path, { headers:{'Authorization':'Bearer '+k} });
-    if(!r.ok){ toast('Download failed: '+r.status, 'error'); return; }
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'mauli-project.zip';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 5000);
-    toast('Download started!', 'success');
-  } catch(e){ toast('Download error: '+e.message, 'error'); }
+function renderMonitor(){refreshMonitor()}
+function refreshMonitor(){
+  const grid=[
+    {label:'Projects',value:STATE.projects.length,icon:'📁',active:true},
+    {label:'Tasks',value:STATE.tasks.length,icon:'📋',active:STATE.tasks.some(t=>t.state==='working')},
+    {label:'Agents',value:STATE.agents.length,icon:'🤖',active:true},
+    {label:'Artifacts',value:STATE.artifacts.length,icon:'📦',active:STATE.artifacts.length>0},
+    {label:'Working',value:STATE.tasks.filter(t=>t.state==='working').length,icon:'⚡',active:STATE.tasks.some(t=>t.state==='working')},
+    {label:'Completed',value:STATE.tasks.filter(t=>t.state==='completed').length,icon:'✅',active:true},
+    {label:'Failed',value:STATE.tasks.filter(t=>t.state==='failed').length,icon:'❌',active:STATE.tasks.some(t=>t.state==='failed')},
+    {label:'Events',value:STATE.events.length,icon:'📡',active:STATE.events.length>0},
+  ];
+  $('monitorGrid').innerHTML=grid.map(g=>'<div class="monitor-card'+(g.active?' active':'')+'"><div class="monitor-label">'+g.icon+' '+g.label+'</div><div class="monitor-value">'+g.value+'</div></div>').join('');
+  $('agentActivity').innerHTML=STATE.agents.map(a=>'<div class="activity-item"><div class="activity-dot" style="background:var(--green)"></div><div class="activity-text"><strong>'+esc(a.name||a.id)+'</strong> — '+esc(a.role||a.type||'Agent')+'</div></div>').join('')||'<div class="empty"><div class="empty-text">No active agents</div></div>';
+  $('taskProgress').innerHTML=STATE.tasks.slice(-10).reverse().map(t=>'<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px">'+esc(t.title||t.id)+'</span><span class="badge badge-'+taskBadge(t.state)+'" style="font-size:10px">'+esc(t.state)+'</span></div><div class="progress-bar"><div class="progress-fill'+(t.state==='completed'?' done':'')+'" style="width:'+progressPct(t.state)+'%"></div></div></div>').join('')||'<div class="empty"><div class="empty-text">No tasks</div></div>';
 }
-
-/* ───── ACTIONS ───── */
+function renderIntegrations(){
+  const ints=[
+    {name:'GitHub',icon:'🐙',status:'Connected',desc:'Source control & CI/CD'},
+    {name:'Cloudflare Workers',icon:'☁️',status:'Deployed',desc:'Production hosting'},
+    {name:'Cloudflare AI',icon:'🧠',status:'Active',desc:'LLM inference'},
+    {name:'Cloudflare D1',icon:'💾',status:'Connected',desc:'SQL database'},
+    {name:'public-apis',icon:'📡',status:'Integrated',desc:'1400+ free APIs'},
+    {name:'MCP Servers',icon:'🔌',status:'Integrated',desc:'Agent tools'},
+    {name:'OpenDesign',icon:'🎨',status:'Integrated',desc:'Design systems'},
+    {name:'Ollama',icon:'🤖',status:'Optional',desc:'Local LLMs'},
+  ];
+  $('integrationsList').innerHTML=ints.map(i=>{const color=i.status==='Connected'||i.status==='Active'||i.status==='Deployed'||i.status==='Integrated'?'green':'yellow';return '<div class="card" style="margin-bottom:0"><div style="display:flex;align-items:center;gap:12px"><span style="font-size:28px">'+i.icon+'</span><div><div style="font-weight:600">'+esc(i.name)+'</div><div style="font-size:11px;color:var(--text-muted)">'+esc(i.desc)+'</div></div><span class="badge badge-'+color+'" style="margin-left:auto">'+i.status+'</span></div></div>'}).join('');
+  $('apiCatalog').innerHTML='<div style="padding:12px 0">'+['Weather','Finance','Maps','Music','News','Sports','Health','Education','Entertainment','Science'].map(a=>'<span class="badge badge-accent" style="margin:2px">'+a+'</span>').join('')+'</div>';
+}
 async function sendCommand(){
-  const input = $('cmdInput');
-  const cmd = input.value.trim();
-  if(!cmd){ toast('Enter a founder command first', 'error'); return; }
-  $('sendCmd').disabled = true;
-  $('cmdLoading').classList.add('show');
-  $('cmdResult').style.display = 'none';
-  try {
-    const result = await api('/api/command', {
-      method:'POST', auth:true,
-      body: JSON.stringify({command:cmd})
-    });
-    $('cmdResult').style.display = 'block';
-    $('cmdResult').textContent = JSON.stringify(result.result || result, null, 2);
-    toast('Command executed successfully!', 'success');
-    input.value = '';
-    await loadState();
-  } catch(e){
-    $('cmdResult').style.display = 'block';
-    $('cmdResult').textContent = 'Error: ' + e.message;
-    toast('Command failed: ' + e.message, 'error');
-    if(e.message.includes('authorization') || e.message.includes('401')){
-      clearKey();
-      toast('Key cleared. Please re-enter the correct API key.', 'info');
+
+/* ═══ FILE EDITOR ═══ */
+async function loadRecentEdits(){
+  try{const r=await api('/api/edits/recent',{auth:true});
+    const edits=r.edits||r||[];let html='';
+    for(const e of (Array.isArray(edits)?edits:[])){
+      html+='<div style="padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><strong style="font-size:13px">'+esc(e.filePath||e.file||'—')+'</strong><span class="badge badge-accent" style="font-size:10px">'+esc(e.operation||e.type||'edit')+'</span></div><div style="font-size:11px;color:var(--text-dim);margin-top:4px">'+esc(e.description||e.summary||'')+'</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+fmtDate(e.at||e.timestamp)+'</div></div>';
     }
-  } finally {
-    $('sendCmd').disabled = false;
-    $('cmdLoading').classList.remove('show');
-  }
+    $('recentEditsList').innerHTML=html||'<div class="empty"><div class="empty-text">No recent edits</div></div>';
+  }catch(e){$('recentEditsList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
+}
+async function loadProjectFiles(projectId){
+  if(!projectId)return;
+  try{const r=await api('/api/state',{auth:true});const d=r.data||r;
+    const artifacts=(d.artifacts||[]).filter(a=>a.projectId===projectId&&a.type==='code-workspace');
+    if(artifacts.length>0){$('editorFile').value=artifacts[0].path||'www/index.html';}
+  }catch(e){}
+}
+async function loadFile(){
+  const path=$('editorFile').value.trim();if(!path){toast('Enter a file path','error');return}
+  try{const r=await api('/api/edits?filePath='+encodeURIComponent(path),{auth:true});
+    $('editorContent').value=r.content||r.code||JSON.stringify(r,null,2);
+    toast('File loaded','success');
+  }catch(e){toast('Load failed: '+e.message,'error');}
+}
+async function saveFile(){
+  const path=$('editorFile').value.trim();const content=$('editorContent').value;
+  if(!path){toast('Enter a file path','error');return}
+  try{await api('/api/edits',{method:'POST',auth:true,body:JSON.stringify({filePath:path,content,operation:'update',description:'Dashboard edit'})});
+    toast('File saved!','success');loadRecentEdits();
+  }catch(e){toast('Save failed: '+e.message,'error');}
 }
 
-async function decideApproval(approvalId, approved){
-  try {
-    await api('/api/approvals/'+approvalId, {
-      method:'POST', auth:true,
-      body: JSON.stringify({approved})
-    });
-    toast(approved ? 'Approval granted' : 'Approval rejected', approved ? 'success' : 'info');
-    await loadState();
-  } catch(e){
-    toast('Failed: ' + e.message, 'error');
-  }
+/* ═══ CHANGE HISTORY ═══ */
+async function loadChangeHistory(){
+  try{const r=await api('/api/edits/history',{auth:true});
+    const history=r.history||r.edits||r||[];let html='';
+    for(const h of (Array.isArray(history)?history:[])){
+      const color=h.operation==='create'?'green':h.operation==='delete'?'red':'accent';
+      html+='<div class="activity-item"><div class="activity-dot" style="background:var(--'+color+')"></div><div style="flex:1"><div style="display:flex;justify-content:space-between"><strong style="font-size:13px">'+esc(h.filePath||h.file||'—')+'</strong><span class="badge badge-'+color+'" style="font-size:10px">'+esc(h.operation||'edit')+'</span></div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">'+esc(h.description||'')+'</div><div style="font-size:10px;color:var(--text-dim)">'+fmtDate(h.at||h.timestamp)+'</div></div></div>';
+    }
+    $('changeHistoryList').innerHTML=html||'<div class="empty"><div class="empty-icon">📝</div><div class="empty-text">No change history yet</div></div>';
+  }catch(e){$('changeHistoryList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
 }
 
+/* ═══ LEARNING & SKILLS ═══ */
+async function renderLearning(){
+  try{const r=await api('/api/learning/stats',{auth:true});const s=r.stats||r||{};
+    if($('learn-tasks'))$('learn-tasks').textContent=s.tasksLearned||s.totalTasks||0;
+    if($('learn-patterns'))$('learn-patterns').textContent=s.patternsFound||s.patterns||0;
+    if($('learn-skills'))$('learn-skills').textContent=s.skillsTracked||s.skills||0;
+    let html='';
+    const stats=s.categoryStats||s.categories||s;
+    for(const [k,v] of Object.entries(stats||{})){
+      if(typeof v==='object'&&v!==null){
+        html+='<div style="padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><strong style="font-size:13px">'+esc(k)+'</strong><span class="badge badge-accent">'+(v.count||v.tasks||0)+'</span></div></div>';
+      }
+    }
+    $('learningStatsList').innerHTML=html||'<div class="empty"><div class="empty-text">No learning data yet</div></div>';
+  }catch(e){$('learningStatsList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
+  try{const r=await api('/api/learning/skill-tree',{auth:true});const tree=r.skillTree||r||{};
+    let html='';
+    for(const [agent,skills] of Object.entries(tree)){
+      html+='<div style="padding:12px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="font-weight:600;font-size:13px;margin-bottom:6px">🤖 '+esc(agent)+'</div>';
+      for(const [skill,level] of Object.entries(skills||{})){
+        const pct=Math.min(100,(typeof level==='number'?level:level?.level||level?.xp||0));
+        html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:11px;color:var(--text-muted);min-width:100px">'+esc(skill)+'</span><div class="agent-skill-bar" style="flex:1"><div class="agent-skill-fill" style="width:'+pct+'%"></div></div><span style="font-size:10px;color:var(--accent)">'+pct+'%</span></div>';
+      }
+      html+='</div>';
+    }
+    $('skillTreeList').innerHTML=html||'<div class="empty"><div class="empty-text">No skills tracked yet</div></div>';
+  }catch(e){$('skillTreeList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
+}
+
+/* ═══ BUILD MANAGER ═══ */
+async function loadBuildStatus(){
+  try{let html='';
+    for(const p of STATE.projects){
+      const hasCode=STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
+      html+='<div style="padding:12px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between;align-items:center"><div><strong style="font-size:13px">'+esc(p.name||p.objective||p.id)+'</strong><div style="font-size:11px;color:var(--text-muted)">'+esc(p.state)+'</div></div><div style="display:flex;gap:6px">';
+      if(hasCode){
+        html+='<button class="btn btn-sm btn-green build-btn" data-project="'+p.id+'" data-platform="android">📱 APK</button>';
+        html+='<button class="btn btn-sm btn-accent build-btn" data-project="'+p.id+'" data-platform="desktop">🖥️ EXE</button>';
+      }else{
+        html+='<span class="badge badge-yellow" style="font-size:10px">No code artifacts</span>';
+      }
+      html+='</div></div></div>';
+    }
+    $('buildManagerList').innerHTML=html||'<div class="empty"><div class="empty-icon">🔨</div><div class="empty-text">No projects to build</div></div>';
+  }catch(e){$('buildManagerList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
+}
+
+/* ═══ SUB-AGENTS ═══ */
+async function loadSubAgents(){
+  try{const r=await api('/api/sub-agents',{auth:true});
+    const subs=r.subAgents||r.agents||r||[];let html='';
+    for(const a of (Array.isArray(subs)?subs:[])){
+      html+='<div class="card agent-card" style="margin-bottom:0"><div style="display:flex;gap:12px;align-items:flex-start"><div class="agent-avatar" style="background:var(--bg-3)">🤖</div><div style="flex:1"><div class="agent-name">'+esc(a.name||a.id||'Sub-Agent')+'</div><div class="agent-role">'+esc(a.parentAgent||a.parent||'—')+'</div><div class="agent-status"><span class="badge badge-green">Active</span></div><div style="margin-top:8px;font-size:11px;color:var(--text-muted)">'+esc(a.task||a.description||'')+'</div></div></div></div>';
+    }
+    $('subAgentsList').innerHTML=html||'<div class="empty"><div class="empty-icon">🤖</div><div class="empty-text">No sub-agents active. Agents create helpers automatically for complex tasks.</div></div>';
+  }catch(e){$('subAgentsList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
+}
+
+/* ═══ MESSAGING ═══ */
+async function loadMessages(){
+  try{const r=await api('/api/messages',{auth:true});
+    const msgs=r.messages||r||[];let html='';
+    for(const m of (Array.isArray(msgs)?msgs:[]).slice(-30).reverse()){
+      const color=m.type==='alert'?'red':m.type==='review'?'yellow':'accent';
+      html+='<div class="activity-item"><div class="activity-dot" style="background:var(--'+color+')"></div><div style="flex:1"><div style="display:flex;justify-content:space-between"><strong style="font-size:13px">'+esc(m.from||'—')+' → '+esc(m.to||'—')+'</strong><span class="badge badge-'+color+'" style="font-size:10px">'+esc(m.type||'info')+'</span></div><div style="font-size:12px;margin-top:4px">'+esc(m.content||m.message||'')+'</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">'+fmtDate(m.at||m.timestamp)+'</div></div></div>';
+    }
+    $('messagesList').innerHTML=html||'<div class="empty"><div class="empty-icon">💌</div><div class="empty-text">No messages yet</div></div>';
+    // Populate agent dropdowns
+    const opts=STATE.agents.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name||a.id)+'</option>').join('');
+    if($('msgFrom'))$('msgFrom').innerHTML='<option value="">From agent...</option>'+opts;
+    if($('msgTo'))$('msgTo').innerHTML='<option value="">To agent...</option>'+opts;
+  }catch(e){$('messagesList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
+}
+async function sendAgentMessage(){
+  const from=$('msgFrom').value,to=$('msgTo').value,content=$('msgContent').value.trim();
+  if(!from||!to||!content){toast('Fill all fields','error');return}
+  try{await api('/api/messages/send',{method:'POST',auth:true,body:JSON.stringify({from,to,content,type:'info'})});
+    toast('Message sent!','success');$('msgContent').value='';loadMessages();
+  }catch(e){toast('Send failed: '+e.message,'error');}
+}
+async function broadcastMessage(){
+  const content=$('msgContent').value.trim();if(!content){toast('Enter a message','error');return}
+  try{await api('/api/messages/broadcast',{method:'POST',auth:true,body:JSON.stringify({content,type:'alert'})});
+    toast('Broadcast sent!','success');$('msgContent').value='';loadMessages();
+  }catch(e){toast('Broadcast failed: '+e.message,'error');}
+}
+
+/* ═══ API EXPLORER ═══ */
+async function searchAPIs(){
+  const q=$('apiSearchQ').value.trim();if(!q){toast('Enter a search term','error');return}
+  try{const r=await api('/api/apis/search?q='+encodeURIComponent(q),{auth:true});
+    const apis=r.apis||r.results||r||[];let html='';
+    for(const a of (Array.isArray(apis)?apis:[])){
+      html+='<div style="padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><strong style="font-size:13px">'+esc(a.name||a.title||'—')+'</strong><span class="badge badge-green" style="font-size:10px">'+esc(a.category||'API')+'</span></div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">'+esc(a.description||a.desc||'')+'</div>'+(a.url?'<a href="'+esc(a.url)+'" target="_blank" style="font-size:11px;margin-top:4px;display:inline-block">🔗 Docs</a>':'')+'</div>';
+    }
+    $('apiSearchResults').innerHTML=html||'<div class="empty"><div class="empty-text">No APIs found for "'+esc(q)+'"</div></div>';
+  }catch(e){$('apiSearchResults').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
+}
+async function loadMCPServers(){
+  try{const r=await api('/api/mcp/servers',{auth:true});
+    const servers=r.servers||r||[];let html='';
+    for(const s of (Array.isArray(servers)?servers:[])){
+      html+='<div style="padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><strong style="font-size:13px">🔌 '+esc(s.name||s.id||'—')+'</strong><span class="badge badge-accent" style="font-size:10px">'+esc(s.category||'MCP')+'</span></div><div style="font-size:11px;color:var(--text-muted);margin-top:4px">'+esc(s.description||s.desc||'')+'</div></div>';
+    }
+    $('mcpServersList').innerHTML=html||'<div class="empty"><div class="empty-text">No MCP servers available</div></div>';
+  }catch(e){$('mcpServersList').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
+}
+
+  const input=$('cmdInput');const cmd=input.value.trim();
+  if(!cmd){toast('Enter a founder command first','error');return}
+  $('sendCmd').disabled=true;$('cmdLoading').classList.add('show');$('cmdResult').style.display='none';
+  try{const result=await api('/api/command',{method:'POST',auth:true,body:JSON.stringify({command:cmd})});
+    $('cmdResult').style.display='block';$('cmdResult').textContent=JSON.stringify(result.result||result,null,2);
+    toast('Command executed!','success');input.value='';await loadState();
+  }catch(e){$('cmdResult').style.display='block';$('cmdResult').textContent='Error: '+e.message;toast('Failed: '+e.message,'error');
+    if(e.message.includes('authorization')||e.message.includes('401')){clearKey();toast('Key cleared','info')}
+  }finally{$('sendCmd').disabled=false;$('cmdLoading').classList.remove('show')}
+}
+function quickCmd(cmd){$('cmdInput').value=cmd;sendCommand()}
+async function sendChat(){
+  const input=$('chatInput');const msg=input.value.trim();if(!msg)return;
+  const container=$('chatMessages');
+  container.innerHTML+='<div class="chat-msg user"><div class="msg-role">You</div>'+esc(msg)+'</div>';
+  input.value='';container.scrollTop=container.scrollHeight;
+  try{const result=await api('/api/chat',{method:'POST',auth:true,body:JSON.stringify({message:msg})});
+    container.innerHTML+='<div class="chat-msg mauli"><div class="msg-role">MAULI</div>'+esc(result.reply||result.message||JSON.stringify(result,null,2))+'</div>';
+    container.scrollTop=container.scrollHeight;
+  }catch(e){container.innerHTML+='<div class="chat-msg mauli" style="border-color:var(--red)"><div class="msg-role">Error</div>'+esc(e.message)+'</div>';container.scrollTop=container.scrollHeight}
+}
 async function runSelfTest(){
-  try {
-    const result = await api('/api/self-test', {auth:true});
-    const r = result.result || result;
-    let html = '<div style="margin-bottom:8px"><span class="badge badge-'+(r.status==='ready'?'green':r.status==='degraded'?'yellow':'red')+'">'+r.status.toUpperCase()+' — '+r.score+'%</span></div>';
-    for(const c of (r.checks||[])){
-      html += '<div class="health-row"><span style="color:'+(c.passed?'var(--green)':'var(--red)')+'">'+(c.passed?'✅':'❌')+'</span><span class="health-label">'+esc(c.name)+'</span><span style="font-size:11px;color:var(--text-dim)">'+esc(c.details||'')+'</span></div>';
-    }
-    $('selfTestResult').innerHTML = html;
-    toast('Self-test: '+r.status+' ('+r.score+'%)', r.status==='ready'?'success':'info');
-  } catch(e){
-    $('selfTestResult').innerHTML = '<div style="color:var(--red)">'+esc(e.message)+'</div>';
-  }
+  try{const result=await api('/api/self-test',{auth:true});const r=result.result||result;
+    let html='<div style="margin-bottom:8px"><span class="badge badge-'+(r.status==='ready'?'green':r.status==='degraded'?'yellow':'red')+'">'+r.status.toUpperCase()+' — '+r.score+'%</span></div>';
+    for(const c of (r.checks||[])){html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="color:'+(c.passed?'var(--green)':'var(--red)')+'">'+(c.passed?'✅':'❌')+'</span><span style="font-size:13px">'+esc(c.name)+'</span><span style="font-size:11px;color:var(--text-dim);margin-left:auto">'+esc(c.details||'')+'</span></div>'}
+    $('selfTestResult').innerHTML=html;toast('Self-test: '+r.status,r.status==='ready'?'success':'info');
+  }catch(e){$('selfTestResult').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
 }
-
 async function runDiagnostic(){
-  try {
-    const result = await api('/api/result-diagnostic', {auth:true});
-    const r = result.result || result;
-    let html = '';
-    html += healthRow('Token Configured', r.tokenConfigured ? '<span style="color:var(--green)">Yes</span>' : '<span style="color:var(--red)">No</span>');
-    if(r.tokenSource) html += healthRow('Token Source', r.tokenSource);
-    if(r.repo) html += healthRow('Repository', r.repo);
-    if(r.path) html += healthRow('Result Path', r.path);
-    if(r.branch) html += healthRow('Branch', r.branch);
-    if(r.reason) html += healthRow('Reason', '<span style="color:var(--yellow)">'+esc(r.reason)+'</span>');
-    html += healthRow('Status', r.ok ? '<span style="color:var(--green)">OK</span>' : '<span style="color:var(--red)">Issue Detected</span>');
-    $('diagResult').innerHTML = html;
-    toast('Diagnostics complete', 'success');
-  } catch(e){
-    $('diagResult').innerHTML = '<div style="color:var(--red)">'+esc(e.message)+'</div>';
-  }
+  try{const result=await api('/api/result-diagnostic',{auth:true});const r=result.result||result;
+    let html=healthRow('Token',r.tokenConfigured?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--red)">No</span>');
+    if(r.repo)html+=healthRow('Repository',r.repo);if(r.path)html+=healthRow('Path',r.path);
+    html+=healthRow('Status',r.ok?'<span style="color:var(--green)">OK</span>':'<span style="color:var(--red)">Issue</span>');
+    $('diagResult').innerHTML=html;toast('Diagnostics complete','success');
+  }catch(e){$('diagResult').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
 }
-
-/* ───── HELPERS ───── */
-function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function stateBadge(s){ return s==='completed'?'green':s==='active'?'blue':s==='planning'?'accent':s==='escalated'?'red':'yellow'; }
-function taskBadge(s){ return s==='completed'?'green':s==='working'?'accent':s==='failed'?'red':s==='blocked'?'red':s==='verifying'?'blue':'yellow'; }
-
-/* ───── CLOCK ───── */
-function updateClock(){ $('topbarTime').textContent = new Date().toLocaleTimeString(); }
-setInterval(updateClock, 1000);
-updateClock();
-
-/* ───── KEYBOARD SHORTCUTS ───── */
-document.addEventListener('keydown', e=>{
-  if((e.ctrlKey||e.metaKey) && e.key==='Enter'){
-    const page = document.querySelector('.page.active');
-    if(page?.id==='page-command') sendCommand();
-  }
-});
-
-/* ───── HEARTBEAT ───── */
-let lastHeartbeat = 0;
-let heartbeatFailures = 0;
-async function checkHeartbeat() {
-  try {
-    const r = await fetch('/api/heartbeat', { cache: 'no-store' });
-    const j = await r.json();
-    if (j.ok) {
-      lastHeartbeat = Date.now();
-      heartbeatFailures = 0;
-      const dot = $('heartbeatDot');
-      const txt = $('heartbeatText');
-      if (dot) dot.classList.remove('dead');
-      if (txt) txt.textContent = 'System Online';
-    }
-  } catch(e) {
-    heartbeatFailures++;
-    if (heartbeatFailures >= 3) {
-      const dot = $('heartbeatDot');
-      const txt = $('heartbeatText');
-      if (dot) dot.classList.add('dead');
-      if (txt) txt.textContent = 'System Offline';
-    }
-  }
+async function generateDocs(){
+  toast('Generating docs...','info');
+  try{const result=await api('/api/docs/generate',{method:'POST',auth:true,body:JSON.stringify({})});
+    $('docsContent').innerHTML='<pre style="font-size:12px;white-space:pre-wrap;font-family:\'JetBrains Mono\',monospace;background:var(--bg-1);padding:16px;border-radius:8px;max-height:600px;overflow:auto">'+esc(JSON.stringify(result.docs||result,null,2))+'</pre>';
+    toast('Docs generated!','success');
+  }catch(e){$('docsContent').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';}
 }
-setInterval(checkHeartbeat, 5000);
-checkHeartbeat();
-
-/* ───── BUILD APP ───── */
-let activeBuilds = {};
-
-function renderBuildProgress(projectId, platform, buildId, status, startedAt) {
-  const el = document.querySelector('.build-progress[data-build="'+buildId+'"]');
-  if (!el) return;
-  const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-  const mins = Math.floor(elapsed / 60);
-  const secs = elapsed % 60;
-  const timeStr = mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
-
-  let pct = 0;
-  let label = '';
-  let fillClass = '';
-  let statusText = '';
-
-  if (status === 'completed' || status === 'success') {
-    pct = 100; fillClass = 'done'; label = '✅ Build Complete!'; statusText = 'Download ready';
-  } else if (status === 'failure' || status === 'error') {
-    pct = 100; fillClass = 'error'; label = '❌ Build Failed'; statusText = 'Check GitHub Actions';
-  } else if (status === 'pushed') {
-    pct = 15; label = '📤 Files Pushed to GitHub'; statusText = 'Waiting for GitHub Actions to start... ' + timeStr;
-  } else if (status === 'in_progress' || status === 'queued') {
-    pct = 50; label = '🔨 Building ' + platform.toUpperCase() + '...'; statusText = 'GitHub Actions is building... ' + timeStr;
-  } else {
-    pct = 25; label = '⏳ Build in progress...'; statusText = 'Elapsed: ' + timeStr;
-  }
-
-  el.innerHTML = '<div class="build-progress-header"><span class="build-progress-label">' + label + '</span><span class="build-progress-status">' + statusText + '</span></div><div class="build-progress-bar"><div class="build-progress-fill ' + fillClass + '" style="width:' + pct + '%"></div></div>';
+async function downloadZip(path){
+  try{toast('Downloading...','info');const k=await getKey();const r=await fetch(path,{headers:{'Authorization':'Bearer '+k}});
+    if(!r.ok){toast('Failed: '+r.status,'error');return}const blob=await r.blob();const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='mauli-project.zip';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);toast('Downloaded!','success');
+  }catch(e){toast('Error: '+e.message,'error');}
 }
-
-async function startBuild(projectId, platform, btn) {
-  const buildKey = projectId + '_' + platform;
-  if (activeBuilds[buildKey]) {
-    toast('Build already in progress for ' + platform.toUpperCase(), 'info');
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'Starting...';
-
-  // Insert progress bar after the button
-  const progressDiv = document.createElement('div');
-  progressDiv.className = 'build-progress';
-  progressDiv.dataset.build = 'pending';
-  btn.closest('div').appendChild(progressDiv);
-
-  try {
-    const result = await api('/api/build-app', {
-      method: 'POST', auth: true,
-      body: JSON.stringify({ projectId, platform })
-    });
-
-    const buildId = result.buildId;
-    progressDiv.dataset.build = buildId;
-    activeBuilds[buildKey] = { buildId, startedAt: Date.now() };
-    toast('Build started! ' + result.pushed + ' files pushed to GitHub.', 'success');
-
-    btn.textContent = 'Building...';
-    let attempts = 0;
-    const maxAttempts = 60;
-
-    const poll = async () => {
-      attempts++;
-      try {
-        const status = await api('/api/build-status/' + buildId, { auth: true });
-        renderBuildProgress(projectId, platform, buildId, status.status, activeBuilds[buildKey].startedAt);
-
-        if (status.downloadUrl) {
-          btn.textContent = 'Download ' + platform.toUpperCase();
-          btn.disabled = false;
-          btn.classList.remove('btn-green');
-          btn.classList.add('btn-primary');
-          btn.onclick = () => window.open(status.downloadUrl, '_blank');
-          delete activeBuilds[buildKey];
-          toast(platform.toUpperCase() + ' ready for download!', 'success');
-          renderBuildProgress(projectId, platform, buildId, 'completed', activeBuilds[buildKey]?.startedAt || Date.now());
-          return;
-        }
-        if (status.status === 'failure' || status.status === 'error') {
-          btn.textContent = 'Build Failed';
-          btn.disabled = false;
-          btn.classList.remove('btn-green');
-          btn.classList.add('btn-red');
-          delete activeBuilds[buildKey];
-          toast('Build failed. Check GitHub Actions.', 'error');
-          renderBuildProgress(projectId, platform, buildId, 'failure', activeBuilds[buildKey]?.startedAt || Date.now());
-          return;
-        }
-        if (attempts >= maxAttempts) {
-          btn.textContent = 'Check GitHub';
-          btn.disabled = false;
-          btn.onclick = () => window.open('https://github.com/kalpeshpatil4694/MAULI-2.0/actions', '_blank');
-          delete activeBuilds[buildKey];
-          toast('Build still running. Click to check GitHub Actions.', 'info');
-          renderBuildProgress(projectId, platform, buildId, 'in_progress', activeBuilds[buildKey]?.startedAt || Date.now());
-          return;
-        }
-        setTimeout(poll, 10000);
-      } catch(e) {
-        if (attempts < maxAttempts) {
-          setTimeout(poll, 10000);
-        } else {
-          btn.textContent = 'Check GitHub';
-          btn.disabled = false;
-          toast('Error checking build: ' + e.message, 'error');
-          delete activeBuilds[buildKey];
-        }
+let activeBuilds={};
+async function startBuild(projectId,platform,btn){
+  const buildKey=projectId+'_'+platform;if(activeBuilds[buildKey]){toast('Build in progress','info');return}
+  btn.disabled=true;btn.textContent='Starting...';
+  try{const result=await api('/api/build-app',{method:'POST',auth:true,body:JSON.stringify({projectId,platform})});
+    activeBuilds[buildKey]={buildId:result.buildId,startedAt:Date.now()};toast('Build started!','success');btn.textContent='Building...';
+    let attempts=0;const poll=async()=>{attempts++;try{const status=await api('/api/build-status/'+result.buildId,{auth:true});
+      if(status.downloadUrl){btn.textContent='Download '+platform.toUpperCase();btn.disabled=false;btn.onclick=()=>window.open(status.downloadUrl,'_blank');delete activeBuilds[buildKey];toast('Ready!','success');return}
+      if(status.status==='failure'||status.status==='error'){btn.textContent='Failed';btn.disabled=false;delete activeBuilds[buildKey];toast('Build failed','error');return}
+      if(attempts<60)setTimeout(poll,10000);else{btn.textContent='Check GitHub';btn.disabled=false;delete activeBuilds[buildKey]}
+    }catch(e){if(attempts<60)setTimeout(poll,10000)}};setTimeout(poll,5000);
+  }catch(e){btn.textContent='Build '+platform.toUpperCase();btn.disabled=false;delete activeBuilds[buildKey];toast('Failed: '+e.message,'error')}
+}
+const buildCache={};
+async function checkExistingBuilds(){
+  const projectsWithCode=STATE.projects.filter(p=>STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace'));
+  for(const p of projectsWithCode){
+    try{const result=await api("/api/project-builds/"+p.id,{auth:true});
+      if(result.bestAPK){buildCache[p.id]={apk:result.bestAPK,exe:result.bestEXE||null};
+        document.querySelectorAll('.build-btn[data-project="'+p.id+'"][data-platform="android"]').forEach(btn=>{btn.textContent='📱 Download APK';btn.classList.remove('btn-green');btn.classList.add('btn-primary');btn.onclick=()=>window.open(result.bestAPK,'_blank')});
+        if(result.bestEXE){document.querySelectorAll('.build-btn[data-project="'+p.id+'"][data-platform="desktop"]').forEach(btn=>{btn.textContent='🖥️ Download EXE';btn.classList.remove('btn-accent');btn.classList.add('btn-primary');btn.onclick=()=>window.open(result.bestEXE,'_blank')})}
       }
-    };
-    setTimeout(poll, 5000);
-  } catch(e) {
-    btn.textContent = 'Build ' + platform.toUpperCase();
-    btn.disabled = false;
-    delete activeBuilds[buildKey];
-    const errMsg = e.message || 'Unknown error';
-    if (errMsg.includes('token') || errMsg.includes('permission') || errMsg.includes('GITHUB_TOKEN')) {
-      toast('GitHub token issue: ' + errMsg, 'error');
-    } else {
-      toast('Build failed: ' + errMsg, 'error');
-    }
-    if (progressDiv) progressDiv.innerHTML = '<div class="build-progress-header"><span class="build-progress-label" style="color:var(--red)">\u274c ' + esc(errMsg) + '</span></div>';
+    }catch(e){}
   }
 }
-
-/* ───── EVENT DELEGATION ───── */
-document.addEventListener('click', e => {
-  const dlBtn = e.target.closest('.download-btn');
-  if(dlBtn) downloadZip(dlBtn.dataset.path);
-  const buildBtn = e.target.closest('.build-btn');
-  if(buildBtn) startBuild(buildBtn.dataset.project, buildBtn.dataset.platform, buildBtn);
-});
-
-/* ───── INIT ───── */
-/* ── EXISTING BUILDS CHECK ── */
-const buildCache = {};
-async function checkExistingBuilds() {
-  const projectsWithCode = STATE.projects.filter(p => {
-    return STATE.artifacts.some(a => a.projectId === p.id && a.type === 'code-workspace');
-  });
-  for (const p of projectsWithCode) {
-    try {
-      const result = await api("/api/project-builds/" + p.id, { auth: true });
-      if (result.bestAPK) {
-        buildCache[p.id] = { apk: result.bestAPK, exe: result.bestEXE || null };
-        const buildBtns = document.querySelectorAll('.build-btn[data-project="' + p.id + '"][data-platform="android"]');
-        buildBtns.forEach(btn => {
-          const isRunPage = result.bestAPK && result.bestAPK.includes("/actions/runs/");
-          btn.textContent = isRunPage ? "📱 Build Ready (GitHub)" : "📱 Download APK";
-          btn.classList.remove("btn-green");
-          btn.classList.add("btn-primary");
-          btn.onclick = () => window.open(result.bestAPK, "_blank");
-          btn.style.fontWeight = "700";
-        });
-        if (result.bestEXE) {
-          const exeBtns = document.querySelectorAll('.build-btn[data-project="' + p.id + '"][data-platform="desktop"]');
-          exeBtns.forEach(btn => {
-            const isExeRunPage = result.bestEXE && result.bestEXE.includes("/actions/runs/");
-            btn.textContent = isExeRunPage ? "🖥️ Build Ready (GitHub)" : "🖥️ Download EXE";
-            btn.classList.remove("btn-accent");
-            btn.classList.add("btn-primary");
-            btn.onclick = () => window.open(result.bestEXE, "_blank");
-            btn.style.fontWeight = "700";
-          });
-        }
-      }
-    } catch(e) {}
-  }
+document.addEventListener('click',e=>{const dlBtn=e.target.closest('.download-btn');if(dlBtn)downloadZip(dlBtn.dataset.path);const buildBtn=e.target.closest('.build-btn');if(buildBtn)startBuild(buildBtn.dataset.project,buildBtn.dataset.platform,buildBtn)});
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function stateBadge(s){return s==='completed'?'green':s==='active'?'blue':s==='planning'?'accent':s==='escalated'?'red':'yellow';}
+function taskBadge(s){return s==='completed'?'green':s==='working'?'accent':s==='failed'?'red':s==='blocked'?'red':s==='verifying'?'blue':'yellow';}
+function progressPct(s){return s==='completed'?'100':s==='working'?'60':s==='failed'?'100':'20';}
+function fmtDate(d){if(!d)return '—';try{return new Date(d).toLocaleString()}catch(e){return String(d)}}
+function updateClock(){if($('topbarTime'))$('topbarTime').textContent=new Date().toLocaleTimeString()}
+setInterval(updateClock,1000);updateClock();
+let lastHeartbeat=0,heartbeatFailures=0;
+async function checkHeartbeat(){
+  try{const r=await fetch('/api/heartbeat',{cache:'no-store'});const j=await r.json();
+    if(j.ok){lastHeartbeat=Date.now();heartbeatFailures=0;$('heartbeatDot')?.classList.remove('dead');if($('heartbeatText'))$('heartbeatText').textContent='System Online';}
+  }catch(e){heartbeatFailures++;if(heartbeatFailures>=3){$('heartbeatDot')?.classList.add('dead');if($('heartbeatText'))$('heartbeatText').textContent='System Offline';}}
 }
-
-/* ── INIT ── */
-loadState().then(() => checkExistingBuilds());
-setInterval(() => { loadState().then(() => checkExistingBuilds()); }, 8000);
+setInterval(checkHeartbeat,5000);checkHeartbeat();
+loadState().then(()=>checkExistingBuilds());setInterval(()=>{loadState().then(()=>checkExistingBuilds())},8000);
 </script>
 </body>
 </html>`;
