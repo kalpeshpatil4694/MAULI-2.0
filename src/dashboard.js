@@ -173,7 +173,9 @@ td{padding:10px 12px;border-bottom:1px solid rgba(30,45,74,.3);font-size:13px}
 .spinner{width:24px;height:24px;border:3px solid var(--bg-3);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin:0 auto}
 @keyframes spin{to{transform:rotate(360deg)}}
 ::-webkit-scrollbar-thumb:hover{background:var(--accent);box-shadow:0 0 8px rgba(0,212,255,.3)}
-@media(max-width:768px){.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.main{margin-left:0}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}}
+.hamburger{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px}
+.hamburger:hover{background:var(--glass-border)}
+@media(max-width:768px){.hamburger{display:block}.sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}.main{margin-left:0!important}.grid-4,.grid-5{grid-template-columns:repeat(2,1fr)}.topbar-title{font-size:13px}.btn-sm{font-size:11px;padding:4px 8px}}
 </style>
 </head>
 <body>
@@ -223,10 +225,12 @@ td{padding:10px 12px;border-bottom:1px solid rgba(30,45,74,.3);font-size:13px}
   <div class="main">
     <header class="topbar">
       <div class="topbar-left">
+        <button class="hamburger" id="menuToggle" onclick="toggleSidebar()" aria-label="Menu">☰</button>
         <div class="topbar-status"><span class="status-dot" id="heartbeatDot"></span><span id="heartbeatText">Connecting...</span></div>
         <span class="topbar-title" id="pageTitle">Command Center</span>
       </div>
       <div class="topbar-right">
+        <button class="btn btn-sm btn-accent" onclick="navigateTo('chat')" title="Chat with MAULI">💬 Chat</button>
         <span class="shortcut-hint" onclick="togglePalette()" title="Command Palette (Ctrl+K)">⌘K</span>
         <span class="topbar-time" id="topbarTime"></span>
       </div>
@@ -467,9 +471,12 @@ const $=id=>document.getElementById(id);
 async function getKey(){return localStorage.getItem('mauli-api-key')}
 async function setKey(k){localStorage.setItem('mauli-api-key',k)}
 function clearKey(){localStorage.removeItem('mauli-api-key');toast('API key cleared','info')}
+const PUBLIC_ENDPOINTS=['/api/state','/api/health','/api/heartbeat','/api/agents/best'];
 async function api(path,opts={}){
-  const k=await getKey();if(!k){const pk=prompt('Enter MAULI API Key:');if(!pk)throw new Error('No key');await setKey(pk);return api(path,opts)}
-  const headers={'Content-Type':'application/json','Authorization':'Bearer '+k,...(opts.headers||{})};
+  const isPublic=PUBLIC_ENDPOINTS.some(ep=>path.startsWith(ep));
+  const k=await getKey();
+  if(!k&&!isPublic&&!opts.auth){const pk=prompt('Enter MAULI API Key:');if(!pk)throw new Error('No key');await setKey(pk);return api(path,opts)}
+  const headers={'Content-Type':'application/json',...(k?{'Authorization':'Bearer '+k}:{}),...(opts.headers||{})};
   const r=await fetch(path,{...opts,headers});
   if(!r.ok){const t=await r.text();throw new Error(t||r.status)}
   return r.json();
@@ -504,9 +511,11 @@ function toast(msg,type='info'){
   resize();createParticles();draw();window.addEventListener('resize',()=>{resize();createParticles()});
 })();
 let currentPage='command';
-const pageTitles={command:'Command Center',chat:'Chat with MAULI',overview:'Overview',agents:'Agent Hive',monitor:'Live Monitor',projects:'Projects',tasks:'Tasks',docs:'Documentation',approvals:'Approvals',activity:'Activity Feed',health:'System Health',memory:'Memory Bank',integrations:'Integrations',shortcuts:'Keyboard Shortcuts',editor:'File Editor',changelog:'Change History',learning:'Learning shortcuts:'Keyboard Shortcuts'}; Skills',builds:'Build Manager',subagents:'Sub-Agents',messaging:'Agent Messaging',apiexplorer:'API Explorer'};
+function toggleSidebar(){$('sidebar')?.classList.toggle('open');}
+const pageTitles={command:'Command Center',chat:'Chat with MAULI',overview:'Overview',agents:'Agent Hive',monitor:'Live Monitor',projects:'Projects',tasks:'Tasks',docs:'Documentation',approvals:'Approvals',activity:'Activity Feed',health:'System Health',memory:'Memory Bank',integrations:'Integrations',shortcuts:'Keyboard Shortcuts',editor:'File Editor',changelog:'Change History',learning:'Learning & Skills',builds:'Build Manager',subagents:'Sub-Agents',messaging:'Agent Messaging',apiexplorer:'API Explorer'};
 function navigateTo(page){
   currentPage=page;
+  $('sidebar')?.classList.remove('open');
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const pg=$('page-'+page);if(pg)pg.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -561,7 +570,8 @@ async function loadState(){
     STATE.projects=d.projects||[];STATE.tasks=d.tasks||[];STATE.artifacts=d.artifacts||[];STATE.agents=d.agents||[];STATE.events=d.events||[];
     STATE.approvals=(d.approvals||[]).filter(a=>a.state==='pending');STATE.tools=d.tools||[];
     updateStats();renderCurrentPage();
-  }catch(e){console.error('Load state error:',e)}
+    if($('heartbeatText')?.textContent!=='System Online'){$('heartbeatDot')?.classList.remove('dead');$('heartbeatText').textContent='System Online';}
+  }catch(e){console.error('Load state error:',e);if(e.message?.includes('401')||e.message?.includes('authorization')){toast('API key required for some features','info')}}
 }
 function updateStats(){
   const completed=STATE.projects.filter(p=>p.state==='completed').length;const active=STATE.projects.filter(p=>p.state==='active').length;
