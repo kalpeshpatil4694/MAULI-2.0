@@ -1,43 +1,42 @@
-name: Build App
+name: Build Apps
+
+# App packaging is an explicit release/build action, not part of every main push.
 on:
-  push:
-    branches: ['build/**']
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mauli-app-build
+  cancel-in-progress: true
 
 jobs:
   build-android:
+    name: Android APK
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/build/')
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
+          node-version: 22
       - name: Install dependencies
-        run: npm install
-
+        run: npm install --no-audit --no-fund
       - name: Install Capacitor
-        run: npm install @capacitor/core @capacitor/cli @capacitor/android
-
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android --no-audit --no-fund
       - name: Init Capacitor
         run: npx cap init mauli-app com.mauli.app --web-dir www || true
-
       - name: Add Android platform
         run: npx cap add android || true
-
       - name: Sync Capacitor
         run: npx cap sync
-
       - name: Build APK
         run: cd android && chmod +x gradlew && ./gradlew assembleDebug
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -46,53 +45,45 @@ jobs:
           if-no-files-found: error
 
   build-desktop-linux:
+    name: Linux desktop
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/build/')
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
+          node-version: 22
       - name: Install dependencies
-        run: npm install
-
+        run: npm install --no-audit --no-fund
       - name: Install Electron
-        run: npm install electron electron-builder --save-dev
-
+        run: npm install electron electron-builder --save-dev --no-audit --no-fund
       - name: Build Linux
-        run: npx electron-builder --linux --dir || true
-
+        run: npx electron-builder --linux --dir
       - name: Upload Linux build
         uses: actions/upload-artifact@v4
         with:
           name: linux-desktop
           path: dist/
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   build-desktop-windows:
+    name: Windows desktop
     runs-on: windows-latest
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/build/')
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
+          node-version: 22
       - name: Install dependencies
-        run: npm install
-
+        run: npm install --no-audit --no-fund
       - name: Install Electron
-        run: npm install electron electron-builder --save-dev
-
+        run: npm install electron electron-builder --save-dev --no-audit --no-fund
       - name: Build Windows
-        run: npx electron-builder --win --dir || true
-
+        run: npx electron-builder --win --dir
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
           name: windows-exe
           path: dist/
-          if-no-files-found: ignore
+          if-no-files-found: error
