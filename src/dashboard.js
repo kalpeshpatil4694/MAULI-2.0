@@ -944,7 +944,7 @@ async function checkExistingBuilds(){
     }catch(e){}
   }
 }
-document.addEventListener('click',e=>{const dlBtn=e.target.closest('.download-btn');if(dlBtn)downloadZip(dlBtn.dataset.path);const buildBtn=e.target.closest('.build-btn');if(buildBtn)startBuild(buildBtn.dataset.project,buildBtn.dataset.platform,buildBtn)});
+document.addEventListener('click',e=>{const dlBtn=e.target.closest('.download-btn');if(dlBtn)downloadZip(dlBtn.dataset.project);const buildBtn=e.target.closest('.build-btn');if(buildBtn)startBuild(buildBtn.dataset.project,buildBtn.dataset.platform,buildBtn)});
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function stateBadge(s){return s==='completed'?'green':s==='active'?'blue':s==='planning'?'accent':s==='escalated'?'red':'yellow';}
 function taskBadge(s){return s==='completed'?'green':s==='working'?'accent':s==='failed'?'red':s==='blocked'?'red':s==='verifying'?'blue':'yellow';}
