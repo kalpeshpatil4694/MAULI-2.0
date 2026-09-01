@@ -12,7 +12,7 @@ import { ensureSchema, hasD1, d1List, d1Events } from './db.js';
 import { recoverRunningExecutions } from './execution.js';
 import { requireFounder, checkRateLimit } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
-import { diagnoseResultPersistence, saveCommandResult } from './result-recorder.js';
+import { diagnoseResultPersistence, saveCommandResult, listCommandResults, getCommandResult } from './result-recorder.js';
 import { dashboardHTML } from './dashboard.js';
 import { sendMessage, getMessages, acknowledgeMessage, respondToMessage, requestReview, handoffTask, broadcastAlert, getCollaborationStats } from './agent-communication.js';
 import { getAgentSkillTree, getAgentCollaborationStats, getSystemLearningStats, getBestAgentForTask } from './agent-learning.js';
@@ -39,6 +39,10 @@ export default { async fetch(request, env) { try {
   if(request.method==='GET'&&url.pathname==='/api/state'){const [agents,projects,tasks,approvals,events]=hasD1(env)?await Promise.all([d1List(env,'agents'),d1List(env,'projects'),d1List(env,'tasks'),d1List(env,'approvals'),d1Events(env)]):[listAgents(),listProjects(),listTasks(),listApprovals(),store.recentEvents()];return ok({agents,projects,tasks,approvals,tools:listTools(),artifacts:store.list('artifacts'),events,recoveredRuns});}
   if(request.method==='GET'&&url.pathname==='/api/self-test'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const result=runL1SelfTest();store.addEvent('self_test.completed',{score:result.score,status:result.status});return ok({result});}
   if(request.method==='GET'&&url.pathname==='/api/result-diagnostic'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const result=await diagnoseResultPersistence(env);store.addEvent('result_persistence.diagnostic',{ok:result.ok,tokenConfigured:result.tokenConfigured,reason:result.reason||null});return ok({result});}
+  // List all command results
+  if(request.method==='GET'&&url.pathname==='/api/results'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const results=listCommandResults();return ok({results,count:results.length});}
+  // Get specific command result
+  if(request.method==='GET'&&url.pathname.startsWith('/api/results/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const rid=url.pathname.split('/api/results/')[1];const r=getCommandResult(rid);if(!r)return fail('Result not found',404);return ok({result:r});}
   // Agent Messages API
   if(request.method==='GET'&&url.pathname==='/api/messages'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const agentId=url.searchParams.get('agentId');if(!agentId)return fail('agentId required',400);const msgs=getMessages(agentId,{unread:url.searchParams.get('unread')==='true'});return ok({messages:msgs});}
   if(request.method==='POST'&&url.pathname==='/api/messages/send'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const msg=sendMessage(body);return ok({message:msg});}

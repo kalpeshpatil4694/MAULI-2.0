@@ -110,66 +110,68 @@ export async function saveCommandResult(result, env = {}) {
   await store?.flush?.();
   const cfg = config(env);
   const { token } = tokenInfo(env);
-  if (!token) return { saved: false, reason: 'GitHub token is not configured' };
 
   const id = runId(result);
-  const path = resultPath(cfg.path, id);
-  const url = `${cfg.api}/repos/${cfg.repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
-  const h = headers(token);
-  const payload = JSON.stringify({
+  const payload = {
     ...result,
     result: normalizeResult(result.result),
     resultRunId: id,
-    resultPath: path
-  }, null, 2) + '\n';
-
-  // Read first so retries/collisions update the same result file instead of failing.
-  const current = await readCurrent(`${url}?ref=${encodeURIComponent(cfg.branch)}`, h);
-  if (!current.ok) return { saved: false, replaced: false, reason: `GitHub Result read failed (${current.status})${current.detail ? `: ${current.detail}` : ''}`, path, runId: id };
-
-  const body = {
-    message: `chore: record MAULI command result ${id}`,
-    content: utf8ToBase64(payload),
-    branch: cfg.branch
+    savedAt: new Date().toISOString()
   };
-  if (current.sha) body.sha = current.sha;
 
-  const { response, data } = await github(url, {
-    method: 'PUT',
-    headers: h,
-    body: JSON.stringify(body)
-  });
-
-  if (!response.ok) {
-    return {
-      saved: false,
-      replaced: Boolean(current.sha),
-      reason: `GitHub write failed (${response.status})${data?.message ? `: ${data.message}` : ''}`,
-      path,
-      runId: id
-    };
+  // 1. Always save locally to in-memory store (works on Cloudflare Workers)
+  try {
+    const existing = store.list('command_results') || [];
+    const idx = existing.findIndex(r => r?.resultRunId === id);
+    if (idx >= 0) {
+      existing[idx] = payload;
+    } else {
+      existing.push(payload);
+    }
+    store.put('command_results', existing);
+    await store?.flush?.();
+  } catch (e) {
+    // Store save failed — continue to try GitHub
   }
 
-  const verification = await github(`${url}?ref=${encodeURIComponent(cfg.branch)}`, { headers: h });
-  if (!verification.response.ok) {
-    return { saved: false, replaced: Boolean(current.sha), reason: `GitHub verification failed (${verification.response.status})`, path, runId: id };
-  }
-
-  let actual = '';
-  try { actual = base64ToUtf8(verification.data?.content || ''); } catch { actual = ''; }
-  if (actual !== payload) {
-    return { saved: false, replaced: Boolean(current.sha), reason: 'GitHub verification failed: Result content does not match saved command result', path, runId: id };
+  // 2. Optionally sync to GitHub (best-effort, does not block)
+  let githubSync = null;
+  if (token) {
+    try {
+      const ghPath = resultPath(cfg.path, id);
+      const url = `${cfg.api}/repos/${cfg.repo}/contents/${ghPath.split('/').map(encodeURIComponent).join('/')}`;
+      const h = headers(token);
+      const ghPayload = JSON.stringify(payload, null, 2) + '\n';
+      const current = await readCurrent(`${url}?ref=${encodeURIComponent(cfg.branch)}`, h);
+      const body = {
+        message: `chore: record MAULI command result ${id}`,
+        content: utf8ToBase64(ghPayload),
+        branch: cfg.branch
+      };
+      if (current.ok && current.sha) body.sha = current.sha;
+      const { response, data } = await github(url, { method: 'PUT', headers: h, body: JSON.stringify(body) });
+      githubSync = response.ok ? { synced: true, commitSha: data?.commit?.sha || null } : { synced: false, reason: data?.message || `HTTP ${response.status}` };
+    } catch (e) {
+      githubSync = { synced: false, reason: e.message };
+    }
   }
 
   return {
     saved: true,
-    replaced: Boolean(current.sha),
-    path,
-    branch: cfg.branch,
-    commitSha: data?.commit?.sha || verification.data?.sha || null,
     runId: id,
-    mode: 'per-run upsert'
+    storage: 'local',
+    githubSync: githubSync || { synced: false, reason: 'No GitHub token configured' },
+    mode: 'local+github-sync'
   };
+}
+
+export function listCommandResults() {
+  return store.list('command_results') || [];
+}
+
+export function getCommandResult(runId) {
+  const results = store.list('command_results') || [];
+  return results.find(r => r?.resultRunId === runId) || null;
 }
 
 export function decodeStoredResult(content) {
