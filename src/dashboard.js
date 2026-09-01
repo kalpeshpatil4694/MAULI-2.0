@@ -222,7 +222,7 @@ body.sidebar-open{overflow:hidden!important}@media(max-width:768px){.hamburger{d
       <div class="nav-item" data-page="downloads"><span class="nav-icon">📥</span>Downloads</div>
       <div class="nav-section">Settings</div>
       <div class="nav-item" data-page="shortcuts"><span class="nav-icon">⌨️</span>Shortcuts</div>
-      <div class="nav-item" onclick="clearKey()"><span class="nav-icon">🔑</span>Reset API Key</div>
+      <div class="nav-item" onclick="resetAllData()"><span class="nav-icon">🗑️</span>Reset All Data</div>
     </nav>
   </aside>
   <div class="main">
@@ -481,7 +481,17 @@ const $=id=>document.getElementById(id);
 async function getKey(){return localStorage.getItem('mauli-api-key')}
 async function setKey(k){localStorage.setItem('mauli-api-key',k)}
 function clearKey(){localStorage.removeItem('mauli-api-key');toast('API key cleared','info')}
-const PUBLIC_ENDPOINTS=['/api/state','/api/health','/api/heartbeat','/api/agents/best','/api/self-test','/api/result-diagnostic','/api/chat','/api/chat/history','/api/chat/active'];
+async function resetAllData(){
+  if(!confirm('⚠️ This will DELETE ALL data:\n• All projects\n• All tasks\n• All artifacts\n• All events\n• All approvals\n\nAre you sure?'))return;
+  if(!confirm('Last chance! This cannot be undone. Reset everything?'))return;
+  try{toast('Resetting all data...','info');
+    const r=await fetch('/api/reset',{method:'POST',headers:{'Content-Type':'application/json'}});
+    const d=await r.json();
+    if(d.ok){toast('All data deleted! Page will refresh...','success');setTimeout(()=>location.reload(),1500)}
+    else{toast('Reset failed: '+(d.error||'Unknown error'),'error')}
+  }catch(e){toast('Reset failed: '+e.message,'error')}
+}
+const PUBLIC_ENDPOINTS=['/api/state','/api/health','/api/heartbeat','/api/agents/best','/api/self-test','/api/result-diagnostic','/api/chat','/api/chat/history','/api/chat/active','/api/reset'];
 async function api(path,opts={}){
   const isPublic=PUBLIC_ENDPOINTS.some(ep=>path.startsWith(ep));
   const k=await getKey();
@@ -563,7 +573,7 @@ const paletteCommands=[
   {icon:'↻',text:'Refresh All Data',action:()=>loadState(),shortcut:'R'},
   {icon:'▶',text:'Run Self-Test',action:()=>{navigateTo('health');setTimeout(runSelfTest,300)}},
   {icon:'🔍',text:'Run Diagnostic',action:()=>{navigateTo('health');setTimeout(runDiagnostic,300)}},
-  {icon:'🔑',text:'Reset API Key',action:clearKey},
+  {icon:'🗑️',text:'Reset All Data',action:resetAllData},
   {icon:'✏️',text:'File Editor',action:()=>navigateTo('editor')},
   {icon:'📝',text:'Change History',action:()=>navigateTo('changelog')},
   {icon:'🎓',text:'Learning & Skills',action:()=>navigateTo('learning')},
