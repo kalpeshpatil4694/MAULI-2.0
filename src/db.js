@@ -36,8 +36,8 @@ export async function d1Put(env, type, value, { critical = false } = {}) {
   if (!canWriteD1(env, critical)) return { ...value, _d1WriteDeferred: true };
   const now = new Date().toISOString();
   const item = { ...value, createdAt: value.createdAt ?? now, updatedAt: now };
-  await env.DB.prepare(`INSERT INTO entities(type,id,data,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at`).bind(type, item.id, JSON.stringify(item), item.createdAt, now).run();
-  recordD1Write(env, 1);
+  const result = await env.DB.prepare(`INSERT INTO entities(type,id,data,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at`).bind(type, item.id, JSON.stringify(item), item.createdAt, now).run();
+  recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1));
   return item;
 }
 
@@ -49,8 +49,8 @@ export async function d1Events(env, limit = 50) {
 export async function d1Event(env, event, { critical = false } = {}) {
   const { canWriteD1, recordD1Write } = await import('./d1-quota.js');
   if (!canWriteD1(env, critical)) return { ...event, _d1WriteDeferred: true };
-  await env.DB.prepare('INSERT INTO events(id,type,payload,created_at) VALUES(?,?,?,?)').bind(event.id,event.type,JSON.stringify(event.payload),event.at).run();
-  recordD1Write(env, 1);
+  const result = await env.DB.prepare('INSERT INTO events(id,type,payload,created_at) VALUES(?,?,?,?)').bind(event.id,event.type,JSON.stringify(event.payload),event.at).run();
+  recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1));
   return event;
 }
 
