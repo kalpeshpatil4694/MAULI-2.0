@@ -1,0 +1,63 @@
+name: One-shot D1 dashboard integration
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'D1 dashboard integration complete') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Apply safe integration patch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const indexPath = 'src/index.js';
+          const dashPath = 'src/dashboard.js';
+          let index = fs.readFileSync(indexPath, 'utf8');
+          let dash = fs.readFileSync(dashPath, 'utf8');
+
+          const importNeedle = "import { store } from './store.js';";
+          if (!index.includes("import { d1QuotaSnapshot } from './d1-quota.js';")) {
+            if (!index.includes(importNeedle)) throw new Error('index import anchor not found');
+            index = index.replace(importNeedle, importNeedle + "\nimport { d1QuotaSnapshot } from './d1-quota.js';");
+          }
+
+          const healthNeedle = "if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,time:now()});";
+          const healthReplacement = "if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),time:now()});";
+          if (index.includes(healthNeedle)) index = index.replace(healthNeedle, healthReplacement);
+          else if (!index.includes('d1Quota:d1QuotaSnapshot(env)')) throw new Error('health route anchor not found');
+
+          const healthFn = /function renderHealth\(\)\{[\s\S]*?\n\}\nfunction /;
+          if (healthFn.test(dash) && !dash.includes('D1 Daily Usage')) {
+            const replacement = `function renderHealth(){\n  api('/api/health').then(r=>{const d=r.data||r;const row=(l,v)=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px;color:var(--text2)">'+l+'</span><span style="font-size:11px">'+v+'</span></div>';\n    const q=d.d1Quota||{};\n    const used=Number(q.used||0), limit=Number(q.limit||100000), remaining=Math.max(0,Number(q.remaining ?? (limit-used)));\n    const pct=Math.min(100,Number(q.percent||0));\n    const status=String(q.status||'unknown');\n    const statusLabel=status==='limit_reached'?'Protection':status==='critical'?'Critical':status==='high'?'High':status==='watch'?'Watch':'Healthy';\n    let h=row('Service',d.service||'—')+row('Status','<span style="color:var(--green)">'+esc(d.status||'?')+'</span>')+row('D1',d.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory</span>')+row('AI',d.ai?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--yellow)">No</span>')+row('Time',fmt(d.time));\n    h += '<div style="margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">D1 Daily Usage</div>'+row('Used',used.toLocaleString()+' / '+limit.toLocaleString())+row('Remaining',remaining.toLocaleString())+row('Usage',pct.toFixed(2)+'%')+row('Status','<span>'+esc(statusLabel)+'</span>')+row('UTC Day',esc(q.date||'—'))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">MAULI tracked writes; Cloudflare account meter may differ.</div></div>';\n    $('hlthDet').innerHTML=h}).catch(e=>{$('hlthDet').innerHTML='<div style="color:var(--red);padding:10px">Health unavailable</div>'});\n}\nfunction `;
+            dash = dash.replace(healthFn, replacement);
+          }
+
+          fs.writeFileSync(indexPath, index);
+          fs.writeFileSync(dashPath, dash);
+          NODE
+          node --check src/index.js
+          node --check src/dashboard.js
+          if git diff --quiet; then
+            echo 'No changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/index.js src/dashboard.js
+          git commit -m 'feat: D1 dashboard integration complete'
+          git push origin HEAD:main
