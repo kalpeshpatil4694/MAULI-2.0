@@ -1,0 +1,1114 @@
+{
+  "runId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+  "command": "Auto massage typing tool banva",
+  "generatedAt": "2026-09-02T13:43:32.777Z",
+  "result": {
+    "runId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+    "intent": {
+      "id": "intent_2fe52be6-d496-4331-ad13-a693cfc63319",
+      "command": "Auto massage typing tool banva",
+      "objective": "Auto massage typing tool banva",
+      "capabilities": [
+        "requirements"
+      ]
+    },
+    "aiPlan": {
+      "objective": "Design and develop an auto massage typing tool called Banva",
+      "requirements": [
+        "User-friendly interface to input and save custom massage templates",
+        "Ability to automatically generate and send messages at scheduled times",
+        "Integration with popular messaging platforms",
+        "Customizable message templates and scheduling options",
+        "Data storage for user information and message history"
+      ],
+      "capabilities": [
+        "research",
+        "product-planning",
+        "frontend",
+        "backend",
+        "database",
+        "security",
+        "testing"
+      ],
+      "risks": [
+        "Difficulty in integrating with various messaging platforms",
+        "Potential security concerns with storing user data",
+        "Limited customization options may not meet user needs"
+      ],
+      "acceptanceCriteria": [
+        "Users can successfully input and save custom massage templates",
+        "The tool can automatically generate and send messages at scheduled times",
+        "The tool integrates seamlessly with at least two popular messaging platforms",
+        "Users can customize message templates and scheduling options",
+        "The tool stores user information and message history securely and efficiently"
+      ]
+    },
+    "project": {
+      "id": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+      "name": "Project: Design and develop an auto massage typing tool called Banva",
+      "objective": "Design and develop an auto massage typing tool called Banva",
+      "founderCommand": "Auto massage typing tool banva",
+      "requirements": [
+        "User-friendly interface to input and save custom massage templates",
+        "Ability to automatically generate and send messages at scheduled times",
+        "Integration with popular messaging platforms",
+        "Customizable message templates and scheduling options",
+        "Data storage for user information and message history"
+      ],
+      "priority": "normal",
+      "state": "queued",
+      "milestones": [],
+      "createdAt": "2026-09-02T13:43:32.777Z",
+      "updatedAt": "2026-09-02T13:43:32.777Z",
+      "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+      "queuedAt": "2026-09-02T13:43:32.777Z"
+    },
+    "tasks": [
+      {
+        "id": "task_a0392cb6-733c-4106-a4eb-b2f66239f929",
+        "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "title": "Research and validate requirements: User-friendly interface to input and save custom massage templates",
+        "description": "Design and develop an auto massage typing tool called Banva",
+        "requiredCapabilities": [
+          "research",
+          "analysis"
+        ],
+        "risk": "normal",
+        "dependsOn": [],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "assigned",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 10,
+        "updatedAt": "2026-09-02T13:43:32.777Z",
+        "createdAt": "2026-09-02T13:43:32.777Z",
+        "assignedAt": "2026-09-02T13:43:32.777Z",
+        "blockedReason": null,
+        "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+        "queuedAt": "2026-09-02T13:43:32.777Z",
+        "task": {
+          "id": "task_a0392cb6-733c-4106-a4eb-b2f66239f929",
+          "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "title": "Research and validate requirements: User-friendly interface to input and save custom massage templates",
+          "description": "Design and develop an auto massage typing tool called Banva",
+          "requiredCapabilities": [
+            "research",
+            "analysis"
+          ],
+          "risk": "normal",
+          "dependsOn": [],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "plan"
+            }
+          ],
+          "state": "assigned",
+          "attempts": 0,
+          "maxAttempts": 3,
+          "executor": "internal.plan",
+          "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 10,
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-09-02T13:43:32.777Z",
+          "assignedAt": "2026-09-02T13:43:32.777Z",
+          "blockedReason": null,
+          "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+          "queuedAt": "2026-09-02T13:43:32.777Z"
+        },
+        "selectedAgent": {
+          "id": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+          "name": "Research Agent",
+          "role": "Research",
+          "department": "Research",
+          "capabilities": [
+            "research",
+            "analysis"
+          ],
+          "tools": [
+            "web.search"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-09-02T13:43:32.777Z",
+          "metadata": {
+            "outcomeCount": 36,
+            "successCount": 36,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-09-02T11:10:43.816Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "analysis|research": {
+                "attempts": 36,
+                "successes": 36,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-09-02T11:10:43.816Z",
+                "patterns": [
+                  {
+                    "type": "general",
+                    "description": "General software",
+                    "count": 1,
+                    "successCount": 1,
+                    "lastSeen": "2026-09-02T11:10:43.816Z"
+                  }
+                ],
+                "improvements": []
+              }
+            },
+            "skillTree": {
+              "research": {
+                "level": 1,
+                "xp": 10,
+                "lastUsed": "2026-09-02T11:10:43.816Z"
+              },
+              "analysis": {
+                "level": 1,
+                "xp": 10,
+                "lastUsed": "2026-09-02T11:10:43.816Z"
+              }
+            },
+            "collaboration": {
+              "verificationsPassed": 1,
+              "totalVerifications": 1
+            }
+          },
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a",
+        "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "title": "Define product and architecture plan: Ability to automatically generate and send messages at scheduled times",
+        "description": "Design and develop an auto massage typing tool called Banva",
+        "requiredCapabilities": [
+          "product-planning",
+          "planning"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_a0392cb6-733c-4106-a4eb-b2f66239f929"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 20,
+        "updatedAt": "2026-09-02T13:43:32.777Z",
+        "createdAt": "2026-09-02T13:43:32.777Z",
+        "blockedReason": "Dependencies incomplete",
+        "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+        "queuedAt": "2026-09-02T13:43:32.777Z",
+        "task": {
+          "id": "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a",
+          "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "title": "Define product and architecture plan: Ability to automatically generate and send messages at scheduled times",
+          "description": "Design and develop an auto massage typing tool called Banva",
+          "requiredCapabilities": [
+            "product-planning",
+            "planning"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_a0392cb6-733c-4106-a4eb-b2f66239f929"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "plan"
+            }
+          ],
+          "state": "blocked",
+          "attempts": 0,
+          "maxAttempts": 3,
+          "executor": "internal.plan",
+          "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 20,
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-09-02T13:43:32.777Z",
+          "blockedReason": "Dependencies incomplete",
+          "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+          "queuedAt": "2026-09-02T13:43:32.777Z"
+        },
+        "selectedAgent": {
+          "id": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+          "name": "Product Agent",
+          "role": "Product",
+          "department": "Business",
+          "capabilities": [
+            "requirements",
+            "product-planning",
+            "planning"
+          ],
+          "tools": [
+            "planning.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-09-02T13:43:32.777Z",
+          "metadata": {
+            "outcomeCount": 54,
+            "successCount": 54,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-31T11:11:33.368Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "analysis|research": {
+                "attempts": 10,
+                "successes": 10,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-21T17:01:01.714Z"
+              },
+              "planning|product-planning": {
+                "attempts": 43,
+                "successes": 43,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-31T11:11:33.368Z"
+              },
+              "testing|verification": {
+                "attempts": 1,
+                "successes": 1,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 0.1,
+                "lastOutcomeAt": "2026-08-21T17:01:36.812Z"
+              }
+            }
+          },
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_34a18109-e2d1-4261-ba17-be830a9f9512",
+        "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "title": "Implement backend code and API: Integration with popular messaging platforms",
+        "description": "Design and develop an auto massage typing tool called Banva",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "updatedAt": "2026-09-02T13:43:32.777Z",
+        "createdAt": "2026-09-02T13:43:32.777Z",
+        "blockedReason": "Dependencies incomplete",
+        "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+        "queuedAt": "2026-09-02T13:43:32.777Z",
+        "task": {
+          "id": "task_34a18109-e2d1-4261-ba17-be830a9f9512",
+          "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "title": "Implement backend code and API: Integration with popular messaging platforms",
+          "description": "Design and develop an auto massage typing tool called Banva",
+          "requiredCapabilities": [
+            "backend",
+            "api"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "state": "blocked",
+          "attempts": 0,
+          "maxAttempts": 3,
+          "executor": "internal.code",
+          "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+          "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 30,
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-09-02T13:43:32.777Z",
+          "blockedReason": "Dependencies incomplete",
+          "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+          "queuedAt": "2026-09-02T13:43:32.777Z"
+        },
+        "selectedAgent": {
+          "id": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+          "name": "Backend Agent",
+          "role": "Engineer",
+          "department": "Engineering",
+          "capabilities": [
+            "backend",
+            "api",
+            "javascript"
+          ],
+          "tools": [
+            "code.execute",
+            "test.run"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-09-02T13:43:32.777Z",
+          "metadata": {
+            "outcomeCount": 40,
+            "successCount": 34,
+            "failureCount": 6,
+            "successRate": 0.85,
+            "lastOutcomeAt": "2026-09-02T11:11:03.960Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 85,
+            "consecutiveFailures": 0,
+            "learning": {
+              "api|backend": {
+                "attempts": 40,
+                "successes": 34,
+                "failures": 6,
+                "successRate": 0.85,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-09-02T11:11:03.960Z",
+                "patterns": [
+                  {
+                    "type": "general",
+                    "description": "General software",
+                    "count": 1,
+                    "successCount": 1,
+                    "lastSeen": "2026-09-02T11:11:03.960Z"
+                  }
+                ],
+                "improvements": [
+                  {
+                    "at": "2026-09-02T11:11:03.960Z",
+                    "successRate": 0.85,
+                    "confidence": 1,
+                    "attempts": 40
+                  }
+                ]
+              }
+            },
+            "skillTree": {
+              "backend": {
+                "level": 1,
+                "xp": 10,
+                "lastUsed": "2026-09-02T11:11:03.960Z"
+              },
+              "api": {
+                "level": 1,
+                "xp": 10,
+                "lastUsed": "2026-09-02T11:11:03.960Z"
+              }
+            },
+            "collaboration": {
+              "verificationsPassed": 1,
+              "totalVerifications": 1
+            }
+          },
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_ba385c6b-202d-4a3d-a74a-1b30d8899a03",
+        "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "title": "Implement database and persistence schema: Customizable message templates and scheduling options",
+        "description": "Design and develop an auto massage typing tool called Banva",
+        "requiredCapabilities": [
+          "database",
+          "schema",
+          "sql"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 40,
+        "updatedAt": "2026-09-02T13:43:32.777Z",
+        "createdAt": "2026-09-02T13:43:32.777Z",
+        "blockedReason": "Dependencies incomplete",
+        "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+        "queuedAt": "2026-09-02T13:43:32.777Z",
+        "task": {
+          "id": "task_ba385c6b-202d-4a3d-a74a-1b30d8899a03",
+          "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "title": "Implement database and persistence schema: Customizable message templates and scheduling options",
+          "description": "Design and develop an auto massage typing tool called Banva",
+          "requiredCapabilities": [
+            "database",
+            "schema",
+            "sql"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "state": "blocked",
+          "attempts": 0,
+          "maxAttempts": 3,
+          "executor": "internal.code",
+          "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+          "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 40,
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-09-02T13:43:32.777Z",
+          "blockedReason": "Dependencies incomplete",
+          "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+          "queuedAt": "2026-09-02T13:43:32.777Z"
+        },
+        "selectedAgent": {
+          "id": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+          "name": "Database Agent",
+          "role": "Engineer",
+          "department": "Engineering",
+          "capabilities": [
+            "database",
+            "schema",
+            "sql"
+          ],
+          "tools": [
+            "database.query",
+            "code.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-09-02T13:43:32.777Z",
+          "metadata": {
+            "outcomeCount": 36,
+            "successCount": 33,
+            "failureCount": 3,
+            "successRate": 0.9166666666666666,
+            "lastOutcomeAt": "2026-08-31T11:15:48.754Z",
+            "lastOutcome": "failure",
+            "reliabilityScore": 92,
+            "consecutiveFailures": 3,
+            "learning": {
+              "database|schema|sql": {
+                "attempts": 35,
+                "successes": 32,
+                "failures": 3,
+                "successRate": 0.9142857142857143,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-31T11:15:48.754Z"
+              }
+            },
+            "cooldownUntil": 1788175248754
+          },
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_6f557ebb-1202-4db8-9e2d-9365ca47dccd",
+        "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "title": "Implement frontend code and user experience: Data storage for user information and message history",
+        "description": "Design and develop an auto massage typing tool called Banva",
+        "requiredCapabilities": [
+          "frontend",
+          "ui"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a",
+          "task_34a18109-e2d1-4261-ba17-be830a9f9512"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 50,
+        "updatedAt": "2026-09-02T13:43:32.777Z",
+        "createdAt": "2026-09-02T13:43:32.777Z",
+        "blockedReason": "Dependencies incomplete",
+        "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+        "queuedAt": "2026-09-02T13:43:32.777Z",
+        "task": {
+          "id": "task_6f557ebb-1202-4db8-9e2d-9365ca47dccd",
+          "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "title": "Implement frontend code and user experience: Data storage for user information and message history",
+          "description": "Design and develop an auto massage typing tool called Banva",
+          "requiredCapabilities": [
+            "frontend",
+            "ui"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a",
+            "task_34a18109-e2d1-4261-ba17-be830a9f9512"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "state": "blocked",
+          "attempts": 0,
+          "maxAttempts": 3,
+          "executor": "internal.code",
+          "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+          "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 50,
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-09-02T13:43:32.777Z",
+          "blockedReason": "Dependencies incomplete",
+          "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+          "queuedAt": "2026-09-02T13:43:32.777Z"
+        },
+        "selectedAgent": {
+          "id": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+          "name": "Frontend Agent",
+          "role": "Engineer",
+          "department": "Engineering",
+          "capabilities": [
+            "frontend",
+            "javascript",
+            "ui"
+          ],
+          "tools": [
+            "code.execute",
+            "test.run"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-09-02T13:43:32.777Z",
+          "metadata": {
+            "outcomeCount": 31,
+            "successCount": 31,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-08-30T15:21:48.227Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "frontend|ui": {
+                "attempts": 31,
+                "successes": 31,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-08-30T15:21:48.227Z"
+              }
+            }
+          },
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_ada58afb-a4f2-4d9d-b157-6747df355fe4",
+        "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "title": "Perform security review",
+        "description": "Design and develop an auto massage typing tool called Banva",
+        "requiredCapabilities": [
+          "security",
+          "audit"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 60,
+        "updatedAt": "2026-09-02T13:43:32.777Z",
+        "createdAt": "2026-09-02T13:43:32.777Z",
+        "blockedReason": "Dependencies incomplete",
+        "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+        "queuedAt": "2026-09-02T13:43:32.777Z",
+        "task": {
+          "id": "task_ada58afb-a4f2-4d9d-b157-6747df355fe4",
+          "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "title": "Perform security review",
+          "description": "Design and develop an auto massage typing tool called Banva",
+          "requiredCapabilities": [
+            "security",
+            "audit"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "state": "blocked",
+          "attempts": 0,
+          "maxAttempts": 3,
+          "executor": "internal.code",
+          "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+          "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 60,
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-09-02T13:43:32.777Z",
+          "blockedReason": "Dependencies incomplete",
+          "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+          "queuedAt": "2026-09-02T13:43:32.777Z"
+        },
+        "selectedAgent": {
+          "id": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+          "name": "Security Agent",
+          "role": "Reviewer",
+          "department": "Security",
+          "capabilities": [
+            "security",
+            "audit"
+          ],
+          "tools": [
+            "security.scan"
+          ],
+          "state": "assigned",
+          "heartbeatAt": "2026-09-02T13:43:32.777Z",
+          "metadata": {
+            "outcomeCount": 32,
+            "successCount": 31,
+            "failureCount": 1,
+            "successRate": 0.96875,
+            "lastOutcomeAt": "2026-09-02T11:11:19.735Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 97,
+            "consecutiveFailures": 0,
+            "learning": {
+              "audit|security": {
+                "attempts": 32,
+                "successes": 31,
+                "failures": 1,
+                "successRate": 0.96875,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-09-02T11:11:19.735Z",
+                "patterns": [
+                  {
+                    "type": "security",
+                    "description": "Security applications",
+                    "count": 1,
+                    "successCount": 1,
+                    "lastSeen": "2026-09-02T11:11:19.735Z"
+                  }
+                ],
+                "improvements": []
+              }
+            },
+            "skillTree": {
+              "security": {
+                "level": 1,
+                "xp": 10,
+                "lastUsed": "2026-09-02T11:11:19.735Z"
+              },
+              "audit": {
+                "level": 1,
+                "xp": 10,
+                "lastUsed": "2026-09-02T11:11:19.735Z"
+              }
+            },
+            "collaboration": {
+              "verificationsPassed": 1,
+              "totalVerifications": 1
+            }
+          },
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": "task_2c58d74f-5ebe-4c79-b541-3c054de0b44f"
+        }
+      },
+      {
+        "id": "task_6a110c8d-434a-4cf8-8e27-e7451c8ecd00",
+        "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "title": "Create testing and verification plan",
+        "description": "Design and develop an auto massage typing tool called Banva",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 70,
+        "updatedAt": "2026-09-02T13:43:32.777Z",
+        "createdAt": "2026-09-02T13:43:32.777Z",
+        "blockedReason": "Dependencies incomplete",
+        "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+        "queuedAt": "2026-09-02T13:43:32.777Z",
+        "task": {
+          "id": "task_6a110c8d-434a-4cf8-8e27-e7451c8ecd00",
+          "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "title": "Create testing and verification plan",
+          "description": "Design and develop an auto massage typing tool called Banva",
+          "requiredCapabilities": [
+            "testing",
+            "verification"
+          ],
+          "risk": "normal",
+          "dependsOn": [
+            "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "plan"
+            }
+          ],
+          "state": "blocked",
+          "attempts": 0,
+          "maxAttempts": 3,
+          "executor": "internal.plan",
+          "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 70,
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-09-02T13:43:32.777Z",
+          "blockedReason": "Dependencies incomplete",
+          "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+          "queuedAt": "2026-09-02T13:43:32.777Z"
+        },
+        "selectedAgent": {
+          "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "name": "QA Agent",
+          "role": "Tester",
+          "department": "Quality",
+          "capabilities": [
+            "testing",
+            "verification"
+          ],
+          "tools": [
+            "test.run",
+            "code.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-09-02T13:43:32.777Z",
+          "metadata": {
+            "outcomeCount": 61,
+            "successCount": 61,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-09-02T11:11:19.735Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "testing|verification": {
+                "attempts": 61,
+                "successes": 61,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-09-02T11:11:19.735Z",
+                "patterns": [
+                  {
+                    "type": "general",
+                    "description": "General software",
+                    "count": 2,
+                    "successCount": 2,
+                    "lastSeen": "2026-09-02T11:11:19.735Z"
+                  }
+                ],
+                "improvements": [
+                  {
+                    "at": "2026-09-02T11:11:19.735Z",
+                    "successRate": 1,
+                    "confidence": 1,
+                    "attempts": 60
+                  }
+                ]
+              }
+            },
+            "skillTree": {
+              "testing": {
+                "level": 1,
+                "xp": 20,
+                "lastUsed": "2026-09-02T11:11:19.735Z"
+              },
+              "verification": {
+                "level": 1,
+                "xp": 20,
+                "lastUsed": "2026-09-02T11:11:19.735Z"
+              }
+            },
+            "collaboration": {
+              "verificationsPassed": 2,
+              "totalVerifications": 2
+            }
+          },
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      },
+      {
+        "id": "task_e42fcf8e-5cb4-4a41-86a4-365e41203fb6",
+        "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "title": "Final project verification and QA",
+        "description": "Verify completed project project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "low",
+        "dependsOn": [
+          "task_a0392cb6-733c-4106-a4eb-b2f66239f929",
+          "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a",
+          "task_34a18109-e2d1-4261-ba17-be830a9f9512",
+          "task_ba385c6b-202d-4a3d-a74a-1b30d8899a03",
+          "task_6f557ebb-1202-4db8-9e2d-9365ca47dccd",
+          "task_ada58afb-a4f2-4d9d-b157-6747df355fe4",
+          "task_6a110c8d-434a-4cf8-8e27-e7451c8ecd00"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 1,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 999,
+        "finalProjectVerification": true,
+        "updatedAt": "2026-09-02T13:43:32.777Z",
+        "createdAt": "2026-09-02T13:43:32.777Z",
+        "blockedReason": "Dependencies incomplete",
+        "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+        "queuedAt": "2026-09-02T13:43:32.777Z",
+        "task": {
+          "id": "task_e42fcf8e-5cb4-4a41-86a4-365e41203fb6",
+          "projectId": "project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "title": "Final project verification and QA",
+          "description": "Verify completed project project_e0045517-ae18-43bb-8a3d-1ab784e03445",
+          "requiredCapabilities": [
+            "testing",
+            "verification"
+          ],
+          "risk": "low",
+          "dependsOn": [
+            "task_a0392cb6-733c-4106-a4eb-b2f66239f929",
+            "task_096a9a42-f459-46d8-a8b0-4b5de6c2504a",
+            "task_34a18109-e2d1-4261-ba17-be830a9f9512",
+            "task_ba385c6b-202d-4a3d-a74a-1b30d8899a03",
+            "task_6f557ebb-1202-4db8-9e2d-9365ca47dccd",
+            "task_ada58afb-a4f2-4d9d-b157-6747df355fe4",
+            "task_6a110c8d-434a-4cf8-8e27-e7451c8ecd00"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "plan"
+            }
+          ],
+          "state": "blocked",
+          "attempts": 0,
+          "maxAttempts": 1,
+          "executor": "internal.plan",
+          "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "toolNames": [],
+          "requiredTools": [],
+          "sequence": 999,
+          "finalProjectVerification": true,
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-09-02T13:43:32.777Z",
+          "blockedReason": "Dependencies incomplete",
+          "commandRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+          "queuedAt": "2026-09-02T13:43:32.777Z"
+        },
+        "selectedAgent": {
+          "id": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+          "name": "QA Agent",
+          "role": "Tester",
+          "department": "Quality",
+          "capabilities": [
+            "testing",
+            "verification"
+          ],
+          "tools": [
+            "test.run",
+            "code.execute"
+          ],
+          "state": "available",
+          "heartbeatAt": "2026-09-02T13:43:32.777Z",
+          "metadata": {
+            "outcomeCount": 61,
+            "successCount": 61,
+            "failureCount": 0,
+            "successRate": 1,
+            "lastOutcomeAt": "2026-09-02T11:11:19.735Z",
+            "lastOutcome": "success",
+            "reliabilityScore": 100,
+            "consecutiveFailures": 0,
+            "learning": {
+              "testing|verification": {
+                "attempts": 61,
+                "successes": 61,
+                "failures": 0,
+                "successRate": 1,
+                "confidence": 1,
+                "lastOutcomeAt": "2026-09-02T11:11:19.735Z",
+                "patterns": [
+                  {
+                    "type": "general",
+                    "description": "General software",
+                    "count": 2,
+                    "successCount": 2,
+                    "lastSeen": "2026-09-02T11:11:19.735Z"
+                  }
+                ],
+                "improvements": [
+                  {
+                    "at": "2026-09-02T11:11:19.735Z",
+                    "successRate": 1,
+                    "confidence": 1,
+                    "attempts": 60
+                  }
+                ]
+              }
+            },
+            "skillTree": {
+              "testing": {
+                "level": 1,
+                "xp": 20,
+                "lastUsed": "2026-09-02T11:11:19.735Z"
+              },
+              "verification": {
+                "level": 1,
+                "xp": 20,
+                "lastUsed": "2026-09-02T11:11:19.735Z"
+              }
+            },
+            "collaboration": {
+              "verificationsPassed": 2,
+              "totalVerifications": 2
+            }
+          },
+          "updatedAt": "2026-09-02T13:43:32.777Z",
+          "createdAt": "2026-08-20T08:12:51.655Z",
+          "currentTaskId": null
+        }
+      }
+    ],
+    "status": "queued",
+    "next": "scheduler"
+  },
+  "resultRunId": "command_2d2e5312-335c-403c-812e-fa76d7b05504",
+  "savedAt": "2026-09-02T13:43:33.346Z"
+}
