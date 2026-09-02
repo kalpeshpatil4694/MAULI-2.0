@@ -1,0 +1,412 @@
+{
+  "runId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+  "command": "Calculator banva",
+  "generatedAt": "2026-09-02T19:00:37.827Z",
+  "result": {
+    "status": "failed",
+    "runId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+    "command": "Calculator banva",
+    "project": {
+      "id": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+      "name": "Project: Create a calculator software product",
+      "objective": "Create a calculator software product",
+      "founderCommand": "Calculator banva",
+      "requirements": [
+        "User can input numbers and mathematical operators",
+        "User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+        "User can view calculation history",
+        "User can clear calculation history"
+      ],
+      "priority": "normal",
+      "state": "failed",
+      "milestones": [],
+      "createdAt": "2026-08-23T02:02:58.964Z",
+      "updatedAt": "2026-09-02T19:00:37.827Z",
+      "failedAt": "2026-09-02T18:48:40.507Z"
+    },
+    "tasks": [
+      {
+        "id": "task_edd27e38-f4ac-4df7-8bdd-c7903f5e0c63",
+        "projectId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+        "title": "Implement backend code and API: User can view calculation history",
+        "description": "Create a calculator software product",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_84b57ade-1a8d-462e-9021-e52b99d664a6"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "failed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "updatedAt": "2026-08-23T02:03:19.387Z",
+        "createdAt": "2026-08-23T02:02:58.964Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-23T02:02:58.964Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_646287f9-75de-4d33-a51a-4d98d9597e7b",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: User can view calculation history\nObjective: Create a calculator software product\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime did not return a valid file artifact."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "qualityGate": {
+            "passed": false,
+            "gate": "L1.1-generated-project-quality",
+            "status": "FAIL",
+            "stages": {
+              "automatedBuildTest": true,
+              "requirementVerification": false,
+              "securityCheck": true,
+              "artifactIntegrity": true,
+              "integrationCheck": true
+            },
+            "checks": [
+              {
+                "name": "files_present",
+                "passed": true
+              },
+              {
+                "name": "unique_paths",
+                "passed": true
+              },
+              {
+                "name": "safe_paths",
+                "passed": true
+              },
+              {
+                "name": "non_empty_files",
+                "passed": true
+              },
+              {
+                "name": "valid_file_records",
+                "passed": true
+              },
+              {
+                "name": "no_obvious_hardcoded_secrets",
+                "passed": true
+              },
+              {
+                "name": "no_dynamic_eval",
+                "passed": true
+              },
+              {
+                "name": "no_dangerous_html_sink",
+                "passed": true
+              },
+              {
+                "name": "no_embedded_private_key",
+                "passed": true
+              },
+              {
+                "name": "calculator_html_present",
+                "passed": false
+              },
+              {
+                "name": "calculator_javascript_present",
+                "passed": false
+              },
+              {
+                "name": "basic_arithmetic",
+                "passed": false
+              },
+              {
+                "name": "calculation_history",
+                "passed": true
+              },
+              {
+                "name": "clear_history",
+                "passed": false
+              },
+              {
+                "name": "html_js_integration",
+                "passed": false
+              },
+              {
+                "name": "html_css_integration",
+                "passed": true
+              },
+              {
+                "name": "artifact_file_count",
+                "passed": true
+              },
+              {
+                "name": "artifact_paths_unique",
+                "passed": true
+              },
+              {
+                "name": "artifact_content_utf8",
+                "passed": true
+              }
+            ],
+            "requirementsDetected": "calculator",
+            "artifactManifest": [
+              {
+                "path": "generated/README.md",
+                "bytes": 176,
+                "sha256": "6ee5d8b75bef8e384d7a118231b9f3971c9b6196c108a1a1e9deebef7e03f1b8"
+              }
+            ],
+            "checkedAt": "2026-08-23T02:03:19.387Z"
+          }
+        },
+        "verificationId": "verification_1d52a6ae-ef85-4b14-b53d-b79c2e4eda10"
+      },
+      {
+        "id": "task_797712a4-42fa-4829-9db6-a1f4ba3943d0",
+        "projectId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+        "title": "Implement database and persistence schema: User can clear calculation history",
+        "description": "Create a calculator software product",
+        "requiredCapabilities": [
+          "database",
+          "schema",
+          "sql"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_edd27e38-f4ac-4df7-8bdd-c7903f5e0c63"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 40,
+        "updatedAt": "2026-08-23T02:02:58.964Z",
+        "createdAt": "2026-08-23T02:02:58.964Z",
+        "blockedReason": "Dependencies incomplete"
+      },
+      {
+        "id": "task_84b57ade-1a8d-462e-9021-e52b99d664a6",
+        "projectId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+        "title": "Define product and architecture plan: User can perform basic arithmetic operations (addition, subtraction, multiplication, division)",
+        "description": "Create a calculator software product",
+        "requiredCapabilities": [
+          "product-planning",
+          "planning"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_4e473b15-d389-4a38-8a0f-36ade8f1ec9c"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [
+          "planning.execute"
+        ],
+        "requiredTools": [],
+        "sequence": 20,
+        "updatedAt": "2026-08-23T02:02:58.964Z",
+        "createdAt": "2026-08-23T02:02:58.964Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-23T02:02:58.964Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_84b57ade-1a8d-462e-9021-e52b99d664a6",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-23T02:02:58.964Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_b45741e5-6a6f-4b78-93b6-07262efba6c1",
+        "completedAt": "2026-08-23T02:02:58.964Z"
+      },
+      {
+        "id": "task_e8d6ff03-7790-4be7-8859-31c64f2148f5",
+        "projectId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+        "title": "Implement frontend code and user experience",
+        "description": "Create a calculator software product",
+        "requiredCapabilities": [
+          "frontend",
+          "ui"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_797712a4-42fa-4829-9db6-a1f4ba3943d0"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "queued",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 50,
+        "updatedAt": "2026-08-23T02:02:58.964Z",
+        "createdAt": "2026-08-23T02:02:58.964Z"
+      },
+      {
+        "id": "task_4e473b15-d389-4a38-8a0f-36ade8f1ec9c",
+        "projectId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+        "title": "Research and validate requirements: User can input numbers and mathematical operators",
+        "description": "Create a calculator software product",
+        "requiredCapabilities": [
+          "research",
+          "analysis"
+        ],
+        "risk": "normal",
+        "dependsOn": [],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 10,
+        "updatedAt": "2026-08-23T02:02:58.964Z",
+        "createdAt": "2026-08-23T02:02:58.964Z",
+        "assignedAt": "2026-08-23T02:02:58.964Z",
+        "startedAt": "2026-08-23T02:02:58.964Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_4e473b15-d389-4a38-8a0f-36ade8f1ec9c",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-23T02:02:58.964Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_abdc7d55-575f-43f6-81c9-7690f226db75",
+        "completedAt": "2026-08-23T02:02:58.964Z"
+      },
+      {
+        "id": "task_0f6f99a5-1e83-4892-8664-89fa27b68a76",
+        "projectId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+        "title": "Create testing and verification plan",
+        "description": "Create a calculator software product",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_423102d5-a278-4b6a-b70d-d600f7ea0fa3"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [
+          "test.run"
+        ],
+        "requiredTools": [],
+        "sequence": 70,
+        "updatedAt": "2026-08-23T02:02:58.964Z",
+        "createdAt": "2026-08-23T02:02:58.964Z",
+        "blockedReason": "Dependencies incomplete"
+      },
+      {
+        "id": "task_423102d5-a278-4b6a-b70d-d600f7ea0fa3",
+        "projectId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+        "title": "Perform security review",
+        "description": "Create a calculator software product",
+        "requiredCapabilities": [
+          "security",
+          "audit"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_e8d6ff03-7790-4be7-8859-31c64f2148f5"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 60,
+        "updatedAt": "2026-08-23T02:02:58.964Z",
+        "createdAt": "2026-08-23T02:02:58.964Z",
+        "blockedReason": "Dependencies incomplete"
+      }
+    ],
+    "error": "One or more tasks failed after recovery/retry limits."
+  },
+  "resultRunId": "project_72f00bd2-00c6-4cd8-a3d3-037d72260c69",
+  "savedAt": "2026-09-02T19:00:38.089Z"
+}
