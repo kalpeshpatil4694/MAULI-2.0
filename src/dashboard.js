@@ -369,7 +369,7 @@ function tBadge(s){return s==='completed'?'g':s==='working'?'a':s==='failed'||s=
 function pct(s){return s==='completed'?'100':s==='working'?'60':s==='failed'?'100':'20'}
 function fmt(d){if(!d)return '—';try{return new Date(d).toLocaleString()}catch(e){return String(d)}}
 function toast(m,t='info'){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;$('toastC').appendChild(e);setTimeout(()=>e.remove(),3500)}
-function md(s){if(!s)return'';let t=esc(s);t=t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');t=t.replace(/\*(.+?)\*/g,'<em>$1</em>');t=t.replace(/^### (.+)$/gm,'<b style="color:var(--accent)">$1</b>');t=t.replace(/^## (.+)$/gm,'<b>$1</b>');t=t.replace(/^# (.+)$/gm,'<b style="font-size:14px">$1</b>');t=t.replace(/^• (.+)$/gm,'<div style="padding-left:10px">• $1</div>');t=t.replace(/\n/g,'<br>');return t}
+function md(s){if(!s)return'';let t=esc(s);t=t.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');t=t.replace(/\\*(.+?)\\*/g,'<em>$1</em>');t=t.replace(/^### (.+)$/gm,'<b style="color:var(--accent)">$1</b>');t=t.replace(/^## (.+)$/gm,'<b>$1</b>');t=t.replace(/^# (.+)$/gm,'<b style="font-size:14px">$1</b>');t=t.replace(/^• (.+)$/gm,'<div style="padding-left:10px">• $1</div>');t=t.replace(/\n/g,'<br>');return t}
 function actColor(ev){return ev.type?.includes('error')?'var(--red)':ev.type?.includes('task_result')?'var(--green)':ev.type?.includes('command')?'var(--accent)':'var(--blue)'}
 
 // ─── API ───
