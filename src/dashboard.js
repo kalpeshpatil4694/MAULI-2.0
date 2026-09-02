@@ -369,7 +369,7 @@ function tBadge(s){return s==='completed'?'g':s==='working'?'a':s==='failed'||s=
 function pct(s){return s==='completed'?'100':s==='working'?'60':s==='failed'?'100':'20'}
 function fmt(d){if(!d)return '—';try{return new Date(d).toLocaleString()}catch(e){return String(d)}}
 function toast(m,t='info'){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;$('toastC').appendChild(e);setTimeout(()=>e.remove(),3500)}
-function md(s){if(!s)return'';let t=esc(s);t=t.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');t=t.replace(/\\*(.+?)\\*/g,'<em>$1</em>');t=t.replace(/^### (.+)$/gm,'<b style="color:var(--accent)">$1</b>');t=t.replace(/^## (.+)$/gm,'<b>$1</b>');t=t.replace(/^# (.+)$/gm,'<b style="font-size:14px">$1</b>');t=t.replace(/^• (.+)$/gm,'<div style="padding-left:10px">• $1</div>');t=t.replace(/\n/g,'<br>');return t}
+function md(s){if(!s)return'';let t=esc(s);t=t.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');t=t.replace(/\\*(.+?)\\*/g,'<em>$1</em>');t=t.replace(/^### (.+)$/gm,'<b style="color:var(--accent)">$1</b>');t=t.replace(/^## (.+)$/gm,'<b>$1</b>');t=t.replace(/^# (.+)$/gm,'<b style="font-size:14px">$1</b>');t=t.replace(/^• (.+)$/gm,'<div style="padding-left:10px">• $1</div>');t=t.replace(/\\n/g,'<br>');return t}
 function actColor(ev){return ev.type?.includes('error')?'var(--red)':ev.type?.includes('task_result')?'var(--green)':ev.type?.includes('command')?'var(--accent)':'var(--blue)'}
 
 // ─── API ───
@@ -430,7 +430,7 @@ function renderProjects(){
   for(const p of list){const hasCode=S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
     h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(p.state)+'">'+esc(p.state)+'</span></td><td>'+(p.taskCount||'—')+'</td><td style="display:flex;gap:4px">';
     h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥</button>';
-    if(hasCode)h+='<button class="btn btn-a btn-s" onclick="window.open(\'/api/preview-app?projectId='+p.id+'\',\'_blank\')">👁️</button>';
+    if(hasCode)h+='<button class="btn btn-a btn-s" onclick="window.open(\\'/api/preview-app?projectId='+p.id+'\\',\\'_blank\\')">👁️</button>';
     if(hasCode)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android">📱</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop">🖥️</button>';
     h+='</td></tr>';}
   h+='</tbody></table>';$('projList').innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No projects</div>';
@@ -473,7 +473,7 @@ function renderIntegrations(){
   $('intList').innerHTML=ints.map(i=>'<div class="card" style="margin-bottom:0"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px">'+i.i+'</span><div><b style="font-size:13px">'+esc(i.n)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(i.d)+'</div></div><span class="badge badge-g" style="margin-left:auto">'+i.s+'</span></div></div>').join('');
 }
 function renderApprovals(){
-  let h='';for(const a of S.approvals)h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(a.action||a.id)+'</b><div style="font-size:10px;color:var(--text2)">Risk: '+esc(a.risk||'unknown')+'</div></div><div style="display:flex;gap:4px"><button class="btn btn-g btn-s" onclick="decideAppr(\''+a.id+'\',true)">✅</button><button class="btn btn-r btn-s" onclick="decideAppr(\''+a.id+'\',false)">❌</button></div></div>';
+  let h='';for(const a of S.approvals)h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(a.action||a.id)+'</b><div style="font-size:10px;color:var(--text2)">Risk: '+esc(a.risk||'unknown')+'</div></div><div style="display:flex;gap:4px"><button class="btn btn-g btn-s" onclick="decideAppr(\\''+a.id+'\\',true)">✅</button><button class="btn btn-r btn-s" onclick="decideAppr(\\''+a.id+'\\',false)">❌</button></div></div>';
   $('apprList').innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No pending approvals</div>';
 }
 async function decideAppr(id,ok){try{await api('/api/approvals/'+id,{method:'POST',body:JSON.stringify({approved:ok})});toast(ok?'Approved':'Rejected','ok');loadState()}catch(e){toast(e.message,'err')}}
