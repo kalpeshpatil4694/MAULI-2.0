@@ -78,6 +78,32 @@ export default {
       }
     }
 
+    // Approval processing: after index.js processes the approval and queues tasks,
+    // trigger the scheduler so tasks start executing immediately instead of waiting
+    // for the next cron tick (up to 1 minute delay).
+    if (request.method === 'POST' && url.pathname.startsWith('/api/approvals/')) {
+      const response = await app.fetch(request, env, ctx);
+      if (response.ok && ctx?.waitUntil) {
+        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId: url.pathname.split('/').pop() }).catch(error => {
+          store.addEvent('approval.scheduler_error', { approvalId: url.pathname.split('/').pop(), error: error?.message || 'Scheduler error after approval', at: now() });
+        }));
+      }
+      return response;
+    }
+
+    // Chat endpoint: after a chat message creates a project, trigger the scheduler
+    // so tasks start executing immediately instead of waiting for the next cron tick.
+    if (request.method === 'POST' && url.pathname === '/api/chat') {
+      const response = await app.fetch(request, env, ctx);
+      if (response.ok && ctx?.waitUntil) {
+        // Trigger scheduler in background - it picks up any newly queued projects/tasks
+        ctx.waitUntil(schedulerTick(env, { trigger: 'chat-message' }).catch(error => {
+          store.addEvent('chat.scheduler_error', { error: error?.message || 'Scheduler error after chat', at: now() });
+        }));
+      }
+      return response;
+    }
+
     const response = await app.fetch(request, env, ctx);
     // The existing dashboard remains authoritative for data/rendering; this only adds a
     // small live lifecycle layer so Founder Command never looks idle after a successful queue.

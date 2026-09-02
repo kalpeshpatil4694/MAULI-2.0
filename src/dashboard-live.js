@@ -24,7 +24,9 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       '</div>'+
       (p.state==='completed'?'<div style="margin-top:8px;color:var(--green);font-weight:600">✅ Final delivery completed</div>':'')+
       (p.state==='failed'?'<div style="margin-top:8px;color:var(--red);font-weight:600">❌ Execution failed — recovery required</div>':'')+
+      '<button class="proj-detail-btn" style="margin-top:8px;background:var(--accent);color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600" onclick="window.__showProjDetail&&window.__showProjDetail(\''+esc(p.id)+'\')">📄 View Full Project Details</button>'+
       '</div>');
+    window.__showProjDetail=showProjectDetail;
   }
   async function poll(){
     if(state.polling)return;state.polling=true;
@@ -51,6 +53,48 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       if(Array.isArray(d.tasks)){set('sTask',d.tasks.length);set('navT',d.tasks.filter(t=>t.state==='working').length||d.tasks.length);}
     }catch(_){ }
     finally{state.polling=false;}
+  }
+  // Project detail view
+  async function showProjectDetail(pid){
+    if(!pid)return;
+    try{
+      const r=await fetch('/api/projects/'+encodeURIComponent(pid)+'/detail');
+      const d=await r.json();
+      const det=d.detail||d.data?.detail;
+      if(!det)return alert('Project not found');
+      const p=det.project;const s=det.summary;
+      let txt='PROJECT DETAILS — '+(p.name||p.objective||p.id)+'\n\n';
+      txt+='ID: '+p.id+'\n';
+      txt+='Name: '+(p.name||'N/A')+'\n';
+      txt+='Objective: '+(p.objective||'N/A')+'\n';
+      txt+='State: '+p.state+'\n';
+      txt+='Created: '+(p.createdAt||'N/A')+'\n';
+      if(p.completedAt)txt+='Completed: '+p.completedAt+'\n';
+      if(p.failedAt)txt+='Failed: '+p.failedAt+'\n';
+      txt+='Duration: '+(s.totalTimeFormatted||'In progress')+'\n\n';
+      txt+='PROGRESS: '+s.completedTasks+'/'+s.totalTasks+' tasks ('+s.progressPct+'%)\n';
+      txt+='Completed: '+s.completedTasks+' | Running: '+s.runningTasks+' | Failed: '+s.failedTasks+' | Pending: '+s.pendingTasks+'\n\n';
+      if(s.errors&&s.errors.length>0){txt+='ERRORS:\n';for(const e of s.errors)txt+='  - '+e.task+': '+e.error+'\n';txt+='\n';}
+      if(s.fixes&&s.fixes.length>0){txt+='RETRIES:\n';for(const f of s.fixes)txt+='  - '+f.task+': '+f.attempts+' attempts\n';txt+='\n';}
+      txt+='TASKS:\n';
+      for(const t of det.tasks){const icon=t.state==='completed'?'[OK]':t.state==='working'?'[..]':t.state==='assigned'?'[>>]':t.state==='failed'?'[!!]':'[--]';txt+='  '+icon+' '+esc(t.title||t.id)+' ['+t.state+']';if(t.agentName)txt+=' — agent: '+t.agentName;if(t.error)txt+=' ERROR: '+t.error;txt+='\n';}
+      // Show as modal overlay
+      const overlay=document.createElement('div');overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+      const modal=document.createElement('div');modal.style.cssText='background:var(--bg2);border:1px solid var(--border);border-radius:12px;max-width:700px;width:100%;max-height:80vh;overflow:auto;padding:20px;font-family:monospace;font-size:12px;color:var(--text);white-space:pre-wrap';
+      modal.textContent=txt;
+      const closeBtn=document.createElement('button');closeBtn.textContent='Close';closeBtn.style.cssText='position:sticky;top:0;float:right;background:var(--accent);color:#000;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:600';
+      closeBtn.onclick=()=>overlay.remove();
+      overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove()};
+      modal.prepend(closeBtn);
+      overlay.appendChild(modal);document.body.appendChild(overlay);
+    }catch(e){alert('Error loading project: '+e.message)}
+  }
+  // Add view details button to live progress
+  function addDetailButton(pid){
+    const e=get('cmdRes');if(!e)return;
+    let btn=e.querySelector('.proj-detail-btn');
+    if(!btn){btn=document.createElement('button');btn.className='proj-detail-btn';btn.style.cssText='margin-top:8px;background:var(--accent);color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600';btn.textContent='📄 View Full Project Details';e.appendChild(btn);}
+    btn.onclick=()=>showProjectDetail(pid);
   }
   window.setTimeout(poll,500);
   window.setInterval(poll,3000);

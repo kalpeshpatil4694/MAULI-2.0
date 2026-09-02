@@ -287,7 +287,7 @@ function analyzeIntent(text, context) {
   }
 
   // Build status requests
-  if (/\b(build.?status|project.?status|what.?happening|progress|progress.?report|how.?going|kay.?chal|update.?build|latest.?update|build.?progress|working.?on)\b/i.test(lower)) {
+  if (/\b(build.?status|project.?status|what.?happening|progress|progress.?report|how.?going|kay.?chal|update.?build|latest.?update|build.?progress|working.?on|live.?status|🔄)\b/i.test(lower)) {
     return { type: 'build_status', action: 'query' };
   }
 
@@ -762,7 +762,7 @@ function handleBuildStatus(text, intent) {
   
   return {
     text: responseText,
-    quickReplies: ['Build another', 'Show projects', 'Help']
+    quickReplies: ['🔄 Live Status', 'Build another', 'Show projects', 'Help']
   };
 }
 
@@ -1003,6 +1003,7 @@ async function handleCommand(text, intent, env) {
     // Status-specific messages
     if (status === 'awaiting_approval') {
       responseText += `\n⏳ **Waiting for approval** — This project requires your approval before execution starts.`;
+      responseText += `\n👉 **Go to Dashboard → Approvals tab → Click ✅ to approve and start building!**`;
     } else if (status === 'queued') {
       responseText += `\n📤 **Queued** — Project is queued for execution. The scheduler will pick it up shortly.`;
     } else if (status === 'completed') {
@@ -1012,10 +1013,11 @@ async function handleCommand(text, intent, env) {
     }
 
     responseText += `\n\n💡 Say **"build status"** to check latest progress!`;
+    responseText += `\n\n🔘 **Live Progress:** Click below to see real-time build status →`;
     return {
       text: responseText,
       actions: [{ type: 'project_created', projectId: project?.id, taskCount: tasks.length }],
-      quickReplies: ['Build status', 'Build another', 'Show my projects']
+      quickReplies: ['🔄 Live Status', 'Build status', 'Build another']
     };
   } catch (error) {
     return {
