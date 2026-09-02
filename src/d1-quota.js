@@ -25,7 +25,7 @@ export function d1QuotaSnapshot(env) {
 
 export function canWriteD1(env, critical = false) {
   const s = state(env);
-  if (s.writes >= DAILY_ROW_WRITE_LIMIT) return critical && s.writes < DAILY_ROW_WRITE_LIMIT + 1000;
+  if (s.writes >= DAILY_ROW_WRITE_LIMIT) return false;
   if (!critical && s.writes >= SAFETY_LIMIT) return false;
   return true;
 }
