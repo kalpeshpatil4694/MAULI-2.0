@@ -1,0 +1,1234 @@
+{
+  "runId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+  "command": "मला एक e-commerce platform तयार करून द्या.",
+  "generatedAt": "2026-09-02T18:55:34.425Z",
+  "result": {
+    "status": "completed",
+    "runId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+    "command": "मला एक e-commerce platform तयार करून द्या.",
+    "project": {
+      "id": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+      "name": "Project: Design an e-commerce platform",
+      "objective": "Design an e-commerce platform",
+      "founderCommand": "मला एक e-commerce platform तयार करून द्या.",
+      "requirements": [
+        "User registration and login functionality",
+        "Product catalog with search and filtering",
+        "Secure payment gateway integration",
+        "Order management system",
+        "Admin dashboard for product and order management"
+      ],
+      "priority": "normal",
+      "state": "completed",
+      "milestones": [],
+      "createdAt": "2026-08-25T13:11:01.977Z",
+      "updatedAt": "2026-09-02T18:55:34.425Z",
+      "progress": {
+        "percent": 100,
+        "completed": 6,
+        "total": 6,
+        "currentTask": null
+      },
+      "finalDeliveryId": "artifact_ad76ccec-84f7-442c-9f8d-9fde9c9c45bd",
+      "completedAt": "2026-09-02T18:48:38.186Z"
+    },
+    "tasks": [
+      {
+        "id": "task_7989de8e-2763-420a-863f-1db283bbc6e7",
+        "projectId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+        "title": "Perform security review: Order management system",
+        "description": "Design an e-commerce platform",
+        "requiredCapabilities": [
+          "security",
+          "audit"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_d02a792c-4a4b-4aff-bea3-b2a4ed5f038c"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 60,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-25T13:11:55.995Z",
+        "createdAt": "2026-08-25T13:11:01.977Z",
+        "startedAt": "2026-08-25T13:11:46.513Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_e03b4815-7716-456e-a3ad-3f4299f9acce",
+          "summary": "Security review of order management system for e-commerce platform",
+          "files": [
+            {
+              "path": "security_review.md",
+              "content": "# Security Review\n## Introduction\nThe order management system is a critical component of the e-commerce platform, responsible for processing and managing customer orders.\n## Security Requirements\n* Authentication and authorization for users and administrators\n* Data encryption for sensitive information\n* Access controls for orders and customer data\n* Regular security audits and vulnerability assessments\n* Incident response plan in place\n## Security Risks\n* Unauthorized access to orders and customer data\n* Data breaches due to lack of encryption\n* Insufficient access controls\n* Vulnerabilities in software and hardware components\n## Recommendations\n* Implement multi-factor authentication for users and administrators\n* Use end-to-end encryption for sensitive information\n* Conduct regular security audits and vulnerability assessments\n* Develop and implement an incident response plan"
+            },
+            {
+              "path": "audit_log.py",
+              "content": "import logging\n# Create a logger\nlogger = logging.getLogger('order_management_system')\n# Set the logging level\nlogger.setLevel(logging.INFO)\n# Create a file handler\nhandler = logging.FileHandler('audit_log.log')\n# Create a formatter and set the formatter for the handler\nformatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')\nhandler.setFormatter(formatter)\n# Add the handler to the logger\nlogger.addHandler(handler)\n# Log events\ndef log_event(event_type, event_data):\n    logger.info(f'{event_type}: {event_data}')"
+            }
+          ],
+          "tests": [
+            "Test authentication and authorization",
+            "Test data encryption",
+            "Test access controls",
+            "Test security audits and vulnerability assessments",
+            "Test incident response plan"
+          ],
+          "notes": [
+            "The security review should be performed regularly to ensure the order management system remains secure",
+            "The audit log should be monitored regularly to detect and respond to security incidents"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "qualityGate": {
+            "passed": true,
+            "gate": "L1.2-requirement-aware-generated-project-quality",
+            "status": "PASS",
+            "delivery": {
+              "requestedType": "deferred",
+              "passed": true,
+              "checks": [
+                {
+                  "name": "delivery_contract",
+                  "passed": true,
+                  "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                }
+              ]
+            },
+            "stages": {
+              "automatedBuildTest": true,
+              "requirementVerification": true,
+              "securityCheck": true,
+              "artifactIntegrity": true,
+              "integrationCheck": true,
+              "deliveryContract": true
+            },
+            "checks": [
+              {
+                "name": "files_present",
+                "passed": true
+              },
+              {
+                "name": "unique_paths",
+                "passed": true
+              },
+              {
+                "name": "safe_paths",
+                "passed": true
+              },
+              {
+                "name": "non_empty_files",
+                "passed": true
+              },
+              {
+                "name": "valid_file_records",
+                "passed": true
+              },
+              {
+                "name": "python_basic_syntax:audit_log.py",
+                "passed": true
+              },
+              {
+                "name": "no_obvious_hardcoded_secrets",
+                "passed": true
+              },
+              {
+                "name": "no_dynamic_eval",
+                "passed": true
+              },
+              {
+                "name": "no_dangerous_html_sink",
+                "passed": true
+              },
+              {
+                "name": "no_embedded_private_key",
+                "passed": true
+              },
+              {
+                "name": "delivery_contract",
+                "passed": true,
+                "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+              },
+              {
+                "name": "artifact_file_count",
+                "passed": true
+              },
+              {
+                "name": "artifact_paths_unique",
+                "passed": true
+              },
+              {
+                "name": "artifact_content_utf8",
+                "passed": true
+              }
+            ],
+            "requirementsDetected": "deferred",
+            "artifactManifest": [
+              {
+                "path": "security_review.md",
+                "bytes": 891,
+                "sha256": "2c536c612c536c612c536c612c536c612c536c612c536c612c536c612c536c61"
+              },
+              {
+                "path": "audit_log.py",
+                "bytes": 546,
+                "sha256": "7b26da157b26da157b26da157b26da157b26da157b26da157b26da157b26da15"
+              }
+            ],
+            "checkedAt": "2026-08-25T13:11:55.995Z"
+          }
+        },
+        "verificationId": "verification_ebadc912-94e3-4e6f-9403-325205da7581",
+        "completedAt": "2026-08-25T13:11:55.995Z"
+      },
+      {
+        "id": "task_8a71f12f-9d8e-4625-95b4-aad1b136466b",
+        "projectId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+        "title": "Create testing and verification plan: Admin dashboard for product and order management",
+        "description": "Design an e-commerce platform",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_7989de8e-2763-420a-863f-1db283bbc6e7"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [
+          "test.run"
+        ],
+        "requiredTools": [],
+        "sequence": 70,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-25T13:11:55.995Z",
+        "createdAt": "2026-08-25T13:11:01.977Z",
+        "startedAt": "2026-08-25T13:11:55.995Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_8a71f12f-9d8e-4625-95b4-aad1b136466b",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-25T13:11:55.995Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_e2806b69-5349-4a89-8198-7c09807c1b63",
+        "completedAt": "2026-08-25T13:11:55.995Z"
+      },
+      {
+        "id": "task_d4fa9512-0216-49f2-8d89-e2d93d00cc92",
+        "projectId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+        "title": "Final project verification and QA",
+        "description": "Verify completed project project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "low",
+        "dependsOn": [
+          "task_8a71f12f-9d8e-4625-95b4-aad1b136466b"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 1,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 999,
+        "finalProjectVerification": true,
+        "updatedAt": "2026-08-25T13:11:55.995Z",
+        "createdAt": "2026-08-25T13:11:55.995Z",
+        "assignedAt": "2026-08-25T13:11:55.995Z",
+        "startedAt": "2026-08-25T13:11:55.995Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_d4fa9512-0216-49f2-8d89-e2d93d00cc92",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-25T13:11:55.995Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_c42b576e-4acb-46d2-a4a9-461cddb9cdc6",
+        "completedAt": "2026-08-25T13:11:55.995Z"
+      },
+      {
+        "id": "task_d02a792c-4a4b-4aff-bea3-b2a4ed5f038c",
+        "projectId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+        "title": "Implement frontend code and user experience: Secure payment gateway integration",
+        "description": "Design an e-commerce platform",
+        "requiredCapabilities": [
+          "frontend",
+          "ui"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_281b7252-5687-4c8e-aeaa-17d9eac43354"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 50,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-25T13:11:46.513Z",
+        "createdAt": "2026-08-25T13:11:01.977Z",
+        "startedAt": "2026-08-25T13:11:35.973Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_7b71ae9f-fcbf-4eb0-9964-5604d98f945b",
+          "summary": "Secure payment gateway integration for e-commerce platform",
+          "files": [
+            {
+              "path": "index.html",
+              "content": "<!DOCTYPE html><html><head><title>Payment Gateway</title></head><body><h1>Secure Payment Gateway</h1><form id='payment-form'><label for='card-number'>Card Number:</label><input type='text' id='card-number' name='card-number'><br><br><label for='expiration-date'>Expiration Date:</label><input type='text' id='expiration-date' name='expiration-date'><br><br><label for='cvv'>CVV:</label><input type='text' id='cvv' name='cvv'><br><br><button id='pay-button'>Pay</button></form><script src='script.js'></script></body></html>"
+            },
+            {
+              "path": "script.js",
+              "content": "const form = document.getElementById('payment-form');form.addEventListener('submit', (e) => {e.preventDefault();const cardNumber = document.getElementById('card-number').value;const expirationDate = document.getElementById('expiration-date').value;const cvv = document.getElementById('cvv').value;// Send payment information to server for processingfetch('/pay', {method: 'POST',headers: { 'Content-Type': 'application/json' },body: JSON.stringify({ cardNumber, expirationDate, cvv })}).then((response) => response.json()).then((data) => console.log(data)).catch((error) => console.error(error));});"
+            },
+            {
+              "path": "styles.css",
+              "content": "body {font-family: Arial, sans-serif;}#payment-form {width: 50%;margin: 40px auto;padding: 20px;border: 1px solid #ccc;border-radius: 10px;box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);}"
+            }
+          ],
+          "tests": [
+            "Test payment form submission with valid payment information",
+            "Test payment form submission with invalid payment information",
+            "Test payment form submission with missing payment information"
+          ],
+          "notes": [
+            "Implement server-side payment processing logic to handle payment information sent from the client-side",
+            "Use a secure payment gateway API to process payments",
+            "Validate user input on the client-side and server-side to prevent errors and security vulnerabilities"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "qualityGate": {
+            "passed": true,
+            "gate": "L1.2-requirement-aware-generated-project-quality",
+            "status": "PASS",
+            "delivery": {
+              "requestedType": "deferred",
+              "passed": true,
+              "checks": [
+                {
+                  "name": "delivery_contract",
+                  "passed": true,
+                  "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                }
+              ]
+            },
+            "stages": {
+              "automatedBuildTest": true,
+              "requirementVerification": true,
+              "securityCheck": true,
+              "artifactIntegrity": true,
+              "integrationCheck": true,
+              "deliveryContract": true
+            },
+            "checks": [
+              {
+                "name": "files_present",
+                "passed": true
+              },
+              {
+                "name": "unique_paths",
+                "passed": true
+              },
+              {
+                "name": "safe_paths",
+                "passed": true
+              },
+              {
+                "name": "non_empty_files",
+                "passed": true
+              },
+              {
+                "name": "valid_file_records",
+                "passed": true
+              },
+              {
+                "name": "html_has_document_structure",
+                "passed": true
+              },
+              {
+                "name": "html_balanced_script_tags",
+                "passed": true
+              },
+              {
+                "name": "js_basic_syntax:script.js",
+                "passed": true
+              },
+              {
+                "name": "script_reference:script.js",
+                "passed": true
+              },
+              {
+                "name": "no_obvious_hardcoded_secrets",
+                "passed": true
+              },
+              {
+                "name": "no_dynamic_eval",
+                "passed": true
+              },
+              {
+                "name": "no_dangerous_html_sink",
+                "passed": true
+              },
+              {
+                "name": "no_embedded_private_key",
+                "passed": true
+              },
+              {
+                "name": "delivery_contract",
+                "passed": true,
+                "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+              },
+              {
+                "name": "artifact_file_count",
+                "passed": true
+              },
+              {
+                "name": "artifact_paths_unique",
+                "passed": true
+              },
+              {
+                "name": "artifact_content_utf8",
+                "passed": true
+              }
+            ],
+            "requirementsDetected": "deferred",
+            "artifactManifest": [
+              {
+                "path": "index.html",
+                "bytes": 523,
+                "sha256": "9632135a9632135a9632135a9632135a9632135a9632135a9632135a9632135a"
+              },
+              {
+                "path": "script.js",
+                "bytes": 599,
+                "sha256": "a04f8fc0a04f8fc0a04f8fc0a04f8fc0a04f8fc0a04f8fc0a04f8fc0a04f8fc0"
+              },
+              {
+                "path": "styles.css",
+                "bytes": 180,
+                "sha256": "272402ad272402ad272402ad272402ad272402ad272402ad272402ad272402ad"
+              }
+            ],
+            "checkedAt": "2026-08-25T13:11:46.513Z"
+          }
+        },
+        "verificationId": "verification_42bb9e93-d1ba-46db-ba39-06394edf07ab",
+        "completedAt": "2026-08-25T13:11:46.513Z"
+      },
+      {
+        "id": "task_281b7252-5687-4c8e-aeaa-17d9eac43354",
+        "projectId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+        "title": "Implement database and persistence schema: Product catalog with search and filtering",
+        "description": "Design an e-commerce platform",
+        "requiredCapabilities": [
+          "database",
+          "schema",
+          "sql"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_6eff0006-bfad-4b09-bb4e-f78bdcd8da4f"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 40,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-25T13:11:35.973Z",
+        "createdAt": "2026-08-25T13:11:01.977Z",
+        "startedAt": "2026-08-25T13:11:24.362Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_851f55bd-d10e-49e3-8f9b-a10fa98f661b",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: Product catalog with search and filtering\nObjective: Design an e-commerce platform\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime did not return a valid file artifact."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "qualityGate": {
+            "passed": true,
+            "gate": "L1.2-requirement-aware-generated-project-quality",
+            "status": "PASS",
+            "delivery": {
+              "requestedType": "deferred",
+              "passed": true,
+              "checks": [
+                {
+                  "name": "delivery_contract",
+                  "passed": true,
+                  "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                }
+              ]
+            },
+            "stages": {
+              "automatedBuildTest": true,
+              "requirementVerification": true,
+              "securityCheck": true,
+              "artifactIntegrity": true,
+              "integrationCheck": true,
+              "deliveryContract": true
+            },
+            "checks": [
+              {
+                "name": "files_present",
+                "passed": true
+              },
+              {
+                "name": "unique_paths",
+                "passed": true
+              },
+              {
+                "name": "safe_paths",
+                "passed": true
+              },
+              {
+                "name": "non_empty_files",
+                "passed": true
+              },
+              {
+                "name": "valid_file_records",
+                "passed": true
+              },
+              {
+                "name": "no_obvious_hardcoded_secrets",
+                "passed": true
+              },
+              {
+                "name": "no_dynamic_eval",
+                "passed": true
+              },
+              {
+                "name": "no_dangerous_html_sink",
+                "passed": true
+              },
+              {
+                "name": "no_embedded_private_key",
+                "passed": true
+              },
+              {
+                "name": "delivery_contract",
+                "passed": true,
+                "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+              },
+              {
+                "name": "artifact_file_count",
+                "passed": true
+              },
+              {
+                "name": "artifact_paths_unique",
+                "passed": true
+              },
+              {
+                "name": "artifact_content_utf8",
+                "passed": true
+              }
+            ],
+            "requirementsDetected": "deferred",
+            "artifactManifest": [
+              {
+                "path": "generated/README.md",
+                "bytes": 188,
+                "sha256": "70e8140e70e8140e70e8140e70e8140e70e8140e70e8140e70e8140e70e8140e"
+              }
+            ],
+            "checkedAt": "2026-08-25T13:11:35.973Z"
+          }
+        },
+        "verificationId": "verification_74a94fbe-4ed6-4e19-8b82-6c0cabe2bab4",
+        "completedAt": "2026-08-25T13:11:35.973Z"
+      },
+      {
+        "id": "task_6eff0006-bfad-4b09-bb4e-f78bdcd8da4f",
+        "projectId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+        "title": "Implement backend code and API: User registration and login functionality",
+        "description": "Design an e-commerce platform",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "artifactSpec": null,
+        "updatedAt": "2026-08-25T13:11:24.362Z",
+        "createdAt": "2026-08-25T13:11:01.977Z",
+        "assignedAt": "2026-08-25T13:11:01.977Z",
+        "startedAt": "2026-08-25T13:11:01.977Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_18d95e07-3965-4a94-8c3b-7bc8b4a07ba1",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: User registration and login functionality\nObjective: Design an e-commerce platform\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime did not return a valid file artifact."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ],
+          "qualityGate": {
+            "passed": true,
+            "gate": "L1.2-requirement-aware-generated-project-quality",
+            "status": "PASS",
+            "delivery": {
+              "requestedType": "deferred",
+              "passed": true,
+              "checks": [
+                {
+                  "name": "delivery_contract",
+                  "passed": true,
+                  "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                }
+              ]
+            },
+            "stages": {
+              "automatedBuildTest": true,
+              "requirementVerification": true,
+              "securityCheck": true,
+              "artifactIntegrity": true,
+              "integrationCheck": true,
+              "deliveryContract": true
+            },
+            "checks": [
+              {
+                "name": "files_present",
+                "passed": true
+              },
+              {
+                "name": "unique_paths",
+                "passed": true
+              },
+              {
+                "name": "safe_paths",
+                "passed": true
+              },
+              {
+                "name": "non_empty_files",
+                "passed": true
+              },
+              {
+                "name": "valid_file_records",
+                "passed": true
+              },
+              {
+                "name": "no_obvious_hardcoded_secrets",
+                "passed": true
+              },
+              {
+                "name": "no_dynamic_eval",
+                "passed": true
+              },
+              {
+                "name": "no_dangerous_html_sink",
+                "passed": true
+              },
+              {
+                "name": "no_embedded_private_key",
+                "passed": true
+              },
+              {
+                "name": "delivery_contract",
+                "passed": true,
+                "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+              },
+              {
+                "name": "artifact_file_count",
+                "passed": true
+              },
+              {
+                "name": "artifact_paths_unique",
+                "passed": true
+              },
+              {
+                "name": "artifact_content_utf8",
+                "passed": true
+              }
+            ],
+            "requirementsDetected": "deferred",
+            "artifactManifest": [
+              {
+                "path": "generated/README.md",
+                "bytes": 177,
+                "sha256": "940e7f3c940e7f3c940e7f3c940e7f3c940e7f3c940e7f3c940e7f3c940e7f3c"
+              }
+            ],
+            "checkedAt": "2026-08-25T13:11:24.362Z"
+          }
+        },
+        "verificationId": "verification_9b6393c4-602e-4342-b591-8343bc155fe2",
+        "completedAt": "2026-08-25T13:11:24.362Z"
+      }
+    ],
+    "finalDelivery": {
+      "id": "artifact_ad76ccec-84f7-442c-9f8d-9fde9c9c45bd",
+      "projectId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+      "taskId": null,
+      "agentId": null,
+      "type": "final-delivery",
+      "content": {
+        "projectId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+        "project": {
+          "id": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+          "name": "Project: Design an e-commerce platform",
+          "objective": "Design an e-commerce platform",
+          "state": "completed"
+        },
+        "summary": {
+          "totalTasks": 6,
+          "completedTasks": 6,
+          "failedTasks": 0,
+          "artifactCount": 5,
+          "deliveredAt": "2026-09-02T18:48:38.186Z"
+        },
+        "tasks": [
+          {
+            "id": "task_7989de8e-2763-420a-863f-1db283bbc6e7",
+            "title": "Perform security review: Order management system",
+            "state": "completed",
+            "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+            "verificationId": "verification_ebadc912-94e3-4e6f-9403-325205da7581"
+          },
+          {
+            "id": "task_8a71f12f-9d8e-4625-95b4-aad1b136466b",
+            "title": "Create testing and verification plan: Admin dashboard for product and order management",
+            "state": "completed",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_e2806b69-5349-4a89-8198-7c09807c1b63"
+          },
+          {
+            "id": "task_d4fa9512-0216-49f2-8d89-e2d93d00cc92",
+            "title": "Final project verification and QA",
+            "state": "completed",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_c42b576e-4acb-46d2-a4a9-461cddb9cdc6"
+          },
+          {
+            "id": "task_d02a792c-4a4b-4aff-bea3-b2a4ed5f038c",
+            "title": "Implement frontend code and user experience: Secure payment gateway integration",
+            "state": "completed",
+            "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+            "verificationId": "verification_42bb9e93-d1ba-46db-ba39-06394edf07ab"
+          },
+          {
+            "id": "task_281b7252-5687-4c8e-aeaa-17d9eac43354",
+            "title": "Implement database and persistence schema: Product catalog with search and filtering",
+            "state": "completed",
+            "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+            "verificationId": "verification_74a94fbe-4ed6-4e19-8b82-6c0cabe2bab4"
+          },
+          {
+            "id": "task_6eff0006-bfad-4b09-bb4e-f78bdcd8da4f",
+            "title": "Implement backend code and API: User registration and login functionality",
+            "state": "completed",
+            "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+            "verificationId": "verification_9b6393c4-602e-4342-b591-8343bc155fe2"
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "artifact_e03b4815-7716-456e-a3ad-3f4299f9acce",
+            "type": "code-workspace",
+            "taskId": "task_7989de8e-2763-420a-863f-1db283bbc6e7",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          },
+          {
+            "id": "artifact_aeea35fc-c910-42cc-910f-6d54ad6a303b",
+            "type": "final-delivery",
+            "taskId": null,
+            "metadata": {
+              "state": "completed",
+              "generatedBy": "mauli-l1.1-delivery",
+              "qualityGateStatus": "PASS",
+              "requestedDeliveryType": "general-project",
+              "deliveryContractPassed": true,
+              "downloadPath": "/api/artifacts/artifact_aeea35fc-c910-42cc-910f-6d54ad6a303b/download"
+            }
+          },
+          {
+            "id": "artifact_7b71ae9f-fcbf-4eb0-9964-5604d98f945b",
+            "type": "code-workspace",
+            "taskId": "task_d02a792c-4a4b-4aff-bea3-b2a4ed5f038c",
+            "metadata": {
+              "generatedBy": "internal.code",
+              "qualityGate": {
+                "passed": true,
+                "gate": "L1.2-requirement-aware-generated-project-quality",
+                "status": "PASS",
+                "delivery": {
+                  "requestedType": "deferred",
+                  "passed": true,
+                  "checks": [
+                    {
+                      "name": "delivery_contract",
+                      "passed": true,
+                      "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                    }
+                  ]
+                },
+                "stages": {
+                  "automatedBuildTest": true,
+                  "requirementVerification": true,
+                  "securityCheck": true,
+                  "artifactIntegrity": true,
+                  "integrationCheck": true,
+                  "deliveryContract": true
+                },
+                "checks": [
+                  {
+                    "name": "files_present",
+                    "passed": true
+                  },
+                  {
+                    "name": "unique_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "safe_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "non_empty_files",
+                    "passed": true
+                  },
+                  {
+                    "name": "valid_file_records",
+                    "passed": true
+                  },
+                  {
+                    "name": "html_has_document_structure",
+                    "passed": true
+                  },
+                  {
+                    "name": "html_balanced_script_tags",
+                    "passed": true
+                  },
+                  {
+                    "name": "js_basic_syntax:script.js",
+                    "passed": true
+                  },
+                  {
+                    "name": "script_reference:script.js",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_obvious_hardcoded_secrets",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dynamic_eval",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dangerous_html_sink",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_embedded_private_key",
+                    "passed": true
+                  },
+                  {
+                    "name": "delivery_contract",
+                    "passed": true,
+                    "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                  },
+                  {
+                    "name": "artifact_file_count",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_paths_unique",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_content_utf8",
+                    "passed": true
+                  }
+                ],
+                "requirementsDetected": "deferred",
+                "artifactManifest": [
+                  {
+                    "path": "index.html",
+                    "bytes": 523,
+                    "sha256": "9632135a9632135a9632135a9632135a9632135a9632135a9632135a9632135a"
+                  },
+                  {
+                    "path": "script.js",
+                    "bytes": 599,
+                    "sha256": "a04f8fc0a04f8fc0a04f8fc0a04f8fc0a04f8fc0a04f8fc0a04f8fc0a04f8fc0"
+                  },
+                  {
+                    "path": "styles.css",
+                    "bytes": 180,
+                    "sha256": "272402ad272402ad272402ad272402ad272402ad272402ad272402ad272402ad"
+                  }
+                ],
+                "checkedAt": "2026-08-25T13:11:46.513Z"
+              },
+              "qualityGateStatus": "PASS",
+              "qualityGateCheckedAt": "2026-08-25T13:11:46.513Z",
+              "deliveryContract": {
+                "requestedType": "deferred",
+                "passed": true,
+                "checks": [
+                  {
+                    "name": "delivery_contract",
+                    "passed": true,
+                    "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "artifact_851f55bd-d10e-49e3-8f9b-a10fa98f661b",
+            "type": "code-workspace",
+            "taskId": "task_281b7252-5687-4c8e-aeaa-17d9eac43354",
+            "metadata": {
+              "generatedBy": "internal.code",
+              "qualityGate": {
+                "passed": true,
+                "gate": "L1.2-requirement-aware-generated-project-quality",
+                "status": "PASS",
+                "delivery": {
+                  "requestedType": "deferred",
+                  "passed": true,
+                  "checks": [
+                    {
+                      "name": "delivery_contract",
+                      "passed": true,
+                      "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                    }
+                  ]
+                },
+                "stages": {
+                  "automatedBuildTest": true,
+                  "requirementVerification": true,
+                  "securityCheck": true,
+                  "artifactIntegrity": true,
+                  "integrationCheck": true,
+                  "deliveryContract": true
+                },
+                "checks": [
+                  {
+                    "name": "files_present",
+                    "passed": true
+                  },
+                  {
+                    "name": "unique_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "safe_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "non_empty_files",
+                    "passed": true
+                  },
+                  {
+                    "name": "valid_file_records",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_obvious_hardcoded_secrets",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dynamic_eval",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dangerous_html_sink",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_embedded_private_key",
+                    "passed": true
+                  },
+                  {
+                    "name": "delivery_contract",
+                    "passed": true,
+                    "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                  },
+                  {
+                    "name": "artifact_file_count",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_paths_unique",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_content_utf8",
+                    "passed": true
+                  }
+                ],
+                "requirementsDetected": "deferred",
+                "artifactManifest": [
+                  {
+                    "path": "generated/README.md",
+                    "bytes": 188,
+                    "sha256": "70e8140e70e8140e70e8140e70e8140e70e8140e70e8140e70e8140e70e8140e"
+                  }
+                ],
+                "checkedAt": "2026-08-25T13:11:35.973Z"
+              },
+              "qualityGateStatus": "PASS",
+              "qualityGateCheckedAt": "2026-08-25T13:11:35.973Z",
+              "deliveryContract": {
+                "requestedType": "deferred",
+                "passed": true,
+                "checks": [
+                  {
+                    "name": "delivery_contract",
+                    "passed": true,
+                    "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "artifact_18d95e07-3965-4a94-8c3b-7bc8b4a07ba1",
+            "type": "code-workspace",
+            "taskId": "task_6eff0006-bfad-4b09-bb4e-f78bdcd8da4f",
+            "metadata": {
+              "generatedBy": "internal.code",
+              "qualityGate": {
+                "passed": true,
+                "gate": "L1.2-requirement-aware-generated-project-quality",
+                "status": "PASS",
+                "delivery": {
+                  "requestedType": "deferred",
+                  "passed": true,
+                  "checks": [
+                    {
+                      "name": "delivery_contract",
+                      "passed": true,
+                      "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                    }
+                  ]
+                },
+                "stages": {
+                  "automatedBuildTest": true,
+                  "requirementVerification": true,
+                  "securityCheck": true,
+                  "artifactIntegrity": true,
+                  "integrationCheck": true,
+                  "deliveryContract": true
+                },
+                "checks": [
+                  {
+                    "name": "files_present",
+                    "passed": true
+                  },
+                  {
+                    "name": "unique_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "safe_paths",
+                    "passed": true
+                  },
+                  {
+                    "name": "non_empty_files",
+                    "passed": true
+                  },
+                  {
+                    "name": "valid_file_records",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_obvious_hardcoded_secrets",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dynamic_eval",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_dangerous_html_sink",
+                    "passed": true
+                  },
+                  {
+                    "name": "no_embedded_private_key",
+                    "passed": true
+                  },
+                  {
+                    "name": "delivery_contract",
+                    "passed": true,
+                    "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                  },
+                  {
+                    "name": "artifact_file_count",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_paths_unique",
+                    "passed": true
+                  },
+                  {
+                    "name": "artifact_content_utf8",
+                    "passed": true
+                  }
+                ],
+                "requirementsDetected": "deferred",
+                "artifactManifest": [
+                  {
+                    "path": "generated/README.md",
+                    "bytes": 177,
+                    "sha256": "940e7f3c940e7f3c940e7f3c940e7f3c940e7f3c940e7f3c940e7f3c940e7f3c"
+                  }
+                ],
+                "checkedAt": "2026-08-25T13:11:24.362Z"
+              },
+              "qualityGateStatus": "PASS",
+              "qualityGateCheckedAt": "2026-08-25T13:11:24.362Z",
+              "deliveryContract": {
+                "requestedType": "deferred",
+                "passed": true,
+                "checks": [
+                  {
+                    "name": "delivery_contract",
+                    "passed": true,
+                    "reason": "deferred_until_explicit_application_deliverable_or_final_project_verification"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "artifactId": "artifact_ad76ccec-84f7-442c-9f8d-9fde9c9c45bd",
+        "artifactType": "final-delivery"
+      },
+      "metadata": {
+        "state": "completed",
+        "generatedBy": "mauli-l1-delivery",
+        "gate": "final-qa+security",
+        "downloadPath": "/api/artifacts/artifact_ad76ccec-84f7-442c-9f8d-9fde9c9c45bd/download"
+      },
+      "createdAt": "2026-09-02T18:48:38.186Z",
+      "updatedAt": "2026-09-02T18:48:38.186Z"
+    },
+    "artifact": "artifact_ad76ccec-84f7-442c-9f8d-9fde9c9c45bd",
+    "artifactType": "final-delivery"
+  },
+  "resultRunId": "project_0a278ce1-d7ae-40f7-ba42-d71675c81064",
+  "savedAt": "2026-09-02T18:55:34.649Z"
+}
