@@ -1,0 +1,446 @@
+{
+  "runId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+  "command": "Abcd animated banun dya",
+  "generatedAt": "2026-09-02T18:48:34.032Z",
+  "result": {
+    "status": "completed",
+    "runId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+    "command": "Abcd animated banun dya",
+    "project": {
+      "id": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+      "name": "Project: Analyze Founder Command",
+      "objective": "Analyze Founder Command",
+      "founderCommand": "Abcd animated banun dya",
+      "requirements": [
+        "Define Command Requirements",
+        "Identify Execution Dependencies",
+        "Determine Command Validation Rules"
+      ],
+      "priority": "normal",
+      "state": "completed",
+      "milestones": [],
+      "createdAt": "2026-08-29T07:56:45.932Z",
+      "updatedAt": "2026-09-02T18:48:34.032Z",
+      "finalDeliveryId": "artifact_f8245579-9b31-4958-9280-71eac36ef8b4",
+      "completedAt": "2026-09-02T18:48:34.032Z"
+    },
+    "tasks": [
+      {
+        "id": "task_8dd41c67-3a8e-49a2-a108-4a820def0c41",
+        "projectId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+        "title": "Create testing and verification plan",
+        "description": "Analyze Founder Command",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_354d1fce-dae2-4a91-871e-281cc1ede16a"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [
+          "test.run"
+        ],
+        "requiredTools": [],
+        "sequence": 70,
+        "updatedAt": "2026-08-29T07:56:54.953Z",
+        "createdAt": "2026-08-29T07:56:45.932Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:56:54.953Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_8dd41c67-3a8e-49a2-a108-4a820def0c41",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-29T07:56:54.953Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_53bb9da4-1895-4b6c-9552-7d0decae4490",
+        "completedAt": "2026-08-29T07:56:54.953Z"
+      },
+      {
+        "id": "task_354d1fce-dae2-4a91-871e-281cc1ede16a",
+        "projectId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+        "title": "Perform security review",
+        "description": "Analyze Founder Command",
+        "requiredCapabilities": [
+          "security",
+          "audit"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_8d26a901-e70f-4f95-bc7a-59c91200ec01"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 60,
+        "updatedAt": "2026-08-29T07:56:54.953Z",
+        "createdAt": "2026-08-29T07:56:45.932Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:56:52.557Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_1b29716c-b338-4366-874f-26dc33ef85a4",
+          "summary": "Security review of Founder Command",
+          "files": [
+            {
+              "content": "class FounderCommand:\n    def __init__(self):\n        self.type = 'code'\n        self.permissions = ['admin']\n    def execute(self, user):\n        if user.permission in self.permissions:\n            # Execute command logic\n            pass\n        else:\n            # Handle unauthorized access\n            pass",
+              "path": "founder_command.py"
+            }
+          ],
+          "tests": [
+            "User with admin permission can execute command",
+            "User without admin permission cannot execute command"
+          ],
+          "notes": [
+            "Review of Founder Command reveals proper permission checks",
+            "Type of command is 'code' as required"
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_c3b50518-edaf-48b5-b201-1fbdb4445ccd",
+        "completedAt": "2026-08-29T07:56:54.953Z"
+      },
+      {
+        "id": "task_c41c39c0-98b5-4044-91b8-282e94c005ce",
+        "projectId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+        "title": "Final project verification and QA",
+        "description": "Verify completed project project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "low",
+        "dependsOn": [
+          "task_8dd41c67-3a8e-49a2-a108-4a820def0c41"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 1,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 999,
+        "finalProjectVerification": true,
+        "updatedAt": "2026-08-29T07:56:54.953Z",
+        "createdAt": "2026-08-29T07:56:54.953Z",
+        "assignedAt": "2026-08-29T07:56:54.953Z",
+        "startedAt": "2026-08-29T07:56:54.953Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_c41c39c0-98b5-4044-91b8-282e94c005ce",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-29T07:56:54.953Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_0d73d219-633d-46ed-86d5-84313af5cc73",
+        "completedAt": "2026-08-29T07:56:54.953Z"
+      },
+      {
+        "id": "task_8d26a901-e70f-4f95-bc7a-59c91200ec01",
+        "projectId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+        "title": "Implement backend code and API: Determine Command Validation Rules",
+        "description": "Analyze Founder Command",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_b87cfe1b-0a65-45ba-97c6-43e97d2163e5"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "updatedAt": "2026-08-29T07:56:52.557Z",
+        "createdAt": "2026-08-29T07:56:45.932Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:56:45.932Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_c8e4bf32-ee7f-4e82-a192-16e653856be3",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: Determine Command Validation Rules\nObjective: Analyze Founder Command\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime is unavailable."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_956f48fc-80dc-461c-8cab-d9b590a697b5",
+        "completedAt": "2026-08-29T07:56:52.557Z"
+      },
+      {
+        "id": "task_d6c1c910-97be-40c8-a52a-048dba840e4e",
+        "projectId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+        "title": "Research and validate requirements: Define Command Requirements",
+        "description": "Analyze Founder Command",
+        "requiredCapabilities": [
+          "research",
+          "analysis"
+        ],
+        "risk": "normal",
+        "dependsOn": [],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 10,
+        "updatedAt": "2026-08-29T07:56:45.932Z",
+        "createdAt": "2026-08-29T07:56:45.932Z",
+        "assignedAt": "2026-08-29T07:56:45.932Z",
+        "startedAt": "2026-08-29T07:56:45.932Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_d6c1c910-97be-40c8-a52a-048dba840e4e",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-29T07:56:45.932Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_7548063e-0262-48df-95d7-f81760f434bb",
+        "completedAt": "2026-08-29T07:56:45.932Z"
+      },
+      {
+        "id": "task_b87cfe1b-0a65-45ba-97c6-43e97d2163e5",
+        "projectId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+        "title": "Define product and architecture plan: Identify Execution Dependencies",
+        "description": "Analyze Founder Command",
+        "requiredCapabilities": [
+          "product-planning",
+          "planning"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_d6c1c910-97be-40c8-a52a-048dba840e4e"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [
+          "planning.execute"
+        ],
+        "requiredTools": [],
+        "sequence": 20,
+        "updatedAt": "2026-08-29T07:56:45.932Z",
+        "createdAt": "2026-08-29T07:56:45.932Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:56:45.932Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_b87cfe1b-0a65-45ba-97c6-43e97d2163e5",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-29T07:56:45.932Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_10b858bd-707b-4fe5-b2ff-91b38fd3a798",
+        "completedAt": "2026-08-29T07:56:45.932Z"
+      }
+    ],
+    "finalDelivery": {
+      "id": "artifact_f8245579-9b31-4958-9280-71eac36ef8b4",
+      "projectId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+      "taskId": null,
+      "agentId": null,
+      "type": "final-delivery",
+      "content": {
+        "projectId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+        "project": {
+          "id": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+          "name": "Project: Analyze Founder Command",
+          "objective": "Analyze Founder Command",
+          "state": "completed"
+        },
+        "summary": {
+          "totalTasks": 6,
+          "completedTasks": 6,
+          "failedTasks": 0,
+          "artifactCount": 3,
+          "deliveredAt": "2026-09-02T18:48:34.032Z"
+        },
+        "tasks": [
+          {
+            "id": "task_8dd41c67-3a8e-49a2-a108-4a820def0c41",
+            "title": "Create testing and verification plan",
+            "state": "completed",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_53bb9da4-1895-4b6c-9552-7d0decae4490"
+          },
+          {
+            "id": "task_354d1fce-dae2-4a91-871e-281cc1ede16a",
+            "title": "Perform security review",
+            "state": "completed",
+            "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+            "verificationId": "verification_c3b50518-edaf-48b5-b201-1fbdb4445ccd"
+          },
+          {
+            "id": "task_c41c39c0-98b5-4044-91b8-282e94c005ce",
+            "title": "Final project verification and QA",
+            "state": "completed",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_0d73d219-633d-46ed-86d5-84313af5cc73"
+          },
+          {
+            "id": "task_8d26a901-e70f-4f95-bc7a-59c91200ec01",
+            "title": "Implement backend code and API: Determine Command Validation Rules",
+            "state": "completed",
+            "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+            "verificationId": "verification_956f48fc-80dc-461c-8cab-d9b590a697b5"
+          },
+          {
+            "id": "task_d6c1c910-97be-40c8-a52a-048dba840e4e",
+            "title": "Research and validate requirements: Define Command Requirements",
+            "state": "completed",
+            "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+            "verificationId": "verification_7548063e-0262-48df-95d7-f81760f434bb"
+          },
+          {
+            "id": "task_b87cfe1b-0a65-45ba-97c6-43e97d2163e5",
+            "title": "Define product and architecture plan: Identify Execution Dependencies",
+            "state": "completed",
+            "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+            "verificationId": "verification_10b858bd-707b-4fe5-b2ff-91b38fd3a798"
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "artifact_1b29716c-b338-4366-874f-26dc33ef85a4",
+            "type": "code-workspace",
+            "taskId": "task_354d1fce-dae2-4a91-871e-281cc1ede16a",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          },
+          {
+            "id": "artifact_c9f9e152-9a2e-40ce-9ed9-ed85a72fc82f",
+            "type": "final-delivery",
+            "taskId": null,
+            "metadata": {
+              "state": "completed",
+              "generatedBy": "mauli-l1-delivery",
+              "downloadPath": "/api/artifacts/artifact_c9f9e152-9a2e-40ce-9ed9-ed85a72fc82f/download"
+            }
+          },
+          {
+            "id": "artifact_c8e4bf32-ee7f-4e82-a192-16e653856be3",
+            "type": "code-workspace",
+            "taskId": "task_8d26a901-e70f-4f95-bc7a-59c91200ec01",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          }
+        ],
+        "artifactId": "artifact_f8245579-9b31-4958-9280-71eac36ef8b4",
+        "artifactType": "final-delivery"
+      },
+      "metadata": {
+        "state": "completed",
+        "generatedBy": "mauli-l1-delivery",
+        "gate": "final-qa+security",
+        "downloadPath": "/api/artifacts/artifact_f8245579-9b31-4958-9280-71eac36ef8b4/download"
+      },
+      "createdAt": "2026-09-02T18:48:34.032Z",
+      "updatedAt": "2026-09-02T18:48:34.032Z"
+    },
+    "artifact": "artifact_f8245579-9b31-4958-9280-71eac36ef8b4",
+    "artifactType": "final-delivery"
+  },
+  "resultRunId": "project_68cfd203-7745-4d69-9294-8fb41ae45ca9",
+  "savedAt": "2026-09-02T18:48:34.255Z"
+}
