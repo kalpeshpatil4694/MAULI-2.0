@@ -8,6 +8,8 @@ import { selectAgents, updateAgent } from './agents.js';
 import { executeTask } from './execution.js';
 import { verifyResult, retryDecision } from './verification.js';
 import { completeTask, failTask, markVerifying } from './tasks.js';
+import { buildFinalDelivery } from './delivery.js';
+import { saveCommandResult } from './result-recorder.js';
 
 const LEASE_MS = 90_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -112,6 +114,39 @@ export async function runTask(taskId, env = {}, context = {}) {
   return { status: 'failed', task: store.get('tasks', task.id), run, verification: check };
 }
 
+async function finalizeCommand(projectId, env = {}) {
+  const project = store.get('projects', projectId);
+  const runId = project?.commandRunId;
+  if (!project || !runId) return null;
+  const tasks = store.list('tasks').filter(t => t.projectId === projectId);
+  if (!tasks.length) return null;
+  const hasRunning = tasks.some(t => ['working', 'assigned'].includes(t.state));
+  const hasQueued = tasks.some(t => RUNNABLE.has(t.state) && dependenciesReady(t));
+  const hasFailed = tasks.some(t => t.state === 'failed');
+  const qaTasks = tasks.filter(t => t.finalProjectVerification);
+  const qaPassed = qaTasks.length > 0 && qaTasks.every(t => t.state === 'completed' && t.verificationId);
+  const allCompleted = tasks.every(t => t.state === 'completed');
+  if (hasRunning || hasQueued) return null;
+
+  if (allCompleted && qaPassed) {
+    const finalDelivery = project.finalDeliveryId ? store.get('artifacts', project.finalDeliveryId) : buildFinalDelivery(project);
+    const finalProject = store.put('projects', { ...project, state: 'completed', finalDeliveryId: finalDelivery?.id ?? project.finalDeliveryId ?? null, completedAt: project.completedAt ?? now(), id: project.id });
+    const result = { status: 'completed', runId, command: project.founderCommand, project: finalProject, tasks, finalDelivery };
+    await saveCommandResult({ runId, command: project.founderCommand, generatedAt: now(), result }, env).catch(() => null);
+    store.addEvent('command.completed', { runId, projectId, status: 'completed', at: now() });
+    return result;
+  }
+
+  if (hasFailed && !hasQueued && !hasRunning) {
+    const failedProject = store.put('projects', { ...project, state: 'failed', failedAt: project.failedAt ?? now(), id: project.id });
+    const result = { status: 'failed', runId, command: project.founderCommand, project: failedProject, tasks, error: 'One or more tasks failed after recovery/retry limits.' };
+    await saveCommandResult({ runId, command: project.founderCommand, generatedAt: now(), result }, env).catch(() => null);
+    store.addEvent('command.failed', { runId, projectId, status: 'failed', at: now() });
+    return result;
+  }
+  return null;
+}
+
 export async function schedulerTick(env = {}, context = {}) {
   recoverStaleTasks();
   const projects = new Set(store.list('tasks').map(t => t.projectId).filter(Boolean));
@@ -123,9 +158,10 @@ export async function schedulerTick(env = {}, context = {}) {
     for (const task of tasks) {
       const result = await runTask(task.id, env, context);
       results.push(result);
-      // One task per project per scheduler invocation keeps execution bounded and idempotent.
       break;
     }
+    const final = await finalizeCommand(projectId, env).catch(() => null);
+    if (final) results.push({ status: final.status, runId: final.runId, projectId });
   }
   return { recovered: recoverStaleTasks(), results, at: now() };
 }
