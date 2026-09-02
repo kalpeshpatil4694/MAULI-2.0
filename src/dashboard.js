@@ -29,6 +29,18 @@ html{font-size:15px}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-0);color:var(--text);line-height:1.6;min-height:100vh;overflow-x:hidden}
 a{color:var(--accent);text-decoration:none}
 ::selection{background:var(--accent);color:var(--bg-0)}
+.search-highlight{background:rgba(0,212,255,.2);border-radius:2px;padding:0 2px}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center}
+.empty-state-icon{font-size:48px;margin-bottom:16px;opacity:.6}
+.empty-state-text{font-size:16px;color:var(--text-muted);margin-bottom:8px}
+.empty-state-hint{font-size:13px;color:var(--text-dim)}
+.card:hover{border-color:rgba(0,212,255,.3)}
+.stat{transition:transform .2s,box-shadow .2s}
+.stat:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.3)}
+.btn{transition:all .2s}
+.btn:active{transform:scale(.95)}
+.badge{font-weight:600;letter-spacing:.3px}
+
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:var(--bg-1)}
 ::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
@@ -311,6 +323,17 @@ body.sidebar-open{overflow:hidden!important}@media(max-width:768px){.hamburger{d
       <div class="page" id="page-projects">
         <div class="card">
           <div class="card-header"><div class="card-title">📁 All Projects</div><div class="card-subtitle" id="projectCount">0 projects</div></div>
+          <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+            <input type="text" id="projectSearch" placeholder="🔍 Search projects..." style="flex:1;min-width:200px;padding:8px 12px;border-radius:8px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text);font-size:13px" oninput="filterProjects()">
+            <select id="projectFilter" style="padding:8px 12px;border-radius:8px;border:1px solid var(--glass-border);background:var(--glass);color:var(--text);font-size:13px" onchange="filterProjects()">
+              <option value="all">All Status</option>
+              <option value="active">🟢 Active</option>
+              <option value="completed">✅ Completed</option>
+              <option value="escalated">🔴 Escalated</option>
+              <option value="failed">❌ Failed</option>
+            </select>
+            <button class="btn btn-accent" onclick="exportProjects()" style="font-size:12px">📤 Export All</button>
+          </div>
           <div id="projectsList"></div>
         </div>
       </div>
@@ -637,6 +660,41 @@ function renderProjects(){
   html+='</tbody></table></div>';
   $('projectsList').innerHTML=html||'<div class="empty"><div class="empty-icon">📁</div><div class="empty-text">No projects yet. Send a founder command!</div></div>';
 }
+
+function filterProjects(){
+  const search=($('projectSearch')&&$('projectSearch').value||'').toLowerCase();
+  const filter=$('projectFilter')&&$('projectFilter').value||'all';
+  let filtered=STATE.projects;
+  if(search){filtered=filtered.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search)||(p.state||'').toLowerCase().includes(search))}
+  if(filter!=='all'){filtered=filtered.filter(p=>p.state===filter)}
+  let html='<div class="table-wrap"><table><thead><tr><th>Name</th><th>Status</th><th>Tasks</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+  for(const p of filtered){
+    const badge=stateBadge(p.state);const hasCode=STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
+    html+='<tr><td><strong>'+esc(p.name||p.objective||p.id)+'</strong></td><td><span class="badge badge-'+badge+'">'+esc(p.state)+'</span></td><td>'+(p.taskCount||'—')+'</td><td style="font-size:11px;color:var(--text-dim)">'+fmtDate(p.createdAt)+'</td><td style="display:flex;gap:4px">';
+    html+='<button class="btn btn-sm btn-green download-btn" data-project="'+p.id+'" style="cursor:pointer">📥 Download</button>';
+    if(hasCode){html+='<button class="btn btn-sm btn-green build-btn" data-project="'+p.id+'" data-platform="android">📱 APK</button><button class="btn btn-sm btn-accent build-btn" data-project="'+p.id+'" data-platform="desktop">🖥️ EXE</button>'}
+    html+='</td></tr>';
+  }
+  html+='</tbody></table></div>';
+  if($('projectsList'))$('projectsList').innerHTML=html||'<div class="empty"><div class="empty-icon">🔍</div><div class="empty-text">No matching projects</div></div>';
+  if($('projectCount'))$('projectCount').textContent=filtered.length+' of '+STATE.projects.length+' projects';
+}
+function exportProjects(){
+  const data={
+    exportedAt:new Date().toISOString(),
+    totalProjects:STATE.projects.length,
+    projects:STATE.projects.map(p=>({
+      id:p.id,name:p.name||p.objective,state:p.state,taskCount:p.taskCount,
+      createdAt:p.createdAt,artifacts:STATE.artifacts.filter(a=>a.projectId===p.id)
+    }))
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='mauli-projects-export.json';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
+  toast('Exported '+STATE.projects.length+' projects!','success');
+}
+
 function renderTasks(){
   let html='<div class="table-wrap"><table><thead><tr><th>Task</th><th>Status</th><th>Agent</th><th>Progress</th></tr></thead><tbody>';
   for(const t of STATE.tasks.slice(-50).reverse()){
