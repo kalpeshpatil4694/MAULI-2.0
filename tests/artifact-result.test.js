@@ -1,31 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { saveCommandResult } from '../src/result-recorder.js';
+import { saveCommandResult, getCommandResult } from '../src/result-recorder.js';
 
-test('Result persistence exposes final delivery artifact id', async () => {
-  const originalFetch = globalThis.fetch;
-  const calls = [];
-  let writtenPayload = null;
-  let writtenPayloadText = null;
-  globalThis.fetch = async (url, options = {}) => {
-    calls.push({ url, options });
-    if (options.method === 'PUT') {
-      writtenPayloadText = Buffer.from(JSON.parse(options.body).content, 'base64').toString('utf8');
-      writtenPayload = JSON.parse(writtenPayloadText);
-      return new Response(JSON.stringify({ ok: true, commit: { sha: 'commit-test' }, content: { sha: 'content-test' } }), { status: 200, headers: { 'content-type': 'application/json' } });
-    }
-    const body = Buffer.from(writtenPayloadText ?? JSON.stringify(writtenPayload ?? {})).toString('base64');
-    return new Response(JSON.stringify({ sha: 'existing', content: body }), { status: 200, headers: { 'content-type': 'application/json' } });
-  };
-  try {
-    const result = await saveCommandResult({ command: 'test', result: { status: 'completed', finalDelivery: { id: 'artifact_final_123', type: 'final-delivery' } } }, { GITHUB_TOKEN: 'test-token' });
-    assert.equal(result.saved, true);
-    const write = calls.find(call => call.options.method === 'PUT');
-    assert.ok(write, 'Result must be written to GitHub');
-    const payload = JSON.parse(Buffer.from(JSON.parse(write.options.body).content, 'base64').toString('utf8'));
-    assert.equal(payload.result.artifact, 'artifact_final_123');
-    assert.equal(payload.result.artifactType, 'final-delivery');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+test('Result persistence exposes final delivery artifact id without GitHub writes', async () => {
+  const runId = `artifact_test_${Date.now()}`;
+  const result = await saveCommandResult({
+    runId,
+    command: 'test',
+    result: { status: 'completed', finalDelivery: { id: 'artifact_final_123', type: 'final-delivery' } }
+  }, {});
+  assert.equal(result.saved, true);
+  assert.equal(result.storage, 'd1');
+  assert.equal(result.githubSync.disabled, true);
+  const stored = getCommandResult(runId);
+  assert.equal(stored.result.artifact, 'artifact_final_123');
+  assert.equal(stored.result.artifactType, 'final-delivery');
 });
