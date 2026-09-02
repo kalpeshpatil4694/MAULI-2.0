@@ -1,0 +1,591 @@
+{
+  "runId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+  "command": "Mobile number tracking banvun dya",
+  "generatedAt": "2026-09-02T18:55:32.375Z",
+  "result": {
+    "status": "completed",
+    "runId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+    "command": "Mobile number tracking banvun dya",
+    "project": {
+      "id": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+      "name": "Project: Design a mobile number tracking system",
+      "objective": "Design a mobile number tracking system",
+      "founderCommand": "Mobile number tracking banvun dya",
+      "requirements": [
+        "User authentication and authorization",
+        "Mobile number input and validation",
+        "Geolocation data retrieval and display",
+        "Real-time tracking updates"
+      ],
+      "priority": "normal",
+      "state": "completed",
+      "milestones": [],
+      "createdAt": "2026-08-29T07:49:51.244Z",
+      "updatedAt": "2026-09-02T18:55:32.375Z",
+      "finalDeliveryId": "artifact_47d610c7-81b0-4608-935b-a01708ff7028",
+      "completedAt": "2026-09-02T18:48:36.305Z"
+    },
+    "tasks": [
+      {
+        "id": "task_3dd2a59f-dfdc-47ce-adcc-512eb24a37bb",
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "title": "Perform security review",
+        "description": "Design a mobile number tracking system",
+        "requiredCapabilities": [
+          "security",
+          "audit"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_ea452d62-1b04-4a16-9e4c-9c4c04dd21cc"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 60,
+        "updatedAt": "2026-08-29T07:50:21.747Z",
+        "createdAt": "2026-08-29T07:49:51.244Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:50:14.633Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_fa4ad877-1cb2-46a6-8f37-853ce5092c08",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Perform security review\nObjective: Design a mobile number tracking system\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime is unavailable."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_0a63a255-9e66-4bd3-ad53-7157b24a3f4b",
+        "completedAt": "2026-08-29T07:50:21.747Z"
+      },
+      {
+        "id": "task_fa9291e2-670d-41fd-bffe-9b01e934b7a2",
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "title": "Create testing and verification plan",
+        "description": "Design a mobile number tracking system",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_3dd2a59f-dfdc-47ce-adcc-512eb24a37bb"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [
+          "test.run"
+        ],
+        "requiredTools": [],
+        "sequence": 70,
+        "updatedAt": "2026-08-29T07:50:21.747Z",
+        "createdAt": "2026-08-29T07:49:51.244Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:50:21.747Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_fa9291e2-670d-41fd-bffe-9b01e934b7a2",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-29T07:50:21.747Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_89750e33-0af8-4f4b-a033-cf9fbef6d358",
+        "completedAt": "2026-08-29T07:50:21.747Z"
+      },
+      {
+        "id": "task_dafded1e-84cb-4a8b-8a88-9cbce8a6cdf6",
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "title": "Final project verification and QA",
+        "description": "Verify completed project project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "low",
+        "dependsOn": [
+          "task_fa9291e2-670d-41fd-bffe-9b01e934b7a2"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 1,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 999,
+        "finalProjectVerification": true,
+        "updatedAt": "2026-08-29T07:50:21.747Z",
+        "createdAt": "2026-08-29T07:50:21.747Z",
+        "assignedAt": "2026-08-29T07:50:21.747Z",
+        "startedAt": "2026-08-29T07:50:21.747Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_dafded1e-84cb-4a8b-8a88-9cbce8a6cdf6",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-29T07:50:21.747Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_bce98589-c89d-4b2b-b374-fec5fa77ddae",
+        "completedAt": "2026-08-29T07:50:21.747Z"
+      },
+      {
+        "id": "task_ea452d62-1b04-4a16-9e4c-9c4c04dd21cc",
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "title": "Implement frontend code and user experience",
+        "description": "Design a mobile number tracking system",
+        "requiredCapabilities": [
+          "frontend",
+          "ui"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_3bb32ebd-7961-4015-996e-edbea87f8db5"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 50,
+        "updatedAt": "2026-08-29T07:50:14.633Z",
+        "createdAt": "2026-08-29T07:49:51.244Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:50:04.857Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_5b2365d0-051f-41d6-a227-3971d9edcb45",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement frontend code and user experience\nObjective: Design a mobile number tracking system\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime is unavailable."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_95eeca95-1576-4fd6-8858-c5fee3d3e9c9",
+        "completedAt": "2026-08-29T07:50:14.633Z"
+      },
+      {
+        "id": "task_3bb32ebd-7961-4015-996e-edbea87f8db5",
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "title": "Implement database and persistence schema: Real-time tracking updates",
+        "description": "Design a mobile number tracking system",
+        "requiredCapabilities": [
+          "database",
+          "schema",
+          "sql"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_d0dbc997-1269-43ca-999d-ac52b2bd2bf2"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 40,
+        "updatedAt": "2026-08-29T07:50:04.857Z",
+        "createdAt": "2026-08-29T07:49:51.244Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:49:56.690Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_0a790c51-9666-4aa6-8295-90c1932bb2fd",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement database and persistence schema: Real-time tracking updates\nObjective: Design a mobile number tracking system\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime is unavailable."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_f9bf70c0-8ae2-4f48-b97c-84d6dc092805",
+        "completedAt": "2026-08-29T07:50:04.857Z"
+      },
+      {
+        "id": "task_d0dbc997-1269-43ca-999d-ac52b2bd2bf2",
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "title": "Implement backend code and API: Geolocation data retrieval and display",
+        "description": "Design a mobile number tracking system",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_159496a4-eda6-42ee-ae07-ae2a2c85de53"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "updatedAt": "2026-08-29T07:49:56.690Z",
+        "createdAt": "2026-08-29T07:49:51.244Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:49:51.244Z",
+        "memoryContext": [],
+        "result": {
+          "type": "code",
+          "artifactId": "artifact_0c17f9f5-8327-4d83-b08e-6691ad172825",
+          "summary": "Code artifact generated without paid/cloud services. [object Object]",
+          "files": [
+            {
+              "path": "generated/README.md",
+              "content": "MAULI L1 generated workspace\nTask: Implement backend code and API: Geolocation data retrieval and display\nObjective: Design a mobile number tracking system\nAcceptance: [object Object]"
+            }
+          ],
+          "tests": [
+            "node --test"
+          ],
+          "notes": [
+            "Deterministic L1 fallback used because AI runtime is unavailable."
+          ],
+          "acceptance": [
+            {
+              "field": "type",
+              "equals": "code"
+            }
+          ]
+        },
+        "verificationId": "verification_4edb52ab-467a-47fd-82b3-c8555f3cf61a",
+        "completedAt": "2026-08-29T07:49:56.690Z"
+      },
+      {
+        "id": "task_059814ab-e95b-4f23-8c49-f029b24784d2",
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "title": "Research and validate requirements: User authentication and authorization",
+        "description": "Design a mobile number tracking system",
+        "requiredCapabilities": [
+          "research",
+          "analysis"
+        ],
+        "risk": "normal",
+        "dependsOn": [],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 10,
+        "updatedAt": "2026-08-29T07:49:51.244Z",
+        "createdAt": "2026-08-29T07:49:51.244Z",
+        "assignedAt": "2026-08-29T07:49:51.244Z",
+        "startedAt": "2026-08-29T07:49:51.244Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_059814ab-e95b-4f23-8c49-f029b24784d2",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-29T07:49:51.244Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_fb31468c-f961-451e-ab47-472e480c0682",
+        "completedAt": "2026-08-29T07:49:51.244Z"
+      },
+      {
+        "id": "task_159496a4-eda6-42ee-ae07-ae2a2c85de53",
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "title": "Define product and architecture plan: Mobile number input and validation",
+        "description": "Design a mobile number tracking system",
+        "requiredCapabilities": [
+          "product-planning",
+          "planning"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_059814ab-e95b-4f23-8c49-f029b24784d2"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [
+          "planning.execute"
+        ],
+        "requiredTools": [],
+        "sequence": 20,
+        "updatedAt": "2026-08-29T07:49:51.244Z",
+        "createdAt": "2026-08-29T07:49:51.244Z",
+        "blockedReason": "Dependencies incomplete",
+        "startedAt": "2026-08-29T07:49:51.244Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_159496a4-eda6-42ee-ae07-ae2a2c85de53",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-29T07:49:51.244Z"
+          },
+          "summary": "Execution plan generated. Verification complete."
+        },
+        "verificationId": "verification_a98c1067-792e-4cb7-bcea-ec8c70db397f",
+        "completedAt": "2026-08-29T07:49:51.244Z"
+      }
+    ],
+    "finalDelivery": {
+      "id": "artifact_47d610c7-81b0-4608-935b-a01708ff7028",
+      "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+      "taskId": null,
+      "agentId": null,
+      "type": "final-delivery",
+      "content": {
+        "projectId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+        "project": {
+          "id": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+          "name": "Project: Design a mobile number tracking system",
+          "objective": "Design a mobile number tracking system",
+          "state": "completed"
+        },
+        "summary": {
+          "totalTasks": 8,
+          "completedTasks": 8,
+          "failedTasks": 0,
+          "artifactCount": 5,
+          "deliveredAt": "2026-09-02T18:48:36.305Z"
+        },
+        "tasks": [
+          {
+            "id": "task_3dd2a59f-dfdc-47ce-adcc-512eb24a37bb",
+            "title": "Perform security review",
+            "state": "completed",
+            "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+            "verificationId": "verification_0a63a255-9e66-4bd3-ad53-7157b24a3f4b"
+          },
+          {
+            "id": "task_fa9291e2-670d-41fd-bffe-9b01e934b7a2",
+            "title": "Create testing and verification plan",
+            "state": "completed",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_89750e33-0af8-4f4b-a033-cf9fbef6d358"
+          },
+          {
+            "id": "task_dafded1e-84cb-4a8b-8a88-9cbce8a6cdf6",
+            "title": "Final project verification and QA",
+            "state": "completed",
+            "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+            "verificationId": "verification_bce98589-c89d-4b2b-b374-fec5fa77ddae"
+          },
+          {
+            "id": "task_ea452d62-1b04-4a16-9e4c-9c4c04dd21cc",
+            "title": "Implement frontend code and user experience",
+            "state": "completed",
+            "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+            "verificationId": "verification_95eeca95-1576-4fd6-8858-c5fee3d3e9c9"
+          },
+          {
+            "id": "task_3bb32ebd-7961-4015-996e-edbea87f8db5",
+            "title": "Implement database and persistence schema: Real-time tracking updates",
+            "state": "completed",
+            "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+            "verificationId": "verification_f9bf70c0-8ae2-4f48-b97c-84d6dc092805"
+          },
+          {
+            "id": "task_d0dbc997-1269-43ca-999d-ac52b2bd2bf2",
+            "title": "Implement backend code and API: Geolocation data retrieval and display",
+            "state": "completed",
+            "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+            "verificationId": "verification_4edb52ab-467a-47fd-82b3-c8555f3cf61a"
+          },
+          {
+            "id": "task_059814ab-e95b-4f23-8c49-f029b24784d2",
+            "title": "Research and validate requirements: User authentication and authorization",
+            "state": "completed",
+            "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+            "verificationId": "verification_fb31468c-f961-451e-ab47-472e480c0682"
+          },
+          {
+            "id": "task_159496a4-eda6-42ee-ae07-ae2a2c85de53",
+            "title": "Define product and architecture plan: Mobile number input and validation",
+            "state": "completed",
+            "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+            "verificationId": "verification_a98c1067-792e-4cb7-bcea-ec8c70db397f"
+          }
+        ],
+        "artifacts": [
+          {
+            "id": "artifact_fa4ad877-1cb2-46a6-8f37-853ce5092c08",
+            "type": "code-workspace",
+            "taskId": "task_3dd2a59f-dfdc-47ce-adcc-512eb24a37bb",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          },
+          {
+            "id": "artifact_13ae0f0b-b4a8-46c9-bd6f-c6bb85a7400a",
+            "type": "final-delivery",
+            "taskId": null,
+            "metadata": {
+              "state": "completed",
+              "generatedBy": "mauli-l1-delivery",
+              "downloadPath": "/api/artifacts/artifact_13ae0f0b-b4a8-46c9-bd6f-c6bb85a7400a/download"
+            }
+          },
+          {
+            "id": "artifact_5b2365d0-051f-41d6-a227-3971d9edcb45",
+            "type": "code-workspace",
+            "taskId": "task_ea452d62-1b04-4a16-9e4c-9c4c04dd21cc",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          },
+          {
+            "id": "artifact_0a790c51-9666-4aa6-8295-90c1932bb2fd",
+            "type": "code-workspace",
+            "taskId": "task_3bb32ebd-7961-4015-996e-edbea87f8db5",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          },
+          {
+            "id": "artifact_0c17f9f5-8327-4d83-b08e-6691ad172825",
+            "type": "code-workspace",
+            "taskId": "task_d0dbc997-1269-43ca-999d-ac52b2bd2bf2",
+            "metadata": {
+              "generatedBy": "internal.code"
+            }
+          }
+        ]
+      },
+      "metadata": {
+        "state": "completed",
+        "generatedBy": "mauli-l1-delivery",
+        "gate": "final-qa+security"
+      },
+      "createdAt": "2026-09-02T18:48:36.305Z",
+      "updatedAt": "2026-09-02T18:48:36.305Z"
+    },
+    "artifact": "artifact_47d610c7-81b0-4608-935b-a01708ff7028",
+    "artifactType": "final-delivery"
+  },
+  "resultRunId": "project_49e284c5-ed0f-471d-b469-8d7207fd05c2",
+  "savedAt": "2026-09-02T18:55:32.590Z"
+}
