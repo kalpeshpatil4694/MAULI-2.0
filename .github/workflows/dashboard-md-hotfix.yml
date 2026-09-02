@@ -1,0 +1,35 @@
+name: MAULI dashboard md hotfix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Patch template-literal markdown regex escaping
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/dashboard.js')
+          text = p.read_text()
+          old = "function md(s){if(!s)return'';let t=esc(s);t=t.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');t=t.replace(/\\*(.+?)\\*/g,'<em>$1</em>');"
+          new = "function md(s){if(!s)return'';let t=esc(s);t=t.replace(/\\\\*\\\\*(.+?)\\\\*\\\\*/g,'<strong>$1</strong>');t=t.replace(/\\\\*(.+?)\\\\*/g,'<em>$1</em>');"
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected exactly one dashboard md target, found {text.count(old)}')
+          p.write_text(text.replace(old, new, 1))
+          print('dashboard md regex escaping patched')
+          PY
+      - name: Commit dashboard fix
+        run: |
+          git config user.name "MAULI Bot"
+          git config user.email "mauli-bot@users.noreply.github.com"
+          git add src/dashboard.js
+          git diff --cached --check
+          git commit -m "fix: preserve dashboard markdown regex escapes" || exit 0
+          git push origin HEAD:main
