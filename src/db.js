@@ -51,3 +51,14 @@ export async function d1Event(env, event) {
   await env.DB.prepare('INSERT INTO events(id,type,payload,created_at) VALUES(?,?,?,?)').bind(event.id,event.type,JSON.stringify(event.payload),event.at).run();
   return event;
 }
+
+export async function claimBuildVersion(env, projectId, buildId, branch, startedAt) {
+  if (!hasD1(env)) return false;
+  return d1Put(env, 'build_locks', { id: 'project:' + projectId, projectId, buildId, branch, startedAt, status: 'active' });
+}
+
+export async function getBuildVersion(env, projectId) {
+  if (!hasD1(env)) return null;
+  const row = await env.DB.prepare('SELECT data FROM entities WHERE type = ? AND id = ? LIMIT 1').bind('build_locks', 'project:' + projectId).first();
+  return row?.data ? JSON.parse(row.data) : null;
+}

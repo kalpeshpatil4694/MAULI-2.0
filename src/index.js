@@ -8,7 +8,7 @@ import { planCommand, resumeApprovedCommand } from './orchestrator.js';
 import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { collectProjectFiles, createZip } from './zip.js';
-import { ensureSchema, hasD1, d1List, d1Events } from './db.js';
+import { ensureSchema, hasD1, d1List, d1Events, claimBuildVersion, getBuildVersion } from './db.js';
 import { recoverRunningExecutions } from './execution.js';
 import { requireFounder, checkRateLimit } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
@@ -124,19 +124,29 @@ export default { async fetch(request, env) { try {
     const token=env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT;
     const repo=env?.GITHUB_RESULT_REPO||'kalpeshpatil4694/MAULI-2.0';
     const buildId='build_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
-    const buildBranch='build/'+buildId;
+    const safeProjectId=String(projectId).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)||'unknown';
+    const buildBranch='build/project-'+safeProjectId;
+    const startedAt=now();
+    const previousBuilds=store.list('builds').filter(b=>b.projectId===projectId&&!['success','failed','cancelled','superseded'].includes(b.status));
+    for(const previous of previousBuilds) store.put('builds',{...previous,status:'superseded',supersededBy:buildId,supersededAt:startedAt});
+    if(hasD1(env)) await claimBuildVersion(env,projectId,buildId,buildBranch,startedAt); else store.put('build_locks',{id:'project:'+projectId,projectId,buildId,branch:buildBranch,startedAt,status:'active'});
     if(!token)return fail('GitHub token not configured. Add GITHUB_TOKEN env var.',500);
     const ghHeaders={Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'MAULI-2.0-builder','Content-Type':'application/json'};
     // Create the build branch from main first
     const mainRef=await fetch('https://api.github.com/repos/'+repo+'/git/refs/heads/main',{headers:ghHeaders});
     const mainData=await mainRef.json();
     const mainSha=mainData?.object?.sha;
-    if(mainSha){
-      await fetch('https://api.github.com/repos/'+repo+'/git/refs',{method:'POST',headers:ghHeaders,body:JSON.stringify({ref:'refs/heads/'+buildBranch,sha:mainSha})});
-    }
+    if(!mainSha)return fail('Unable to resolve main branch',502,{buildId,repo});
+    const branchRuns=await fetch('https://api.github.com/repos/'+repo+'/actions/runs?branch='+encodeURIComponent(buildBranch)+'&per_page=20',{headers:ghHeaders}).then(r=>r.ok?r.json():({workflow_runs:[]})).catch(()=>({workflow_runs:[]}));
+    for(const run of branchRuns.workflow_runs||[]) if(['queued','in_progress'].includes(run.status)){await fetch('https://api.github.com/repos/'+repo+'/actions/runs/'+run.id+'/cancel',{method:'POST',headers:ghHeaders}).catch(()=>{});}
+    await fetch('https://api.github.com/repos/'+repo+'/git/refs/heads/'+encodeURIComponent(buildBranch),{method:'DELETE',headers:ghHeaders}).catch(()=>{});
+    const createBranch=await fetch('https://api.github.com/repos/'+repo+'/git/refs',{method:'POST',headers:ghHeaders,body:JSON.stringify({ref:'refs/heads/'+buildBranch,sha:mainSha})});
+    if(!createBranch.ok){const text=await createBranch.text().catch(()=>"");return fail('Unable to create clean build branch',502,{buildId,repo,branch:buildBranch,error:text.substring(0,200)});}
     // Push each file to GitHub
     let pushed=0;
     for(const file of files){
+      const current=hasD1(env)?await getBuildVersion(env,projectId):store.get('build_locks','project:'+projectId);
+      if(current?.buildId!==buildId)return ok({buildId,status:'superseded',supersededBy:current?.buildId||null,pushed});
       const path=file.path;
       const content=typeof btoa==='function'?btoa(unescape(encodeURIComponent(file.content))):Buffer.from(file.content).toString('base64');
       // Check if file exists
@@ -152,9 +162,12 @@ export default { async fetch(request, env) { try {
     // Push the build-app.yml workflow to the build branch
     const wfLines=[];
     wfLines.push('name: Build App');
-    wfLines.push('on: push');
+    wfLines.push('on:');
+    wfLines.push('  push:');
+    wfLines.push('    paths:');
+    wfLines.push("      - '.github/workflows/build-apps.yml'");
     wfLines.push('concurrency:');
-    wfLines.push('  group: mauli-build-\${{ github.ref }}');
+    wfLines.push('  group: mauli-build-\refs/heads/main');
     wfLines.push('  cancel-in-progress: true');
     wfLines.push('jobs:');
     wfLines.push('  build-android:');
@@ -230,6 +243,8 @@ export default { async fetch(request, env) { try {
     wfLines.push('          path: dist/*.AppImage');
     wfLines.push('          if-no-files-found: error');
     wfLines.push('          retention-days: 14');
+    const latestBeforeWorkflow=hasD1(env)?await getBuildVersion(env,projectId):store.get('build_locks','project:'+projectId);
+    if(latestBeforeWorkflow?.buildId!==buildId)return ok({buildId,status:'superseded',supersededBy:latestBeforeWorkflow?.buildId||null,pushed});
     const wfContent=wfLines.join('\n');
     const wfBase64=typeof btoa==='function'?btoa(unescape(encodeURIComponent(wfContent))):Buffer.from(wfContent).toString('base64');
     const wfCheck=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-apps.yml')+'?ref='+buildBranch,{headers:ghHeaders});
@@ -238,7 +253,7 @@ export default { async fetch(request, env) { try {
     if(wfSha)wfBody.sha=wfSha;
     await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-apps.yml'),{method:'PUT',headers:ghHeaders,body:JSON.stringify(wfBody)});
     // Store build info
-    store.put('builds',{id:buildId,projectId,platform,repo,branch:buildBranch,pushedAt:now(),status:pushed>0?'pushed':'failed',filesPushed:pushed});
+    store.put('builds',{id:buildId,projectId,platform,repo,branch:buildBranch,pushedAt:now(),startedAt,status:pushed>0?'pushed':'failed',filesPushed:pushed,supersededBy:null});
     store.addEvent('build.started',{buildId,projectId,platform,pushed});
     if(pushed===0){return fail('GitHub token does not have push permissions. The token may be expired or missing repo scope. Please check the GITHUB_TOKEN in Settings > Environment.',500,{buildId,pushed,repo,branch:buildBranch});}
     return ok({buildId,platform,pushed,repo,branch:buildBranch,status:'pushed',message:pushed+' files pushed to GitHub. Build will start shortly.'});
@@ -249,6 +264,7 @@ export default { async fetch(request, env) { try {
     const buildId=url.pathname.split('/').pop();
     const build=store.list('builds').find(b=>b.id===buildId);
     if(!build)return fail('Build not found',404);
+    if(build.status==='superseded')return ok({buildId,status:'superseded',supersededBy:build.supersededBy||null,downloadUrl:null,pushedAt:build.pushedAt,platform:build.platform,filesPushed:build.filesPushed});
     const token=env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT;
     const repo=build.repo||'kalpeshpatil4694/MAULI-2.0';
     if(!token)return ok({...build,status:'pushed',message:'GitHub token not configured'});
