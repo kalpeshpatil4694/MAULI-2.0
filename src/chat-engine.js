@@ -566,6 +566,81 @@ function handleDiscussion(text, intent, context) {
 
 // ═══ BUILD STATUS HANDLER ═══
 
+const STUCK_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+function formatDuration(ms) {
+  if (ms < 60000) return Math.round(ms / 1000) + 's';
+  if (ms < 3600000) return Math.round(ms / 60000) + 'm ' + Math.round((ms % 60000) / 1000) + 's';
+  return Math.round(ms / 3600000) + 'h ' + Math.round((ms % 3600000) / 60000) + 'm';
+}
+
+function detectStuck(project, tasks, agents) {
+  const now_ms = Date.now();
+  const projectCreated = Date.parse(project.createdAt || project.updatedAt || '');
+  const age = projectCreated ? now_ms - projectCreated : 0;
+  
+  const issues = [];
+  
+  // Check for stuck tasks (working/assigned but no progress)
+  for (const task of tasks) {
+    if (task.state === 'working' || task.state === 'assigned') {
+      const lastUpdate = Date.parse(task.updatedAt || task.createdAt || '');
+      const taskAge = lastUpdate ? now_ms - lastUpdate : age;
+      if (taskAge > STUCK_THRESHOLD_MS) {
+        const agent = task.assignedAgentId ? agents.find(a => a.id === task.assignedAgentId) : null;
+        issues.push({
+          type: 'stuck_task',
+          task: task.title || task.id,
+          agent: agent ? agent.name : 'Unassigned',
+          duration: formatDuration(taskAge),
+          suggestion: agent ? `${agent.name} may need help or reassignment` : 'No agent assigned — task is waiting'
+        });
+      }
+    }
+    
+    // Check for blocked tasks
+    if (task.state === 'blocked') {
+      const deps = task.dependsOn || [];
+      const incompleteDeps = deps.filter(depId => {
+        const depTask = tasks.find(t => t.id === depId);
+        return depTask && depTask.state !== 'completed';
+      });
+      if (incompleteDeps.length > 0) {
+        issues.push({
+          type: 'blocked',
+          task: task.title || task.id,
+          reason: `Waiting for ${incompleteDeps.length} dependent task(s) to complete`,
+          suggestion: 'Check if dependent tasks are progressing'
+        });
+      }
+    }
+    
+    // Check for failed tasks
+    if (task.state === 'failed') {
+      issues.push({
+        type: 'failed',
+        task: task.title || task.id,
+        reason: 'Task execution failed',
+        suggestion: `Retry count: ${task.attempts || 0}/${task.maxAttempts || 3}`
+      });
+    }
+  }
+  
+  // Check for agent starvation (tasks queued but no agents available)
+  const queuedTasks = tasks.filter(t => t.state === 'queued');
+  const availableAgents = agents.filter(a => a.state === 'available');
+  if (queuedTasks.length > 0 && availableAgents.length === 0 && tasks.some(t => t.state === 'working' || t.state === 'assigned')) {
+    issues.push({
+      type: 'agent_starvation',
+      task: `${queuedTasks.length} queued task(s)`,
+      reason: 'All agents are busy, tasks waiting in queue',
+      suggestion: 'Wait for current tasks to complete, or retry failed tasks'
+    });
+  }
+  
+  return { issues, age, ageStr: formatDuration(age) };
+}
+
 function handleBuildStatus(text, intent) {
   const projects = store.list('projects');
   const allTasks = store.list('tasks');
@@ -573,7 +648,7 @@ function handleBuildStatus(text, intent) {
   
   // Get the most recent active/queued project
   const recentProject = projects
-    .filter(p => ['active', 'working', 'queued', 'completed'].includes(p.state))
+    .filter(p => ['active', 'working', 'queued', 'completed', 'escalated'].includes(p.state))
     .sort((a, b) => String(b.createdAt || b.updatedAt || '').localeCompare(String(a.createdAt || a.updatedAt || '')))[0];
   
   if (!recentProject) {
@@ -593,9 +668,17 @@ function handleBuildStatus(text, intent) {
   const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
   const progressBar = '█'.repeat(Math.round(progressPct / 10)) + '░'.repeat(10 - Math.round(progressPct / 10));
   
+  // Stuck detection
+  const { issues, age, ageStr } = detectStuck(recentProject, projectTasks, agents);
+  const isStuck = issues.length > 0;
+  const stuckIssues = issues.filter(i => i.type === 'stuck_task' || i.type === 'agent_starvation');
+  const hasBlockers = issues.filter(i => i.type === 'blocked');
+  const hasFailures = issues.filter(i => i.type === 'failed');
+  
   let responseText = `📊 **Build Status — ${recentProject.name || recentProject.objective || 'Project'}**\n\n`;
   responseText += `📋 **Objective:** ${recentProject.objective || 'N/A'}\n`;
-  responseText += `📌 **Project State:** ${recentProject.state}\n\n`;
+  responseText += `📌 **Project State:** ${recentProject.state}`;
+  responseText += ` | ⏱️ Running for: **${ageStr}**\n\n`;
   
   // Progress bar
   responseText += `**⚙️ Progress:**\n`;
@@ -605,6 +688,35 @@ function handleBuildStatus(text, intent) {
   if (failed > 0) responseText += ` | ❌ Failed: ${failed}`;
   responseText += `\n\n`;
   
+  // Issue summary
+  if (isStuck) {
+    if (stuckIssues.length > 0) {
+      responseText += `**⚠️ POTENTIALLY STUCK:**\n`;
+      for (const issue of stuckIssues) {
+        responseText += `• 🚨 **${issue.task}** (${issue.duration})\n`;
+        responseText += `   Agent: ${issue.agent}\n`;
+        responseText += `   💡 ${issue.suggestion}\n`;
+      }
+      responseText += `\n`;
+    }
+    if (hasBlockers.length > 0) {
+      responseText += `**🚫 BLOCKED TASKS:**\n`;
+      for (const issue of hasBlockers) {
+        responseText += `• **${issue.task}** — ${issue.reason}\n`;
+        responseText += `   💡 ${issue.suggestion}\n`;
+      }
+      responseText += `\n`;
+    }
+    if (hasFailures.length > 0) {
+      responseText += `**❌ FAILED TASKS:**\n`;
+      for (const issue of hasFailures) {
+        responseText += `• **${issue.task}** — ${issue.reason}\n`;
+        responseText += `   💡 ${issue.suggestion}\n`;
+      }
+      responseText += `\n`;
+    }
+  }
+  
   // Detailed task status
   if (projectTasks.length > 0) {
     responseText += `**📋 Tasks:**\n`;
@@ -613,7 +725,11 @@ function handleBuildStatus(text, intent) {
       const state = task.state || 'queued';
       const icon = state === 'completed' ? '✅' : state === 'working' ? '🔄' : state === 'assigned' ? '📌' : state === 'failed' ? '❌' : state === 'blocked' ? '🚫' : '⏳';
       const agentName = agent ? agent.name : '—';
-      responseText += `${icon} **${task.title || task.id}**\n`;
+      const lastUpdate = Date.parse(task.updatedAt || task.createdAt || '');
+      const timeSince = lastUpdate ? formatDuration(Date.now() - lastUpdate) : '';
+      responseText += `${icon} **${task.title || task.id}**`;
+      if (timeSince && state !== 'completed') responseText += ` (${timeSince} ago)`;
+      responseText += `\n`;
       responseText += `   🤖 ${agentName}`;
       if (task.risk) responseText += ` | Risk: ${task.risk}`;
       if (task.executor) responseText += ` | Type: ${task.executor.replace('internal.', '')}`;
@@ -635,6 +751,9 @@ function handleBuildStatus(text, intent) {
   responseText += `\n**📈 Summary:** ${completed}/${total} tasks completed`;
   if (progressPct === 100) {
     responseText += `\n🎉 **Build Complete!** All tasks finished successfully.`;
+  } else if (isStuck && stuckIssues.length > 0) {
+    responseText += `\n🚨 **Potentially Stuck** — ${stuckIssues.length} task(s) haven't progressed in a while.`;
+    responseText += `\n💡 Try: **"retry stuck task"** or **"reset stuck tasks"**`;
   } else if (working > 0) {
     responseText += `\n⚡ **Building** — ${working} task(s) currently being processed.`;
   } else if (queued > 0) {
