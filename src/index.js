@@ -167,7 +167,7 @@ export default { async fetch(request, env) { try {
     wfLines.push('    paths:');
     wfLines.push("      - '.github/workflows/build-apps.yml'");
     wfLines.push('concurrency:');
-    wfLines.push('  group: mauli-build-\refs/heads/main');
+    wfLines.push('  group: mauli-build-$'+'{{ github.ref }}');
     wfLines.push('  cancel-in-progress: true');
     wfLines.push('jobs:');
     wfLines.push('  build-android:');
