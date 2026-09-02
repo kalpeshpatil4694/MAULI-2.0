@@ -191,16 +191,31 @@ function extractPattern(title, success) {
   if (!title) return null;
   const lower = title.toLowerCase();
   
+  // App type patterns
   if (/calculator|math|arithmetic/i.test(lower)) return { type: 'calculator', description: 'Calculator applications' };
-  if (/game|puzzle|chess|card/i.test(lower)) return { type: 'game', description: 'Game applications' };
-  if (/e-commerce|shop|store|cart/i.test(lower)) return { type: 'ecommerce', description: 'E-commerce platforms' };
-  if (/chat|messenger|message/i.test(lower)) return { type: 'messaging', description: 'Messaging applications' };
-  if (/tracker|location|gps/i.test(lower)) return { type: 'tracker', description: 'Location tracking apps' };
-  if (/player|video|music|audio/i.test(lower)) return { type: 'media', description: 'Media player applications' };
-  if (/security|protect|encrypt|firewall/i.test(lower)) return { type: 'security', description: 'Security applications' };
-  if (/pdf|document|report/i.test(lower)) return { type: 'document', description: 'Document generation' };
-  if (/web|website|blog|portal/i.test(lower)) return { type: 'web', description: 'Web applications' };
-  if (/mobile|app|android|ios/i.test(lower)) return { type: 'mobile', description: 'Mobile applications' };
+  if (/game|puzzle|chess|card|arcade/i.test(lower)) return { type: 'game', description: 'Game applications' };
+  if (/e-commerce|shop|store|cart|marketplace/i.test(lower)) return { type: 'ecommerce', description: 'E-commerce platforms' };
+  if (/chat|messenger|message|conversation/i.test(lower)) return { type: 'messaging', description: 'Messaging applications' };
+  if (/tracker|location|gps|map/i.test(lower)) return { type: 'tracker', description: 'Location tracking apps' };
+  if (/player|video|music|audio|stream/i.test(lower)) return { type: 'media', description: 'Media player applications' };
+  if (/security|protect|encrypt|firewall|auth/i.test(lower)) return { type: 'security', description: 'Security applications' };
+  if (/pdf|document|report|invoice|certificate/i.test(lower)) return { type: 'document', description: 'Document generation' };
+  if (/web|website|blog|portal|landing/i.test(lower)) return { type: 'web', description: 'Web applications' };
+  if (/mobile|app|android|ios|flutter/i.test(lower)) return { type: 'mobile', description: 'Mobile applications' };
+  
+  // Technology patterns
+  if (/api|rest|graphql|endpoint/i.test(lower)) return { type: 'api', description: 'API development' };
+  if (/database|sql|schema|migration/i.test(lower)) return { type: 'database', description: 'Database work' };
+  if (/ai|machine.learning|neural|deep.learning/i.test(lower)) return { type: 'ai', description: 'AI/ML applications' };
+  if (/dashboard|admin|analytics|report/i.test(lower)) return { type: 'dashboard', description: 'Dashboard applications' };
+  if (/todo|task|project|kanban/i.test(lower)) return { type: 'productivity', description: 'Productivity tools' };
+  if (/weather|forecast|temperature/i.test(lower)) return { type: 'weather', description: 'Weather applications' };
+  if (/social|feed|post|share|community/i.test(lower)) return { type: 'social', description: 'Social applications' };
+  if (/blog|cms|content|article/i.test(lower)) return { type: 'content', description: 'Content management' };
+  if (/payment|stripe|billing|subscription/i.test(lower)) return { type: 'payment', description: 'Payment systems' };
+  if (/iot|sensor|device|mqtt/i.test(lower)) return { type: 'iot', description: 'IoT applications' };
+  if (/scraping|crawl|extract|data.mining/i.test(lower)) return { type: 'scraping', description: 'Web scraping' };
+  if (/realtime|real.time|websocket|live/i.test(lower)) return { type: 'realtime', description: 'Real-time applications' };
   
   return { type: 'general', description: 'General software' };
 }

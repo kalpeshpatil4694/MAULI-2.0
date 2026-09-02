@@ -349,6 +349,42 @@ function handleDiscussion(text, intent, context) {
     };
   }
 
+  // NEW: Additional discussion topics
+  if (/(devops|ci.cd|deploy|docker|kubernetes|cloud|aws|azure|gcp)/i.test(lower)) {
+    return {
+      text: `☁️ **DevOps & Cloud** — let's automate everything!\n\n**I can help with:**\n• 🔄 CI/CD pipeline setup\n• 🐳 Docker containerization\n• ☸️ Kubernetes orchestration\n• ☁️ Cloud deployment (AWS, Azure, GCP)\n• 📊 Monitoring & alerting\n• 🔐 Security hardening\n\nWant to build a deployment pipeline? Just ask!`,
+      quickReplies: ['Build a CI/CD pipeline', 'Deploy to cloud', 'Setup monitoring']
+    };
+  }
+
+  if (/(security|protect|encrypt|auth|login|password|oauth)/i.test(lower)) {
+    return {
+      text: `🔒 **Security** — protecting your apps!\n\n**I can help with:**\n• 🔐 Authentication systems (OAuth, JWT)\n• 🛡️ Security audits & vulnerability scans\n• 🔒 Encryption & data protection\n• 👤 User management & roles\n• 📋 Compliance checks\n\nWant to build a secure app? Let's talk about security!`,
+      quickReplies: ['Build auth system', 'Security audit', 'Build secure app']
+    };
+  }
+
+  if (/(database|sql|mysql|postgres|mongo|redis|data)/i.test(lower)) {
+    return {
+      text: `🗄️ **Database & Data** — organizing your data!\n\n**I can help with:**\n• 🗄️ Database design & schema\n• 📊 Data analysis & insights\n• 🔄 ETL pipelines\n• 📈 Data visualization\n• 🔍 Search & indexing\n\nWant to build a data-driven app? Let's design your database!`,
+      quickReplies: ['Design database', 'Build data dashboard', 'ETL pipeline']
+    };
+  }
+
+  if (/(iot|sensor|device|mqtt|raspberry|arduino)/i.test(lower)) {
+    return {
+      text: `📡 **IoT & Devices** — connecting the physical world!\n\n**I can build:**\n• 📡 IoT device management\n• 📊 Real-time monitoring dashboards\n• 🔔 Alert systems\n• 📱 Mobile control apps\n• 🔄 Data pipelines for sensors\n\nWant to build an IoT system? Tell me about your devices!`,
+      quickReplies: ['Build IoT dashboard', 'Device management', 'Real-time monitoring']
+    };
+  }
+
+  if (/(saas|subscription|billing|tenant|multi.tenant)/i.test(lower)) {
+    return {
+      text: `💼 **SaaS & Subscriptions** — building recurring revenue!\n\n**I can build:**\n• 💼 Multi-tenant SaaS platforms\n• 💳 Subscription & billing systems\n• 👤 User management & roles\n• 📊 Analytics dashboards\n• 🔐 Tenant isolation\n\nWant to build a SaaS product? Let's plan your architecture!`,
+      quickReplies: ['Build SaaS platform', 'Billing system', 'Multi-tenant app']
+    };
+  }
+
   // General discussion — be conversational
   return {
     text: `That's a great topic! 💡\n\nI'd love to discuss this with you. As MAULI, I can:\n\n• 💬 Chat about any subject\n• 🔍 Share knowledge and insights\n• 💡 Help brainstorm ideas\n• 🚀 Turn ideas into real projects\n\n**Want to go deeper?** I can:\n• Build an app around this topic\n• Research more information\n• Create a project plan\n\nWhat would you like to do next?`,

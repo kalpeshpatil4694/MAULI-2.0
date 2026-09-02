@@ -93,6 +93,128 @@ const AGENT_PATTERNS = {
       system: 'You are a full-stack developer. Build complete, production-ready applications.',
       workflow: 'plan → database → API → UI → deploy'
     }
+  },
+  // ═══ NEW PATTERNS ═══
+  devops_pipeline: {
+    name: 'DevOps Pipeline',
+    description: 'CI/CD pipeline setup and deployment automation',
+    agents: ['DevOps Agent', 'Security Agent', 'QA Agent'],
+    steps: ['Setup CI/CD', 'Configure testing', 'Setup staging', 'Configure production', 'Setup monitoring'],
+    capabilities: ['deployment', 'ci-cd', 'infrastructure', 'monitoring'],
+    template: {
+      system: 'You are a DevOps engineer. Build robust, automated deployment pipelines.',
+      workflow: 'ci-cd → test → staging → production → monitor'
+    }
+  },
+  ai_chatbot: {
+    name: 'AI Chatbot Builder',
+    description: 'Build intelligent conversational AI systems',
+    agents: ['AI/ML Agent', 'Backend Agent', 'Frontend Agent'],
+    steps: ['Design conversation flow', 'Train intent model', 'Build backend API', 'Create chat UI', 'Test conversations'],
+    capabilities: ['ai', 'machine-learning', 'nlp', 'frontend', 'backend'],
+    template: {
+      system: 'You are an AI chatbot architect. Build natural, helpful conversational systems.',
+      workflow: 'design → train → backend → UI → test'
+    }
+  },
+  ecommerce_platform: {
+    name: 'E-Commerce Platform',
+    description: 'Build complete online store with payments',
+    agents: ['Frontend Agent', 'Backend Agent', 'Database Agent', 'Security Agent'],
+    steps: ['Design product catalog', 'Build shopping cart', 'Implement checkout', 'Add payment gateway', 'Setup order management'],
+    capabilities: ['frontend', 'backend', 'database', 'security', 'ecommerce'],
+    template: {
+      system: 'You are an e-commerce architect. Build secure, scalable online stores.',
+      workflow: 'catalog → cart → checkout → payment → orders'
+    }
+  },
+  data_pipeline: {
+    name: 'Data Pipeline Builder',
+    description: 'Build ETL pipelines and data processing workflows',
+    agents: ['Data Agent', 'Backend Agent', 'Database Agent'],
+    steps: ['Design data flow', 'Build extraction', 'Transform data', 'Load to warehouse', 'Create dashboards'],
+    capabilities: ['data-analysis', 'etl', 'data-pipeline', 'visualization'],
+    template: {
+      system: 'You are a data engineer. Build efficient, reliable data pipelines.',
+      workflow: 'design → extract → transform → load → visualize'
+    }
+  },
+  game_developer: {
+    name: 'Game Developer',
+    description: 'Build browser and mobile games',
+    agents: ['Frontend Agent', 'Creative Agent', 'Mobile Agent'],
+    steps: ['Design game mechanics', 'Create game assets', 'Implement game engine', 'Add physics', 'Test gameplay'],
+    capabilities: ['frontend', 'creative', 'game-development', 'graphics'],
+    template: {
+      system: 'You are a game developer. Build fun, engaging interactive games.',
+      workflow: 'mechanics → assets → engine → physics → test'
+    }
+  },
+  saas_platform: {
+    name: 'SaaS Platform Builder',
+    description: 'Build multi-tenant SaaS applications',
+    agents: ['Frontend Agent', 'Backend Agent', 'Database Agent', 'Security Agent', 'DevOps Agent'],
+    steps: ['Design multi-tenant architecture', 'Build auth & billing', 'Create admin dashboard', 'Implement API', 'Deploy & monitor'],
+    capabilities: ['frontend', 'backend', 'database', 'security', 'deployment'],
+    template: {
+      system: 'You are a SaaS architect. Build scalable, multi-tenant platforms.',
+      workflow: 'architecture → auth → admin → API → deploy'
+    }
+  },
+  iot_system: {
+    name: 'IoT System Builder',
+    description: 'Build IoT device management and monitoring',
+    agents: ['Backend Agent', 'Data Agent', 'Mobile Agent', 'DevOps Agent'],
+    steps: ['Design device protocol', 'Build ingestion pipeline', 'Create real-time dashboard', 'Implement alerts', 'Setup device management'],
+    capabilities: ['backend', 'data-analysis', 'monitoring', 'mobile'],
+    template: {
+      system: 'You are an IoT architect. Build connected device systems.',
+      workflow: 'protocol → pipeline → dashboard → alerts → management'
+    }
+  },
+  pdf_generator: {
+    name: 'PDF Generator',
+    description: 'Generate PDF documents, reports, and invoices',
+    agents: ['PDF Agent', 'Creative Agent', 'Backend Agent'],
+    steps: ['Design document template', 'Implement PDF engine', 'Add styling', 'Generate sample', 'Test output'],
+    capabilities: ['pdf', 'document', 'creative', 'backend'],
+    template: {
+      system: 'You are a document generation expert. Create beautiful PDF documents.',
+      workflow: 'template → engine → style → generate → test'
+    }
+  },
+  scraping_system: {
+    name: 'Web Scraping System',
+    description: 'Build intelligent web scraping and data extraction',
+    agents: ['Research Agent', 'Backend Agent', 'Data Agent'],
+    steps: ['Identify targets', 'Build scraper', 'Parse data', 'Store results', 'Create API'],
+    capabilities: ['research', 'data-analysis', 'backend', 'web-fetch'],
+    template: {
+      system: 'You are a web scraping expert. Build efficient, ethical data extraction systems.',
+      workflow: 'targets → scrape → parse → store → api'
+    }
+  },
+  realtime_app: {
+    name: 'Real-Time Application',
+    description: 'Build real-time collaborative applications',
+    agents: ['Frontend Agent', 'Backend Agent', 'Database Agent'],
+    steps: ['Design WebSocket protocol', 'Build real-time sync', 'Create collaborative UI', 'Add conflict resolution', 'Test real-time features'],
+    capabilities: ['frontend', 'backend', 'realtime', 'websocket'],
+    template: {
+      system: 'You are a real-time systems expert. Build low-latency collaborative apps.',
+      workflow: 'protocol → sync → UI → conflicts → test'
+    }
+  },
+  migration_system: {
+    name: 'System Migration',
+    description: 'Migrate legacy systems to modern architectures',
+    agents: ['Backend Agent', 'Database Agent', 'DevOps Agent', 'QA Agent'],
+    steps: ['Analyze legacy system', 'Design migration plan', 'Migrate data', 'Rewrite components', 'Validate and deploy'],
+    capabilities: ['backend', 'database', 'deployment', 'testing'],
+    template: {
+      system: 'You are a migration specialist. Safely migrate systems to modern architectures.',
+      workflow: 'analyze → plan → migrate → rewrite → validate'
+    }
   }
 };
 
