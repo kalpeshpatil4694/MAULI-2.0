@@ -4,7 +4,7 @@ export async function ensureSchema(env) {
   if (!hasD1(env)) return false;
   const statements = [
     `CREATE TABLE IF NOT EXISTS entities (type TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(type,id))`,
-    `CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, type TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)` ,
+    `CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, type TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type)`,
     `CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)`
   ];
@@ -26,19 +26,18 @@ export async function d1List(env, type) {
   const result = await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC').bind(type).all();
   const rows = (result.results ?? []).map(row => JSON.parse(row.data));
   if (type !== 'projects' || !rows.length) return rows;
-
   const taskResult = await env.DB.prepare('SELECT data FROM entities WHERE type = ?').bind('tasks').all();
   const tasks = (taskResult.results ?? []).map(row => JSON.parse(row.data));
-  return rows.map(project => ({
-    ...project,
-    state: projectStateFromTasks(project, tasks)
-  }));
+  return rows.map(project => ({ ...project, state: projectStateFromTasks(project, tasks) }));
 }
 
-export async function d1Put(env, type, value) {
+export async function d1Put(env, type, value, { critical = false } = {}) {
+  const { canWriteD1, recordD1Write } = await import('./d1-quota.js');
+  if (!canWriteD1(env, critical)) return { ...value, _d1WriteDeferred: true };
   const now = new Date().toISOString();
   const item = { ...value, createdAt: value.createdAt ?? now, updatedAt: now };
   await env.DB.prepare(`INSERT INTO entities(type,id,data,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at`).bind(type, item.id, JSON.stringify(item), item.createdAt, now).run();
+  recordD1Write(env, 1);
   return item;
 }
 
@@ -47,14 +46,17 @@ export async function d1Events(env, limit = 50) {
   return (result.results ?? []).map(r => ({ id:r.id, type:r.type, payload:JSON.parse(r.payload), at:r.created_at }));
 }
 
-export async function d1Event(env, event) {
+export async function d1Event(env, event, { critical = false } = {}) {
+  const { canWriteD1, recordD1Write } = await import('./d1-quota.js');
+  if (!canWriteD1(env, critical)) return { ...event, _d1WriteDeferred: true };
   await env.DB.prepare('INSERT INTO events(id,type,payload,created_at) VALUES(?,?,?,?)').bind(event.id,event.type,JSON.stringify(event.payload),event.at).run();
+  recordD1Write(env, 1);
   return event;
 }
 
 export async function claimBuildVersion(env, projectId, buildId, branch, startedAt) {
   if (!hasD1(env)) return false;
-  return d1Put(env, 'build_locks', { id: 'project:' + projectId, projectId, buildId, branch, startedAt, status: 'active' });
+  return d1Put(env, 'build_locks', { id: 'project:' + projectId, projectId, buildId, branch, startedAt, status: 'active' }, { critical: true });
 }
 
 export async function getBuildVersion(env, projectId) {
