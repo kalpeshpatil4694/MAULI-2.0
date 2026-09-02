@@ -1,14 +1,16 @@
 {
-  "name": "mauli2.0",
-  "version": "2.0.0",
-  "private": true,
-  "type": "module",
+  "name": "wifi-hack-tool",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "test": "node --test"
+    "start": "node server.js"
   },
-  "devDependencies": {
-    "wrangler": "^4.0.0"
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1",
+    "node-wifi": "^1.3.4"
   }
 }
