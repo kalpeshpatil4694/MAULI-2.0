@@ -452,10 +452,14 @@ function renderActivity(){
 }
 function renderHealth(){
   api('/api/health').then(r=>{const d=r.data||r;const row=(l,v)=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px;color:var(--text2)">'+l+'</span><span style="font-size:11px">'+v+'</span></div>';
+    const q=d.d1Quota||{};
+    const used=Number(q.used||0), limit=Number(q.limit||100000), remaining=Math.max(0,Number(q.remaining ?? (limit-used)));
+    const pct=Math.min(100,Number(q.percent||0));
+    const status=String(q.status||'unknown');
+    const statusLabel=status==='limit_reached'?'Protection':status==='critical'?'Critical':status==='high'?'High':status==='watch'?'Watch':'Healthy';
     let h=row('Service',d.service||'—')+row('Status','<span style="color:var(--green)">'+esc(d.status||'?')+'</span>')+row('D1',d.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory</span>')+row('AI',d.ai?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--yellow)">No</span>')+row('Time',fmt(d.time));
-    $('hlthDet').innerHTML=h}).catch(e=>{$('hlthDet').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'});
-  let h='';for(const t of S.tools)h+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:12px">🔧</span><div style="flex:1"><b style="font-size:12px">'+esc(t.name)+'</b><div style="font-size:10px;color:var(--text3)">'+esc(t.description||'')+'</div></div><span class="badge badge-'+(t.risk==='read'?'g':t.risk==='write'?'y':'r')+'">'+esc(t.risk)+'</span></div>';
-  $('toolsOut').innerHTML=h||'<div style="text-align:center;padding:10px;color:var(--text2)">No tools</div>';
+    h += '<div style="margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">D1 Daily Usage</div>'+row('Used',used.toLocaleString()+' / '+limit.toLocaleString())+row('Remaining',remaining.toLocaleString())+row('Usage',pct.toFixed(2)+'%')+row('Status','<span>'+esc(statusLabel)+'</span>')+row('UTC Day',esc(q.date||'—'))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">MAULI tracked writes; Cloudflare account meter may differ.</div></div>';
+    $('hlthDet').innerHTML=h}).catch(e=>{$('hlthDet').innerHTML='<div style="color:var(--red);padding:10px">Health unavailable</div>'});
 }
 function renderMemory(){
   const evts=S.events.filter(e=>e.type&&(e.type.includes('task_result')||e.type.includes('solution')||e.type.includes('error')||e.type.includes('command'))).slice(-25).reverse();
