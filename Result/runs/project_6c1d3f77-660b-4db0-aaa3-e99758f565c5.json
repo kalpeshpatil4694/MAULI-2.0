@@ -1,7 +1,7 @@
 {
   "runId": "project_6c1d3f77-660b-4db0-aaa3-e99758f565c5",
   "command": "Teen pati game for mobile",
-  "generatedAt": "2026-09-02T18:48:14.766Z",
+  "generatedAt": "2026-09-02T18:55:09.417Z",
   "result": {
     "status": "completed",
     "runId": "project_6c1d3f77-660b-4db0-aaa3-e99758f565c5",
@@ -22,7 +22,7 @@
       "state": "completed",
       "milestones": [],
       "createdAt": "2026-08-30T10:55:41.847Z",
-      "updatedAt": "2026-09-02T18:48:14.766Z",
+      "updatedAt": "2026-09-02T18:55:09.417Z",
       "finalDeliveryId": "artifact_de50d87c-a238-493f-93c4-fbeb3795a535",
       "completedAt": "2026-09-02T18:48:14.766Z"
     },
@@ -882,15 +882,12 @@
               "downloadPath": "/api/artifacts/artifact_c74c7e1a-5d17-4527-ae70-c639a0fcfc50/download"
             }
           }
-        ],
-        "artifactId": "artifact_de50d87c-a238-493f-93c4-fbeb3795a535",
-        "artifactType": "final-delivery"
+        ]
       },
       "metadata": {
         "state": "completed",
         "generatedBy": "mauli-l1-delivery",
-        "gate": "final-qa+security",
-        "downloadPath": "/api/artifacts/artifact_de50d87c-a238-493f-93c4-fbeb3795a535/download"
+        "gate": "final-qa+security"
       },
       "createdAt": "2026-09-02T18:48:14.766Z",
       "updatedAt": "2026-09-02T18:48:14.766Z"
@@ -899,5 +896,5 @@
     "artifactType": "final-delivery"
   },
   "resultRunId": "project_6c1d3f77-660b-4db0-aaa3-e99758f565c5",
-  "savedAt": "2026-09-02T18:48:14.987Z"
+  "savedAt": "2026-09-02T18:55:09.631Z"
 }
