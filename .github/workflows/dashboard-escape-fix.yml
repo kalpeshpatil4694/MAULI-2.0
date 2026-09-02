@@ -1,6 +1,7 @@
 name: Temporary dashboard escape fix
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
 jobs:
   fix:
     runs-on: ubuntu-latest
