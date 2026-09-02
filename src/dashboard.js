@@ -991,9 +991,9 @@ async function sendChat(){
   addTypingIndicator();
   try{const result=await api('/api/chat',{method:'POST',auth:true,body:JSON.stringify({message:msg})});
     removeTypingIndicator();
-    const text=result.reply||result.message||JSON.stringify(result,null,2);
+    const r=result.data||result;const resp=r.result||r;const text=resp.reply||resp.message||(resp.response&&resp.response.text)||JSON.stringify(result,null,2);
     container.innerHTML+='<div class="chat-msg mauli"><div class="msg-role">MAULI</div><div class="msg-content">'+renderMarkdown(text)+'</div></div>';
-    if(result.quickReplies)addChatQuickReplies(result.quickReplies);
+    const qReplies=(resp.response&&resp.response.quickReplies)||resp.quickReplies;if(qReplies)addChatQuickReplies(qReplies);
     container.scrollTop=container.scrollHeight;
   }catch(e){removeTypingIndicator();container.innerHTML+='<div class="chat-msg mauli" style="border-color:var(--red)"><div class="msg-role">Error</div>'+esc(e.message)+'</div>';container.scrollTop=container.scrollHeight}
 }
