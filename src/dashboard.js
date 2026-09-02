@@ -29,6 +29,13 @@ html{font-size:15px}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-0);color:var(--text);line-height:1.6;min-height:100vh;overflow-x:hidden}
 a{color:var(--accent);text-decoration:none}
 ::selection{background:var(--accent);color:var(--bg-0)}
+
+@keyframes typingBounce{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-6px);opacity:1}}
+.typing-indicator span{animation:typingBounce 1.4s infinite ease-in-out}
+.msg-content{line-height:1.7;font-size:14px}
+.msg-content strong{color:var(--accent)}
+.msg-content em{color:var(--text-muted);font-style:italic}
+
 .search-highlight{background:rgba(0,212,255,.2);border-radius:2px;padding:0 2px}
 .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center}
 .empty-state-icon{font-size:48px;margin-bottom:16px;opacity:.6}
@@ -567,7 +574,7 @@ function navigateTo(page){
   $('pageTitle').textContent=pageTitles[page]||page;
   if(page==='overview')renderOverview();if(page==='agents')renderAgents();if(page==='projects')renderProjects();
   if(page==='tasks')renderTasks();if(page==='activity')renderActivity();if(page==='health')renderHealth();
-  if(page==='memory')renderMemory();if(page==='monitor')renderMonitor();if(page==='integrations')renderIntegrations();if(page==='learning')renderLearning();if(page==='editor')loadRecentEdits();if(page==='changelog')loadChangeHistory();if(page==='builds')loadBuildStatus();if(page==='subagents')loadSubAgents();if(page==='messaging')loadMessages();if(page==='apiexplorer')loadMCPServers();if(page==='downloads')loadDownloads();
+  if(page==='memory')renderMemory();if(page==='monitor')renderMonitor();if(page==='integrations')renderIntegrations();if(page==='learning')renderLearning();if(page==='editor')loadRecentEdits();if(page==='changelog')loadChangeHistory();if(page==='builds')loadBuildStatus();if(page==='subagents')loadSubAgents();if(page==='messaging')loadMessages();if(page==='apiexplorer')loadMCPServers();if(page==='downloads')loadDownloads();if(page==='chat')loadChat();
 }
 document.querySelectorAll('.nav-item[data-page]').forEach(el=>{el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();navigateTo(el.dataset.page)})});
 const navPages=['command','chat','overview','agents','monitor','projects','tasks','docs','approvals','activity','health','memory','integrations','editor','changelog','learning','builds','subagents','messaging','apiexplorer','downloads','shortcuts'];
@@ -942,15 +949,53 @@ function loadDownloads(){
   $('downloadsList').innerHTML=html||'<div class="empty"><div class="empty-icon">📥</div><div class="empty-text">No projects with code artifacts yet.<br>Send a command to build something!</div></div>';
 }
 function quickCmd(cmd){$('cmdInput').value=cmd;sendCommand()}
+function renderMarkdown(text){
+  if(!text)return'';
+  let s=esc(text);
+  s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  s=s.replace(/\x60([^\x60]+)\x60/g,'<code style="background:var(--bg-2);padding:2px 6px;border-radius:4px;font-size:12px">$1</code>');
+  s=s.replace(/^### (.+)$/gm,'<div style="margin:10px 0 4px;font-size:13px;font-weight:700;color:var(--accent)">$1</div>');
+  s=s.replace(/^## (.+)$/gm,'<div style="margin:12px 0 6px;font-size:14px;font-weight:700;color:var(--text)">$1</div>');
+  s=s.replace(/^# (.+)$/gm,'<div style="margin:14px 0 8px;font-size:15px;font-weight:700;color:var(--text)">$1</div>');
+  s=s.replace(/^• (.+)$/gm,'<div style="padding-left:12px">• $1</div>');
+  s=s.replace(/\n/g,'<br>');
+  return s;
+}
+function addChatQuickReplies(replies){
+  if(!replies||!replies.length)return;
+  const container=$('chatMessages');const wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 8px 48px';
+  replies.forEach(r=>{const btn=document.createElement('button');btn.className='btn btn-sm btn-accent';btn.style.cssText='font-size:11px;padding:4px 10px;border-radius:12px;white-space:nowrap';btn.textContent=r;btn.onclick=()=>{$('chatInput').value=r;sendChat()};wrap.appendChild(btn)});
+  container.appendChild(wrap);container.scrollTop=container.scrollHeight;
+}
+function addTypingIndicator(){const container=$('chatMessages');const div=document.createElement('div');div.className='chat-msg mauli';div.id='typingIndicator';div.innerHTML='<div class="msg-role">MAULI</div><div style="display:flex;gap:4px;padding:8px 0"><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:typingBounce 1.4s infinite ease-in-out"></span><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:typingBounce 1.4s infinite ease-in-out .2s"></span><span style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:typingBounce 1.4s infinite ease-in-out .4s"></span></div>';container.appendChild(div);container.scrollTop=container.scrollHeight}
+function removeTypingIndicator(){const el=$('typingIndicator');if(el)el.remove()}
+function loadChat(){
+  const container=$('chatMessages');
+  if(!container)return;
+  // Only add welcome if empty
+  if(container.children.length<=1){
+    const hour=new Date().getHours();
+    const greeting=hour<12?'Good morning':hour<17?'Good afternoon':'Good evening';
+    container.innerHTML='<div class="chat-msg mauli"><div class="msg-role">MAULI</div><div class="msg-content">'+renderMarkdown(greeting+'! 👋 I am **MAULI 2.0**, your AI command center.\n\nI can help you with:\n• 💬 Discuss any topic\n• 🔍 Answer questions\n• 🚀 Build apps, websites, or tools\n• 📊 Check your project status\n• 🤖 Manage your AI agent team\n\nWhat would you like to do?')+'</div></div>';
+    addChatQuickReplies(['Build a web app','Chat about tech','Show my projects','What can you do?']);
+  }
+}
+
 async function sendChat(){
   const input=$('chatInput');const msg=input.value.trim();if(!msg)return;
   const container=$('chatMessages');
   container.innerHTML+='<div class="chat-msg user"><div class="msg-role">You</div>'+esc(msg)+'</div>';
   input.value='';container.scrollTop=container.scrollHeight;
+  addTypingIndicator();
   try{const result=await api('/api/chat',{method:'POST',auth:true,body:JSON.stringify({message:msg})});
-    container.innerHTML+='<div class="chat-msg mauli"><div class="msg-role">MAULI</div>'+esc(result.reply||result.message||JSON.stringify(result,null,2))+'</div>';
+    removeTypingIndicator();
+    const text=result.reply||result.message||JSON.stringify(result,null,2);
+    container.innerHTML+='<div class="chat-msg mauli"><div class="msg-role">MAULI</div><div class="msg-content">'+renderMarkdown(text)+'</div></div>';
+    if(result.quickReplies)addChatQuickReplies(result.quickReplies);
     container.scrollTop=container.scrollHeight;
-  }catch(e){container.innerHTML+='<div class="chat-msg mauli" style="border-color:var(--red)"><div class="msg-role">Error</div>'+esc(e.message)+'</div>';container.scrollTop=container.scrollHeight}
+  }catch(e){removeTypingIndicator();container.innerHTML+='<div class="chat-msg mauli" style="border-color:var(--red)"><div class="msg-role">Error</div>'+esc(e.message)+'</div>';container.scrollTop=container.scrollHeight}
 }
 async function runSelfTest(){
   try{const result=await api('/api/self-test');const r=result.result||result;
