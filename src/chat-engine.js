@@ -14,6 +14,161 @@ import { remember } from './memory.js';
 const conversationContext = new Map();
 const MAX_CONTEXT = 10;
 
+// ═══ APP-SPECIFIC FEATURES ═══
+// Detailed feature lists for common app types — shown in chat responses
+const APP_FEATURES = {
+  calculator: {
+    name: 'Calculator',
+    icon: '🧮',
+    features: ['Basic operations (+, −, ×, ÷)', 'Scientific functions (sin, cos, tan, log, √)', 'History log', 'Keyboard support', 'Responsive design', 'Dark/Light theme'],
+    tech: 'HTML + CSS + JavaScript'
+  },
+  weather: {
+    name: 'Weather App',
+    icon: '🌤️',
+    features: ['Current temperature & conditions', '5-day forecast', 'Location search', 'Weather icons & animations', 'Humidity, wind speed, UV index', 'Responsive mobile layout'],
+    tech: 'HTML + CSS + JavaScript + Weather API'
+  },
+  todo: {
+    name: 'Todo List',
+    icon: '📋',
+    features: ['Add/edit/delete tasks', 'Mark complete', 'Filter (All/Active/Completed)', 'Local storage persistence', 'Drag & drop reorder', 'Due dates & priority'],
+    tech: 'HTML + CSS + JavaScript'
+  },
+  ecommerce: {
+    name: 'E-Commerce Store',
+    icon: '🛒',
+    features: ['Product catalog with images', 'Search & filter', 'Shopping cart', 'Checkout flow', 'Payment integration', 'Order tracking', 'Admin dashboard'],
+    tech: 'React + Node.js + Database'
+  },
+  game: {
+    name: 'Game',
+    icon: '🎮',
+    features: ['Game canvas rendering', 'Score tracking', 'High score leaderboard', 'Sound effects', 'Multiple levels', 'Responsive controls'],
+    tech: 'HTML5 Canvas + JavaScript'
+  },
+  notes: {
+    name: 'Notes App',
+    icon: '📝',
+    features: ['Create/edit/delete notes', 'Rich text formatting', 'Search notes', 'Categories & tags', 'Cloud sync', 'Export to PDF'],
+    tech: 'HTML + CSS + JavaScript'
+  },
+  chat: {
+    name: 'Chat App',
+    icon: '💬',
+    features: ['Real-time messaging', 'User authentication', 'Chat rooms', 'Emoji support', 'Read receipts', 'Online status'],
+    tech: 'React + WebSocket + Node.js'
+  },
+  dashboard: {
+    name: 'Admin Dashboard',
+    icon: '📊',
+    features: ['Charts & graphs', 'Data tables', 'User management', 'Settings panel', 'Real-time updates', 'Export reports'],
+    tech: 'React + Charts Library + API'
+  },
+  music: {
+    name: 'Music Player',
+    icon: '🎵',
+    features: ['Audio playback', 'Playlist management', 'Play/pause/skip controls', 'Volume slider', 'Seek bar', 'Album art display'],
+    tech: 'HTML + CSS + JavaScript + Web Audio API'
+  },
+  portfolio: {
+    name: 'Portfolio Website',
+    icon: '💼',
+    features: ['Hero section', 'About me', 'Project gallery', 'Skills section', 'Contact form', 'Responsive design', 'Smooth animations'],
+    tech: 'HTML + CSS + JavaScript'
+  },
+  blog: {
+    name: 'Blog/CMS',
+    icon: '📰',
+    features: ['Create/edit/delete posts', 'Rich text editor', 'Categories & tags', 'Comments system', 'Search functionality', 'RSS feed'],
+    tech: 'React + Node.js + Database'
+  },
+  invoice: {
+    name: 'Invoice Generator',
+    icon: '📄',
+    features: ['Create invoices', 'Add line items', 'Tax calculations', 'PDF export', 'Client management', 'Invoice history'],
+    tech: 'HTML + CSS + JavaScript + PDF library'
+  },
+  fitness: {
+    name: 'Fitness Tracker',
+    icon: '💪',
+    features: ['Workout logging', 'Exercise library', 'Progress charts', 'Calorie tracking', 'Goal setting', 'Rest timer'],
+    tech: 'React + Charts + Local Storage'
+  },
+  recipe: {
+    name: 'Recipe App',
+    icon: '🍳',
+    features: ['Recipe browser', 'Search & filter', 'Step-by-step cooking mode', 'Ingredient scaling', 'Favorites & meal plan', 'Nutrition info'],
+    tech: 'HTML + CSS + JavaScript'
+  },
+  social: {
+    name: 'Social Media App',
+    icon: '👥',
+    features: ['User profiles', 'Post feed', 'Like & comment', 'Follow system', 'Notifications', 'Image uploads'],
+    tech: 'React + Node.js + Database + Storage'
+  },
+  erp: {
+    name: 'ERP System',
+    icon: '🏢',
+    features: ['Inventory management', 'Sales tracking', 'Purchase orders', 'Employee management', 'Financial reports', 'Multi-user roles'],
+    tech: 'React + Node.js + Database'
+  },
+  kanban: {
+    name: 'Kanban Board',
+    icon: '📌',
+    features: ['Drag & drop cards', 'Multiple boards', 'Labels & priorities', 'Due dates', 'Task assignments', 'Progress tracking'],
+    tech: 'HTML + CSS + JavaScript'
+  },
+  streaming: {
+    name: 'Streaming App',
+    icon: '📺',
+    features: ['Video player', 'Content library', 'Search & browse', 'Watchlist', 'Quality settings', 'Subtitles support'],
+    tech: 'React + Video Player + API'
+  },
+  booking: {
+    name: 'Booking System',
+    icon: '📅',
+    features: ['Calendar view', 'Time slot selection', 'Booking confirmation', 'Email reminders', 'Admin panel', 'Availability management'],
+    tech: 'React + Node.js + Calendar'
+  },
+  survey: {
+    name: 'Survey/Form Builder',
+    icon: '📝',
+    features: ['Drag & drop builder', 'Multiple question types', 'Conditional logic', 'Response analytics', 'Export results', 'Share via link'],
+    tech: 'React + Node.js + Charts'
+  }
+};
+
+function getAppFeatures(text) {
+  const lower = text.toLowerCase();
+  if (/calculator|calc|math|arithmetic|सोप/.test(lower)) return APP_FEATURES.calculator;
+  if (/weather|forecast|मौसम|temperature/.test(lower)) return APP_FEATURES.weather;
+  if (/todo|task.list|to.do|कार्य/.test(lower)) return APP_FEATURES.todo;
+  if (/ecommerce|e.commerce|shop|store|cart|दुकान|ओळ/.test(lower)) return APP_FEATURES.ecommerce;
+  if (/game|गेम|puzzle|chess|arcade/.test(lower)) return APP_FEATURES.game;
+  if (/note|notepad|notebook|सुचना|टिप/.test(lower)) return APP_FEATURES.notes;
+  if (/chat|messenger|संवाद|message/.test(lower)) return APP_FEATURES.chat;
+  if (/dashboard|admin|control.panel|डॅशबोर्ड/.test(lower)) return APP_FEATURES.dashboard;
+  if (/music|song|player|गाणे|संगीत/.test(lower)) return APP_FEATURES.music;
+  if (/portfolio|website|landing|पोर्टफोलिओ/.test(lower)) return APP_FEATURES.portfolio;
+  if (/blog|cms|article|ब्लॉग/.test(lower)) return APP_FEATURES.blog;
+  if (/invoice|bill|receipt|बिल/.test(lower)) return APP_FEATURES.invoice;
+  if (/fitness|workout|gym|exercise|व्यायाम/.test(lower)) return APP_FEATURES.fitness;
+  if (/recipe|cooking|food|पाककला/.test(lower)) return APP_FEATURES.recipe;
+  if (/social|friend|post|शेअर/.test(lower)) return APP_FEATURES.social;
+  if (/erp|inventory|management|व्यवस्थापन/.test(lower)) return APP_FEATURES.erp;
+  if (/kanban|board|project.management|तिकीट/.test(lower)) return APP_FEATURES.kanban;
+  if (/stream|video|youtube|व्हिडिओ/.test(lower)) return APP_FEATURES.streaming;
+  if (/booking|appointment|reservation|बुकिंग/.test(lower)) return APP_FEATURES.booking;
+  if (/survey|form|quiz|प्रश्नावली/.test(lower)) return APP_FEATURES.survey;
+  return null;
+}
+
+function formatFeatureList(appInfo) {
+  if (!appInfo) return '';
+  return `**${appInfo.icon} ${appInfo.name} Features:**\n` + appInfo.features.map(f => `• ${f}`).join('\n') + `\n\n🛠️ **Tech:** ${appInfo.tech}`;
+}
+
 /**
  * Process a chat message — conversational assistant with context memory
  */
@@ -94,8 +249,13 @@ function wasRecentlyDiscussed(userId, keyword) {
 function analyzeIntent(text, context) {
   const lower = text.toLowerCase().trim();
 
-  // Marathi/Hindi detection
-  if (/(kasa ahe|kay chal|namaskar|namaste|dhanyavaad|shukriya|bagh|sang|kar|de|ghya|theva|pan|ani|mag|tar|mahiti|project|command)/i.test(lower) && !/(build|create|make)/i.test(lower)) {
+  // Marathi/Hindi build requests (must come BEFORE general Marathi chat)
+  if (/banva|banvay|tayar|build|create|make|develop|design|implement/.test(lower)) {
+    return { type: 'command', action: 'execute', category: 'create' };
+  }
+
+  // Marathi/Hindi general chat (no build intent)
+  if (/(kasa ahe|kay chal|namaskar|namaste|dhanyavaad|shukriya|bagh|sang|kar|de|ghya|theva|pan|ani|mag|tar|mahiti|project|command)/i.test(lower)) {
     return { type: 'marathi', action: 'chat' };
   }
 
@@ -460,6 +620,10 @@ function handleProjectInfo(text, intent) {
 async function handleCommand(text, intent, env) {
   try {
     seedAgents();
+    
+    // Detect app-specific features from the user's request
+    const appInfo = getAppFeatures(text);
+    
     const result = await planCommand(text, env);
     const project = result.project;
     const tasks = result.tasks || [];
@@ -471,8 +635,13 @@ async function handleCommand(text, intent, env) {
     responseText += `📊 **Status:** ${status}\n`;
     responseText += `🎯 **Tasks:** ${tasks.length}\n\n`;
 
+    // Show specific features/functions the app will include
+    if (appInfo) {
+      responseText += `${formatFeatureList(appInfo)}\n\n`;
+    }
+
     if (tasks.length > 0) {
-      responseText += `**Task Pipeline:**\n`;
+      responseText += `**📋 Task Pipeline:**\n`;
       for (const t of tasks.slice(0, 6)) {
         const task = t.task || t;
         const state = task.state || 'queued';
