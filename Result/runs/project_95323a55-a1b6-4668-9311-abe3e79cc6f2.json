@@ -1,7 +1,7 @@
 {
   "runId": "project_95323a55-a1b6-4668-9311-abe3e79cc6f2",
   "command": "Mobile tracker application",
-  "generatedAt": "2026-09-02T18:48:23.352Z",
+  "generatedAt": "2026-09-02T18:55:19.177Z",
   "result": {
     "status": "completed",
     "runId": "project_95323a55-a1b6-4668-9311-abe3e79cc6f2",
@@ -22,7 +22,7 @@
       "state": "completed",
       "milestones": [],
       "createdAt": "2026-08-30T08:46:17.162Z",
-      "updatedAt": "2026-09-02T18:48:23.352Z",
+      "updatedAt": "2026-09-02T18:55:19.177Z",
       "finalDeliveryId": "artifact_52dc967d-2dc9-4701-ac61-94bd667cc9a3",
       "completedAt": "2026-09-02T18:48:23.352Z"
     },
@@ -881,15 +881,12 @@
               "generatedBy": "mauli-l1-delivery"
             }
           }
-        ],
-        "artifactId": "artifact_52dc967d-2dc9-4701-ac61-94bd667cc9a3",
-        "artifactType": "final-delivery"
+        ]
       },
       "metadata": {
         "state": "completed",
         "generatedBy": "mauli-l1-delivery",
-        "gate": "final-qa+security",
-        "downloadPath": "/api/artifacts/artifact_52dc967d-2dc9-4701-ac61-94bd667cc9a3/download"
+        "gate": "final-qa+security"
       },
       "createdAt": "2026-09-02T18:48:23.352Z",
       "updatedAt": "2026-09-02T18:48:23.352Z"
@@ -898,5 +895,5 @@
     "artifactType": "final-delivery"
   },
   "resultRunId": "project_95323a55-a1b6-4668-9311-abe3e79cc6f2",
-  "savedAt": "2026-09-02T18:48:23.565Z"
+  "savedAt": "2026-09-02T18:55:19.392Z"
 }
