@@ -194,6 +194,7 @@ export async function processChatMessage({ message, userId = 'founder', env = {}
     case 'command': response = await handleCommand(text, intent, env); break;
     case 'question': response = handleQuestion(text, intent, context); break;
     case 'discuss': response = handleDiscussion(text, intent, context); break;
+    case 'build_status': response = handleBuildStatus(text, intent); break;
     case 'news': response = await handleNews(text, intent); break;
     case 'status': response = handleStatusRequest(text, intent); break;
     case 'help': response = handleHelp(text); break;
@@ -283,6 +284,11 @@ function analyzeIntent(text, context) {
   // Project info
   if (/(project|task|agent|team|progress|status|history|completed|active|sangit|dakhav)/i.test(lower)) {
     return { type: 'project', action: 'info' };
+  }
+
+  // Build status requests
+  if (/\b(build.?status|project.?status|what.?happening|progress|progress.?report|how.?going|kay.?chal|update.?build|latest.?update|build.?progress|working.?on)\b/i.test(lower)) {
+    return { type: 'build_status', action: 'query' };
   }
 
   // News requests (before general discussion)
@@ -558,6 +564,89 @@ function handleDiscussion(text, intent, context) {
   };
 }
 
+// ═══ BUILD STATUS HANDLER ═══
+
+function handleBuildStatus(text, intent) {
+  const projects = store.list('projects');
+  const allTasks = store.list('tasks');
+  const agents = store.list('agents');
+  
+  // Get the most recent active/queued project
+  const recentProject = projects
+    .filter(p => ['active', 'working', 'queued', 'completed'].includes(p.state))
+    .sort((a, b) => String(b.createdAt || b.updatedAt || '').localeCompare(String(a.createdAt || a.updatedAt || '')))[0];
+  
+  if (!recentProject) {
+    return {
+      text: `📊 **No Active Projects**\n\nThere are no projects currently building or recently completed.\n\n**Total Projects:** ${projects.length}\n**Total Tasks:** ${allTasks.length}\n\n💡 Tell me what to build and I'll start a new project!`,
+      quickReplies: ['Build a web app', 'Build a calculator', 'Show projects']
+    };
+  }
+  
+  const projectTasks = allTasks.filter(t => t.projectId === recentProject.id);
+  const completed = projectTasks.filter(t => t.state === 'completed').length;
+  const working = projectTasks.filter(t => t.state === 'working' || t.state === 'assigned').length;
+  const failed = projectTasks.filter(t => t.state === 'failed').length;
+  const blocked = projectTasks.filter(t => t.state === 'blocked').length;
+  const queued = projectTasks.filter(t => t.state === 'queued').length;
+  const total = projectTasks.length;
+  const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const progressBar = '█'.repeat(Math.round(progressPct / 10)) + '░'.repeat(10 - Math.round(progressPct / 10));
+  
+  let responseText = `📊 **Build Status — ${recentProject.name || recentProject.objective || 'Project'}**\n\n`;
+  responseText += `📋 **Objective:** ${recentProject.objective || 'N/A'}\n`;
+  responseText += `📌 **Project State:** ${recentProject.state}\n\n`;
+  
+  // Progress bar
+  responseText += `**⚙️ Progress:**\n`;
+  responseText += `\`${progressBar}\` ${progressPct}%\n`;
+  responseText += `✅ Done: ${completed} | 🔄 Active: ${working} | ⏳ Queue: ${queued}`;
+  if (blocked > 0) responseText += ` | 🚫 Blocked: ${blocked}`;
+  if (failed > 0) responseText += ` | ❌ Failed: ${failed}`;
+  responseText += `\n\n`;
+  
+  // Detailed task status
+  if (projectTasks.length > 0) {
+    responseText += `**📋 Tasks:**\n`;
+    for (const task of projectTasks.slice(0, 10)) {
+      const agent = task.assignedAgentId ? agents.find(a => a.id === task.assignedAgentId) : null;
+      const state = task.state || 'queued';
+      const icon = state === 'completed' ? '✅' : state === 'working' ? '🔄' : state === 'assigned' ? '📌' : state === 'failed' ? '❌' : state === 'blocked' ? '🚫' : '⏳';
+      const agentName = agent ? agent.name : '—';
+      responseText += `${icon} **${task.title || task.id}**\n`;
+      responseText += `   🤖 ${agentName}`;
+      if (task.risk) responseText += ` | Risk: ${task.risk}`;
+      if (task.executor) responseText += ` | Type: ${task.executor.replace('internal.', '')}`;
+      responseText += `\n`;
+    }
+    if (projectTasks.length > 10) responseText += `   ... and ${projectTasks.length - 10} more tasks\n`;
+  }
+  
+  // Active agents
+  const activeAgents = agents.filter(a => a.state !== 'available' && a.state !== 'offline');
+  if (activeAgents.length > 0) {
+    responseText += `\n**🤖 Active Agents:**\n`;
+    for (const a of activeAgents.slice(0, 5)) {
+      responseText += `• ${a.name} (${a.state})\n`;
+    }
+  }
+  
+  // Summary
+  responseText += `\n**📈 Summary:** ${completed}/${total} tasks completed`;
+  if (progressPct === 100) {
+    responseText += `\n🎉 **Build Complete!** All tasks finished successfully.`;
+  } else if (working > 0) {
+    responseText += `\n⚡ **Building** — ${working} task(s) currently being processed.`;
+  } else if (queued > 0) {
+    responseText += `\n📤 **Queued** — ${queued} task(s) waiting to be picked up.`;
+  }
+  
+  return {
+    text: responseText,
+    quickReplies: ['Build another', 'Show projects', 'Help']
+  };
+}
+
 // ═══ NEWS HANDLER ═══
 
 async function handleNews(text, intent) {
@@ -738,33 +827,76 @@ async function handleCommand(text, intent, env) {
     const tasks = result.tasks || [];
     const status = result.status || 'unknown';
 
-    let responseText = `🚀 **Project Created!**\n\n`;
+    // Count task states for progress
+    const completed = tasks.filter(t => (t.task || t).state === 'completed').length;
+    const working = tasks.filter(t => (t.task || t).state === 'working' || (t.task || t).state === 'assigned').length;
+    const failed = tasks.filter(t => (t.task || t).state === 'failed').length;
+    const total = tasks.length;
+    const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const progressBar = '█'.repeat(Math.round(progressPct / 10)) + '░'.repeat(10 - Math.round(progressPct / 10));
+
+    let responseText = `🚀 **Project Build Started!**\n\n`;
     responseText += `📋 **Name:** ${project?.name || 'Unknown'}\n`;
     responseText += `📝 **Objective:** ${project?.objective || text}\n`;
     responseText += `📊 **Status:** ${status}\n`;
-    responseText += `🎯 **Tasks:** ${tasks.length}\n\n`;
+    responseText += `🎯 **Total Tasks:** ${total}\n\n`;
+
+    // Build progress section
+    responseText += `**⚙️ Build Progress:**\n`;
+    responseText += `\`${progressBar}\` ${progressPct}%\n`;
+    responseText += `✅ Completed: ${completed} | 🔄 Working: ${working} | ⏳ Pending: ${total - completed - working - failed}`;
+    if (failed > 0) responseText += ` | ❌ Failed: ${failed}`;
+    responseText += `\n\n`;
 
     // Show specific features/functions the app will include
     if (appInfo) {
       responseText += `${formatFeatureList(appInfo)}\n\n`;
     }
 
+    // Build phases explanation
+    responseText += `**🔧 Build Pipeline Phases:**\n`;
+    responseText += `1️⃣ **Research** — Validate requirements\n`;
+    responseText += `2️⃣ **Planning** — Define architecture & plan\n`;
+    responseText += `3️⃣ **Backend** — Implement API & server logic\n`;
+    responseText += `4️⃣ **Database** — Design schema & persistence\n`;
+    responseText += `5️⃣ **Frontend** — Build UI & user experience\n`;
+    responseText += `6️⃣ **Security** — Security review & audit\n`;
+    responseText += `7️⃣ **Testing** — QA verification & testing\n\n`;
+
+    // Detailed task pipeline with agents
     if (tasks.length > 0) {
-      responseText += `**📋 Task Pipeline:**\n`;
-      for (const t of tasks.slice(0, 6)) {
+      responseText += `**📋 Task Details:**\n`;
+      for (const t of tasks.slice(0, 8)) {
         const task = t.task || t;
+        const agent = t.selectedAgent;
         const state = task.state || 'queued';
-        const icon = state === 'completed' ? '✅' : state === 'working' ? '🔄' : state === 'failed' ? '❌' : '⏳';
-        responseText += `${icon} ${task.title || 'Task'}\n`;
+        const icon = state === 'completed' ? '✅' : state === 'working' ? '🔄' : state === 'assigned' ? '📌' : state === 'failed' ? '❌' : '⏳';
+        const agentName = agent ? agent.name : (task.assignedAgentId ? 'Assigned' : 'Unassigned');
+        const risk = task.risk === 'high' ? '🔴' : task.risk === 'medium' ? '🟡' : '🟢';
+        responseText += `${icon} **${task.title || 'Task'}**\n`;
+        responseText += `   🤖 ${agentName} ${risk} Risk: ${task.risk || 'low'}`;
+        if (task.toolNames && task.toolNames.length) responseText += ` | 🔧 Tools: ${task.toolNames.length}`;
+        responseText += `\n`;
       }
-      if (tasks.length > 6) responseText += `... and ${tasks.length - 6} more\n`;
+      if (tasks.length > 8) responseText += `   ... and ${tasks.length - 8} more tasks\n`;
     }
 
-    responseText += `\n💡 You can track progress in the Projects tab!`;
+    // Status-specific messages
+    if (status === 'awaiting_approval') {
+      responseText += `\n⏳ **Waiting for approval** — This project requires your approval before execution starts.`;
+    } else if (status === 'queued') {
+      responseText += `\n📤 **Queued** — Project is queued for execution. The scheduler will pick it up shortly.`;
+    } else if (status === 'completed') {
+      responseText += `\n🎉 **Build Complete!** All tasks have been executed and verified.`;
+    } else {
+      responseText += `\n⚡ **Building in progress** — Agents are working on your project.`;
+    }
+
+    responseText += `\n\n💡 Say **"build status"** to check latest progress!`;
     return {
       text: responseText,
       actions: [{ type: 'project_created', projectId: project?.id, taskCount: tasks.length }],
-      quickReplies: ['Build another', 'Show my projects', 'Check status']
+      quickReplies: ['Build status', 'Build another', 'Show my projects']
     };
   } catch (error) {
     return {
