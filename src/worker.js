@@ -57,13 +57,17 @@ export default {
           }));
         }
 
-        return ok({
+        const responseData = {
           result: { ...queued, status: queued.status, execution: 'scheduler' },
           runId: queued.runId,
           resultFile: saved
-        }, 202);
+        };
+        // Keep both the standard API envelope and the legacy dashboard contract.
+        // dashboard.js reads r.result directly, while newer clients use r.data.result.
+        return Response.json({ ok: true, data: responseData, ...responseData }, { status: 202 });
       } catch (error) {
-        return ok({ result: { status: 'error', error: error?.message || 'Command queue failed', command: body.command } }, 500);
+        const result = { status: 'error', error: error?.message || 'Command queue failed', command: body.command };
+        return Response.json({ ok: false, data: { result }, result }, { status: 500 });
       }
     }
 
