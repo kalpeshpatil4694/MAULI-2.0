@@ -1,0 +1,390 @@
+{
+  "runId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+  "command": "Mobile health tracker application",
+  "generatedAt": "2026-09-02T18:48:10.469Z",
+  "result": {
+    "status": "failed",
+    "runId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+    "command": "Mobile health tracker application",
+    "project": {
+      "id": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+      "name": "Project: Design and develop a mobile health tracker application to mo",
+      "objective": "Design and develop a mobile health tracker application to monitor and manage user health and wellness",
+      "founderCommand": "Mobile health tracker application",
+      "requirements": [
+        "User registration and profile management",
+        "Integration with wearable devices and health sensors",
+        "Tracking of physical activity, sleep, and nutrition",
+        "Personalized health and wellness recommendations",
+        "Secure data storage and analytics"
+      ],
+      "priority": "normal",
+      "state": "failed",
+      "milestones": [],
+      "createdAt": "2026-08-31T11:11:33.368Z",
+      "updatedAt": "2026-09-02T18:48:10.469Z",
+      "failedAt": "2026-09-02T18:48:10.469Z"
+    },
+    "tasks": [
+      {
+        "id": "task_e202ad37-9129-485e-996d-1d1977ea8772",
+        "projectId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "title": "Create testing and verification plan",
+        "description": "Design and develop a mobile health tracker application to monitor and manage user health and wellness",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_40bd99b4-84dc-4380-9e8c-ae232d60ee98"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "verifying",
+        "attempts": 2,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 70,
+        "updatedAt": "2026-09-01T06:34:20.201Z",
+        "createdAt": "2026-08-31T11:11:33.368Z",
+        "blockedReason": null,
+        "assignedAt": "2026-08-31T11:11:33.368Z",
+        "startedAt": "2026-08-31T11:15:48.852Z",
+        "memoryContext": [],
+        "error": "Execution lease expired",
+        "claimedAt": "2026-09-01T06:34:20.201Z",
+        "leaseUntil": "2026-09-01T06:35:50.201Z",
+        "result": {
+          "id": "verification_c171464b-608f-4453-b801-bbf2603b8852",
+          "taskId": "task_e202ad37-9129-485e-996d-1d1977ea8772",
+          "executionId": "run_50c483f2-3b4c-427c-a5c8-ea1a5a9b9602",
+          "passed": true,
+          "checks": [
+            {
+              "name": "execution_completed",
+              "passed": true
+            },
+            {
+              "name": "has_result",
+              "passed": true
+            },
+            {
+              "name": "task_identity",
+              "passed": true
+            },
+            {
+              "name": "agent_identity",
+              "passed": true
+            },
+            {
+              "name": "acceptance_criteria",
+              "passed": true,
+              "details": [
+                {
+                  "rule": {
+                    "field": "type",
+                    "equals": "plan"
+                  },
+                  "passed": true,
+                  "actual": "plan",
+                  "mode": "equals"
+                }
+              ]
+            }
+          ],
+          "verifiedAt": "2026-09-01T06:34:20.201Z"
+        }
+      },
+      {
+        "id": "task_45167858-2fc9-49c7-a24e-bffe6c64790e",
+        "projectId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "title": "Perform security review",
+        "description": "Design and develop a mobile health tracker application to monitor and manage user health and wellness",
+        "requiredCapabilities": [
+          "security",
+          "audit"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_40bd99b4-84dc-4380-9e8c-ae232d60ee98"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "failed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 60,
+        "updatedAt": "2026-08-31T11:15:48.852Z",
+        "createdAt": "2026-08-31T11:11:33.368Z",
+        "blockedReason": null,
+        "assignedAt": "2026-08-31T11:11:33.368Z",
+        "startedAt": "2026-08-31T11:15:48.754Z",
+        "memoryContext": [],
+        "result": null,
+        "verificationId": "verification_5c2167cb-60c5-483e-9b97-fd8890714527",
+        "error": "Functional code generation failed: MAULI refused to deliver a placeholder or incomplete application. {\"name\":\"AiError\"}"
+      },
+      {
+        "id": "task_9e57d1c9-b36a-4e67-a32a-71ecbeaa2de3",
+        "projectId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "title": "Implement database and persistence schema: Personalized health and wellness recommendations",
+        "description": "Design and develop a mobile health tracker application to monitor and manage user health and wellness",
+        "requiredCapabilities": [
+          "database",
+          "schema",
+          "sql"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_40bd99b4-84dc-4380-9e8c-ae232d60ee98"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "failed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 40,
+        "updatedAt": "2026-08-31T11:15:48.754Z",
+        "createdAt": "2026-08-31T11:11:33.368Z",
+        "blockedReason": null,
+        "assignedAt": "2026-08-31T11:11:33.368Z",
+        "startedAt": "2026-08-31T11:14:13.628Z",
+        "memoryContext": [],
+        "result": null,
+        "verificationId": "verification_a579cb91-17aa-4297-9703-b6c2d491c4c2",
+        "error": "Functional code generation failed: MAULI refused to deliver a placeholder or incomplete application. {\"name\":\"AiError\"}"
+      },
+      {
+        "id": "task_9d7cda3c-e1c6-4666-8801-abb1a0aea8ea",
+        "projectId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "title": "Implement backend code and API: Tracking of physical activity, sleep, and nutrition",
+        "description": "Design and develop a mobile health tracker application to monitor and manage user health and wellness",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_40bd99b4-84dc-4380-9e8c-ae232d60ee98"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "failed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "updatedAt": "2026-08-31T11:14:13.628Z",
+        "createdAt": "2026-08-31T11:11:33.368Z",
+        "blockedReason": null,
+        "assignedAt": "2026-08-31T11:11:33.368Z",
+        "startedAt": "2026-08-31T11:11:33.368Z",
+        "memoryContext": [],
+        "result": null,
+        "verificationId": "verification_a565918a-46b8-492a-a5df-9fba22929612",
+        "error": "Functional code generation failed: MAULI refused to deliver a placeholder or incomplete application."
+      },
+      {
+        "id": "task_48d0c4d4-f758-49a4-9728-404f1972bd92",
+        "projectId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "title": "Research and validate requirements: User registration and profile management",
+        "description": "Design and develop a mobile health tracker application to monitor and manage user health and wellness",
+        "requiredCapabilities": [
+          "research",
+          "analysis"
+        ],
+        "risk": "normal",
+        "dependsOn": [],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 10,
+        "updatedAt": "2026-08-31T11:11:33.368Z",
+        "createdAt": "2026-08-31T11:11:33.368Z",
+        "assignedAt": "2026-08-31T11:11:33.368Z",
+        "blockedReason": null,
+        "startedAt": "2026-08-31T11:11:33.368Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_48d0c4d4-f758-49a4-9728-404f1972bd92",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-31T11:11:33.368Z"
+          },
+          "summary": "Design and develop a mobile health tracker application to monitor and manage user health and wellness"
+        },
+        "completedAt": "2026-08-31T11:11:33.368Z",
+        "verificationId": "verification_b27f31d9-3d7a-4c62-9994-9cfd04a56103"
+      },
+      {
+        "id": "task_40bd99b4-84dc-4380-9e8c-ae232d60ee98",
+        "projectId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "title": "Define product and architecture plan: Integration with wearable devices and health sensors",
+        "description": "Design and develop a mobile health tracker application to monitor and manage user health and wellness",
+        "requiredCapabilities": [
+          "product-planning",
+          "planning"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_48d0c4d4-f758-49a4-9728-404f1972bd92"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 20,
+        "updatedAt": "2026-08-31T11:11:33.368Z",
+        "createdAt": "2026-08-31T11:11:33.368Z",
+        "blockedReason": null,
+        "assignedAt": "2026-08-31T11:11:33.368Z",
+        "startedAt": "2026-08-31T11:11:33.368Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_40bd99b4-84dc-4380-9e8c-ae232d60ee98",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-31T11:11:33.368Z"
+          },
+          "summary": "Design and develop a mobile health tracker application to monitor and manage user health and wellness"
+        },
+        "completedAt": "2026-08-31T11:11:33.368Z",
+        "verificationId": "verification_5dd106f4-4685-4122-911b-a636fbf7cfac"
+      },
+      {
+        "id": "task_c4be7649-9017-4c89-87fd-f23d307a0f57",
+        "projectId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "title": "Implement frontend code and user experience: Secure data storage and analytics",
+        "description": "Design and develop a mobile health tracker application to monitor and manage user health and wellness",
+        "requiredCapabilities": [
+          "frontend",
+          "ui"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_40bd99b4-84dc-4380-9e8c-ae232d60ee98",
+          "task_9d7cda3c-e1c6-4666-8801-abb1a0aea8ea"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 50,
+        "updatedAt": "2026-08-31T11:11:33.368Z",
+        "createdAt": "2026-08-31T11:11:33.368Z",
+        "blockedReason": "Dependencies incomplete"
+      },
+      {
+        "id": "task_082a07a3-5af5-469a-a229-60bdb9f4776e",
+        "projectId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "title": "Final project verification and QA",
+        "description": "Verify completed project project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "low",
+        "dependsOn": [
+          "task_48d0c4d4-f758-49a4-9728-404f1972bd92",
+          "task_40bd99b4-84dc-4380-9e8c-ae232d60ee98",
+          "task_9d7cda3c-e1c6-4666-8801-abb1a0aea8ea",
+          "task_9e57d1c9-b36a-4e67-a32a-71ecbeaa2de3",
+          "task_c4be7649-9017-4c89-87fd-f23d307a0f57",
+          "task_45167858-2fc9-49c7-a24e-bffe6c64790e",
+          "task_e202ad37-9129-485e-996d-1d1977ea8772"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "queued",
+        "attempts": 0,
+        "maxAttempts": 1,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 999,
+        "finalProjectVerification": true,
+        "updatedAt": "2026-08-31T11:11:33.368Z",
+        "createdAt": "2026-08-31T11:11:33.368Z"
+      }
+    ],
+    "error": "One or more tasks failed after recovery/retry limits."
+  },
+  "resultRunId": "project_31e0bd44-bf5a-4236-b384-2456d4bb4512",
+  "savedAt": "2026-09-02T18:48:10.717Z"
+}
