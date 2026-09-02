@@ -621,7 +621,7 @@ async function loadState(){
     STATE.projects=d.projects||[];STATE.tasks=d.tasks||[];STATE.artifacts=d.artifacts||[];STATE.agents=d.agents||[];STATE.events=d.events||[];
     STATE.approvals=(d.approvals||[]).filter(a=>a.state==='pending');STATE.tools=d.tools||[];
     updateStats();renderCurrentPage();
-    if($('heartbeatText')?.textContent!=='System Online'){$('heartbeatDot')?.classList.remove('dead');$('heartbeatText').textContent='System Online';}
+    if($('heartbeatText')){$('heartbeatDot')?.classList.remove('dead');$('heartbeatText').textContent='System Online';}
   }catch(e){console.error('Load state error:',e);if(e.message?.includes('401')||e.message?.includes('authorization')){toast('API key required for some features','info')}}
 }
 function updateStats(){
@@ -660,7 +660,7 @@ function renderProjects(){
   for(const p of STATE.projects){
     const badge=stateBadge(p.state);const hasCode=STATE.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
     html+='<tr><td><strong>'+esc(p.name||p.objective||p.id)+'</strong></td><td><span class="badge badge-'+badge+'">'+esc(p.state)+'</span></td><td>'+(p.taskCount||'—')+'</td><td style="display:flex;gap:4px">';
-    html+='<button class="btn btn-sm btn-green download-btn" data-project="'+p.id+'" style="cursor:pointer">📥 Download</button>';
+    html+='<button class="btn btn-sm btn-green download-btn" data-project="'+p.id+'" style="cursor:pointer">📥 Download</button>';if(hasCode){html+='<button class="btn btn-sm btn-accent" onclick="window.open(\'/api/preview-app?projectId='+p.id+'\',\'_blank\')" style="cursor:pointer">👁️ Preview</button>';}if(hasCode){html+='<button class="btn btn-sm btn-accent" onclick="window.open(\'/api/preview-app?projectId='+p.id+'\',\'_blank\')" style="cursor:pointer">👁️ Preview</button>';}
     if(hasCode){html+='<button class="btn btn-sm btn-green build-btn" data-project="'+p.id+'" data-platform="android">📱 APK</button><button class="btn btn-sm btn-accent build-btn" data-project="'+p.id+'" data-platform="desktop">🖥️ EXE</button>'}
     html+='</td></tr>';
   }
