@@ -6,7 +6,7 @@ const worker = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8'
 const orchestrator = readFileSync(new URL('../src/orchestrator.js', import.meta.url), 'utf8');
 const scheduler = readFileSync(new URL('../src/scheduler.js', import.meta.url), 'utf8');
 
- test('Founder command is scheduler-backed and does not use the old 60s timeout path', () => {
+test('Founder command is scheduler-backed and does not use the old 60s timeout path', () => {
   assert.match(worker, /url\.pathname\s*===\s*['"]\/api\/command['"]/);
   assert.match(worker, /queueCommand\(/);
   assert.match(worker, /schedulerTick\(/);
@@ -26,5 +26,5 @@ test('Scheduler owns final command persistence and delivery', () => {
   assert.match(scheduler, /saveCommandResult/);
   assert.match(scheduler, /buildFinalDelivery/);
   assert.match(scheduler, /finalizeCommand\(/);
-  assert.match(scheduler, /status: 'completed'/);
+  assert.match(scheduler, /status\s*:\s*['"]completed['"]/);
 });
