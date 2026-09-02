@@ -1,6 +1,16 @@
 import { id, now } from './core.js';
 import { hasD1, d1List, d1Put, d1Event, d1Events } from './db.js';
 
+const CRITICAL_TYPES = new Set(['projects','tasks','runs','command_results','verifications','artifacts','build_locks','approvals']);
+
+function comparable(value) {
+  if (!value || typeof value !== 'object') return value;
+  const copy = { ...value };
+  delete copy.updatedAt;
+  delete copy._d1WriteDeferred;
+  return JSON.stringify(copy);
+}
+
 export class MemoryStore {
   constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); }
   configure(env) { this.env=env??null; }
@@ -8,11 +18,13 @@ export class MemoryStore {
   get(type,key) { return this.data.get(type)?.get(key)??null; }
   put(type,value) {
     const bucket=this.data.get(type)??new Map();
+    const previous=value?.id ? bucket.get(value.id) : null;
+    if (previous && comparable(previous) === comparable(value)) return previous;
     const item={...value,id:value.id??id(type),updatedAt:now(),createdAt:value.createdAt??now()};
     bucket.set(item.id,item); this.data.set(type,bucket);
     if(hasD1(this.env)) {
       let write;
-      write=d1Put(this.env,type,item).catch(()=>{}).finally(()=>this.pendingWrites.delete(write));
+      write=d1Put(this.env,type,item,{critical:CRITICAL_TYPES.has(type)}).catch(()=>{}).finally(()=>this.pendingWrites.delete(write));
       this.pendingWrites.add(write);
     }
     return item;
@@ -20,8 +32,9 @@ export class MemoryStore {
   addEvent(type,payload) {
     const event={id:id('evt'),type,payload,at:now()}; this.events.push(event); if(this.events.length>1000)this.events.shift();
     if(hasD1(this.env)) {
+      const critical=type.startsWith('command.')||type.startsWith('project.')||type.startsWith('task.')||type.startsWith('verification.')||type.startsWith('artifact.');
       let write;
-      write=d1Event(this.env,event).catch(()=>{}).finally(()=>this.pendingWrites.delete(write));
+      write=d1Event(this.env,event,{critical}).catch(()=>{}).finally(()=>this.pendingWrites.delete(write));
       this.pendingWrites.add(write);
     }
     return event;
