@@ -1,0 +1,328 @@
+{
+  "runId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+  "command": "Online radio aplication",
+  "generatedAt": "2026-09-02T18:48:12.753Z",
+  "result": {
+    "status": "failed",
+    "runId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+    "command": "Online radio aplication",
+    "project": {
+      "id": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+      "name": "Project: Develop an online radio application that allows users to str",
+      "objective": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts",
+      "founderCommand": "Online radio aplication",
+      "requirements": [
+        "User registration and login functionality",
+        "Search and filter radio stations by genre, location, and language",
+        "Playback control features such as play, pause, and volume adjustment",
+        "Ability to create and manage personalized playlists",
+        "Integration with popular podcast platforms"
+      ],
+      "priority": "normal",
+      "state": "failed",
+      "milestones": [],
+      "createdAt": "2026-08-31T09:39:04.873Z",
+      "updatedAt": "2026-09-02T18:48:12.753Z",
+      "failedAt": "2026-09-02T18:48:12.753Z"
+    },
+    "tasks": [
+      {
+        "id": "task_e6c74149-dbe7-412d-af5c-ebd6e3b8159e",
+        "projectId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "title": "Implement backend code and API: Playback control features such as play, pause, and volume adjustment",
+        "description": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts",
+        "requiredCapabilities": [
+          "backend",
+          "api"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_5135ea48-4083-4f1d-ba7d-f4902d9ffb0d"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "failed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "agentId": "agent_c94f83db-f1b0-4747-b859-01244dc7904c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 30,
+        "updatedAt": "2026-08-31T09:41:02.958Z",
+        "createdAt": "2026-08-31T09:39:04.873Z",
+        "assignedAt": "2026-08-31T09:39:04.873Z",
+        "startedAt": "2026-08-31T09:39:04.873Z",
+        "memoryContext": [],
+        "result": null,
+        "verificationId": "verification_099a8f4b-3a91-4719-86ec-8966911563cf",
+        "error": "Functional code generation failed: MAULI refused to deliver a placeholder or incomplete application."
+      },
+      {
+        "id": "task_5135ea48-4083-4f1d-ba7d-f4902d9ffb0d",
+        "projectId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "title": "Define product and architecture plan: Search and filter radio stations by genre, location, and language",
+        "description": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts",
+        "requiredCapabilities": [
+          "product-planning",
+          "planning"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_aba61e28-c920-4aa7-bd98-4de49b8eb344"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "agentId": "agent_b1d56187-54b5-4174-adac-c2ebb820840c",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 20,
+        "updatedAt": "2026-08-31T09:39:04.873Z",
+        "createdAt": "2026-08-31T09:39:04.873Z",
+        "assignedAt": "2026-08-31T09:39:04.873Z",
+        "startedAt": "2026-08-31T09:39:04.873Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_5135ea48-4083-4f1d-ba7d-f4902d9ffb0d",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-31T09:39:04.873Z"
+          },
+          "summary": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts"
+        },
+        "completedAt": "2026-08-31T09:39:04.873Z",
+        "verificationId": "verification_c822133b-488b-4c03-a246-52d57d10d57d"
+      },
+      {
+        "id": "task_aba61e28-c920-4aa7-bd98-4de49b8eb344",
+        "projectId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "title": "Research and validate requirements: User registration and login functionality",
+        "description": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts",
+        "requiredCapabilities": [
+          "research",
+          "analysis"
+        ],
+        "risk": "normal",
+        "dependsOn": [],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "completed",
+        "attempts": 1,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "agentId": "agent_98ce5b39-2fe9-470d-8383-53901e322679",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 10,
+        "updatedAt": "2026-08-31T09:39:04.873Z",
+        "createdAt": "2026-08-31T09:39:04.873Z",
+        "assignedAt": "2026-08-31T09:39:04.873Z",
+        "startedAt": "2026-08-31T09:39:04.873Z",
+        "memoryContext": [],
+        "result": {
+          "type": "plan",
+          "taskId": "task_aba61e28-c920-4aa7-bd98-4de49b8eb344",
+          "output": "Execution plan generated.",
+          "diagnostics": {
+            "healthy": true,
+            "at": "2026-08-31T09:39:04.873Z"
+          },
+          "summary": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts"
+        },
+        "completedAt": "2026-08-31T09:39:04.873Z",
+        "verificationId": "verification_1f7dc8d9-3989-4e3f-b983-0c7ced935dc0"
+      },
+      {
+        "id": "task_3900460e-06a9-478a-ad9a-f6bd05d513b9",
+        "projectId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "title": "Perform security review",
+        "description": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts",
+        "requiredCapabilities": [
+          "security",
+          "audit"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_a9825314-9304-42d4-b866-91996a4b5c62"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "agentId": "agent_c39a36b1-14e1-4260-961e-91b1b6983445",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 60,
+        "updatedAt": "2026-08-31T09:39:04.873Z",
+        "createdAt": "2026-08-31T09:39:04.873Z",
+        "blockedReason": "Dependencies incomplete"
+      },
+      {
+        "id": "task_b2ad7cd8-33bd-4ffc-9099-5e4f0bf56a97",
+        "projectId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "title": "Implement database and persistence schema: Ability to create and manage personalized playlists",
+        "description": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts",
+        "requiredCapabilities": [
+          "database",
+          "schema",
+          "sql"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_e6c74149-dbe7-412d-af5c-ebd6e3b8159e"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "agentId": "agent_3c94c76a-b808-4fb6-ac19-7acd241f9b4e",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 40,
+        "updatedAt": "2026-08-31T09:39:04.873Z",
+        "createdAt": "2026-08-31T09:39:04.873Z",
+        "blockedReason": "Dependencies incomplete"
+      },
+      {
+        "id": "task_95da251b-6389-40b2-88ef-d139a7b54a30",
+        "projectId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "title": "Create testing and verification plan",
+        "description": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_3900460e-06a9-478a-ad9a-f6bd05d513b9"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 70,
+        "updatedAt": "2026-08-31T09:39:04.873Z",
+        "createdAt": "2026-08-31T09:39:04.873Z",
+        "blockedReason": "Dependencies incomplete"
+      },
+      {
+        "id": "task_55e8c902-cb35-4a97-9cda-f378c77f4a0f",
+        "projectId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "title": "Final project verification and QA",
+        "description": "Verify completed project project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "requiredCapabilities": [
+          "testing",
+          "verification"
+        ],
+        "risk": "low",
+        "dependsOn": [
+          "task_aba61e28-c920-4aa7-bd98-4de49b8eb344",
+          "task_5135ea48-4083-4f1d-ba7d-f4902d9ffb0d",
+          "task_e6c74149-dbe7-412d-af5c-ebd6e3b8159e",
+          "task_b2ad7cd8-33bd-4ffc-9099-5e4f0bf56a97",
+          "task_a9825314-9304-42d4-b866-91996a4b5c62",
+          "task_3900460e-06a9-478a-ad9a-f6bd05d513b9",
+          "task_95da251b-6389-40b2-88ef-d139a7b54a30"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "plan"
+          }
+        ],
+        "state": "blocked",
+        "attempts": 0,
+        "maxAttempts": 1,
+        "executor": "internal.plan",
+        "assignedAgentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "agentId": "agent_7acfa28b-5142-4693-93c7-b847a6f6c620",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 999,
+        "finalProjectVerification": true,
+        "updatedAt": "2026-08-31T09:39:04.873Z",
+        "createdAt": "2026-08-31T09:39:04.873Z",
+        "blockedReason": "Dependencies incomplete"
+      },
+      {
+        "id": "task_a9825314-9304-42d4-b866-91996a4b5c62",
+        "projectId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+        "title": "Implement frontend code and user experience: Integration with popular podcast platforms",
+        "description": "Develop an online radio application that allows users to stream and listen to various radio stations and podcasts",
+        "requiredCapabilities": [
+          "frontend",
+          "ui"
+        ],
+        "risk": "normal",
+        "dependsOn": [
+          "task_b2ad7cd8-33bd-4ffc-9099-5e4f0bf56a97"
+        ],
+        "acceptance": [
+          {
+            "field": "type",
+            "equals": "code"
+          }
+        ],
+        "state": "queued",
+        "attempts": 0,
+        "maxAttempts": 3,
+        "executor": "internal.code",
+        "assignedAgentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "agentId": "agent_be5d8358-532f-4651-b69f-a54e2ee05356",
+        "toolNames": [],
+        "requiredTools": [],
+        "sequence": 50,
+        "updatedAt": "2026-08-31T09:39:04.873Z",
+        "createdAt": "2026-08-31T09:39:04.873Z"
+      }
+    ],
+    "error": "One or more tasks failed after recovery/retry limits."
+  },
+  "resultRunId": "project_4692559f-b1d2-401b-a245-6b6cfd96ab73",
+  "savedAt": "2026-09-02T18:48:12.970Z"
+}
