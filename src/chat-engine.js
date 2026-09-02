@@ -194,6 +194,7 @@ export async function processChatMessage({ message, userId = 'founder', env = {}
     case 'command': response = await handleCommand(text, intent, env); break;
     case 'question': response = handleQuestion(text, intent, context); break;
     case 'discuss': response = handleDiscussion(text, intent, context); break;
+    case 'news': response = await handleNews(text, intent); break;
     case 'status': response = handleStatusRequest(text, intent); break;
     case 'help': response = handleHelp(text); break;
     case 'about': response = handleAbout(text, intent); break;
@@ -284,8 +285,13 @@ function analyzeIntent(text, context) {
     return { type: 'project', action: 'info' };
   }
 
+  // News requests (before general discussion)
+  if (/\b(news|बातमी|समाचार|headlines|ताज्या|today.*(news|happen)|what.*(happen|going)|current.*(event|affair)|latest.*(news|update)|tell.*(news|me))\b/i.test(lower)) {
+    return { type: 'news', action: 'fetch' };
+  }
+
   // Discussion topics
-  if (/(weather|news|today|music|movie|food|travel|sports|tech|ai|coding|programming|javascript|python|web|app|phone|android|iphone|laptop|computer|restaurant|price|cost|best|worst|recommend|suggestion|opinion|think|feel|love|hate|good|bad|great|awesome|terrible|help|please|thanks|thank|hello|hi|hey|good morning|good night|how are you|what's up)/i.test(lower)) {
+  if (/(weather|today|music|movie|food|travel|sports|tech|ai|coding|programming|javascript|python|web|app|phone|android|iphone|laptop|computer|restaurant|price|cost|best|worst|recommend|suggestion|opinion|think|feel|love|hate|good|bad|great|awesome|terrible|help|please|thanks|thank|hello|hi|hey|good morning|good night|how are you|what's up)/i.test(lower)) {
     return { type: 'discuss', action: 'chat' };
   }
 
@@ -549,6 +555,109 @@ function handleDiscussion(text, intent, context) {
   return {
     text: `That's a great topic! 💡\n\nI'd love to discuss this with you. As MAULI, I can:\n\n• 💬 Chat about any subject\n• 🔍 Share knowledge and insights\n• 💡 Help brainstorm ideas\n• 🚀 Turn ideas into real projects\n\n**Want to go deeper?** I can:\n• Build an app around this topic\n• Research more information\n• Create a project plan\n\nWhat would you like to do next?`,
     quickReplies: ['Build something', 'Discuss more', 'Show examples']
+  };
+}
+
+// ═══ NEWS HANDLER ═══
+
+async function handleNews(text, intent) {
+  const lower = text.toLowerCase();
+  const now_date = new Date();
+  const dateStr = now_date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = now_date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  
+  // Determine news category from the query
+  let category = 'general';
+  let categoryIcon = '📰';
+  
+  if (/(tech|technology|AI|artificial intelligence|coding|programming|software|startup|apple|google|microsoft|meta|openai|gpt|llm)/i.test(lower)) {
+    category = 'technology'; categoryIcon = '💻';
+  } else if (/(sports|cricket|football|tennis|ipl|olympic|match|game|player)/i.test(lower)) {
+    category = 'sports'; categoryIcon = '⚽';
+  } else if (/(politic|government|minister|election|parliament|law|policy)/i.test(lower)) {
+    category = 'politics'; categoryIcon = '🏛️';
+  } else if (/(business|economy|market|stock|share|trade|finance|bank)/i.test(lower)) {
+    category = 'business'; categoryIcon = '📈';
+  } else if (/(entertainment|movie|film|music|celebrity|actor|song|album)/i.test(lower)) {
+    category = 'entertainment'; categoryIcon = '🎬';
+  } else if (/(health|medical|covid|disease|doctor|hospital|vaccine)/i.test(lower)) {
+    category = 'health'; categoryIcon = '🏥';
+  } else if (/(world|international|global|country|war|peace)/i.test(lower)) {
+    category = 'world'; categoryIcon = '🌍';
+  } else if (/(maharashtra|mumbai|pune|nagpur|india|desi|local)/i.test(lower)) {
+    category = 'maharashtra'; categoryIcon = '🇮🇳';
+  }
+  
+  // Build news source links based on category
+  const newsLinks = {
+    general: [
+      { name: 'Google News', url: 'https://news.google.com' },
+      { name: 'BBC News', url: 'https://www.bbc.com/news' },
+      { name: 'Reuters', url: 'https://www.reuters.com' }
+    ],
+    technology: [
+      { name: 'TechCrunch', url: 'https://techcrunch.com' },
+      { name: 'The Verge', url: 'https://www.theverge.com' },
+      { name: 'Ars Technica', url: 'https://arstechnica.com' },
+      { name: 'Hacker News', url: 'https://news.ycombinator.com' }
+    ],
+    sports: [
+      { name: 'ESPN', url: 'https://www.espn.com' },
+      { name: 'Cricbuzz', url: 'https://www.cricbuzz.com' },
+      { name: 'Star Sports', url: 'https://www.star Sports.com' }
+    ],
+    politics: [
+      { name: 'NDTV', url: 'https://www.ndtv.com' },
+      { name: 'Times of India', url: 'https://timesofindia.indiatimes.com' },
+      { name: 'The Hindu', url: 'https://www.thehindu.com' }
+    ],
+    business: [
+      { name: 'Economic Times', url: 'https://economictimes.indiatimes.com' },
+      { name: 'Moneycontrol', url: 'https://www.moneycontrol.com' },
+      { name: 'Bloomberg', url: 'https://www.bloomberg.com' }
+    ],
+    entertainment: [
+      { name: 'IMDb', url: 'https://www.imdb.com' },
+      { name: 'Times of India - Entertainment', url: 'https://timesofindia.indiatimes.com/entertainment' },
+      { name: 'YouTube Trending', url: 'https://www.youtube.com/feed/trending' }
+    ],
+    health: [
+      { name: 'WHO', url: 'https://www.who.int' },
+      { name: 'Healthline', url: 'https://www.healthline.com' },
+      { name: 'WebMD', url: 'https://www.webmd.com' }
+    ],
+    world: [
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com' },
+      { name: 'BBC World', url: 'https://www.bbc.com/news/world' },
+      { name: 'CNN', url: 'https://www.cnn.com' }
+    ],
+    maharashtra: [
+      { name: 'Loksatta', url: 'https://www.loksatta.com' },
+      { name: 'Maharashtra Times', url: 'https://maharashtratimes.com' },
+      { name: 'Sakal', url: 'https://www.esakal.com' },
+      { name: 'Lokmat', url: 'https://www.lokmat.com' }
+    ]
+  };
+  
+  const links = newsLinks[category] || newsLinks.general;
+  const linksText = links.map(l => `• [${l.name}](${l.url})`).join('\n');
+  
+  // Category-specific tips
+  const tips = {
+    technology: '🤖 Top Tech Topics: AI advancements, new software releases, startup funding, cybersecurity updates, and emerging technologies.',
+    sports: '🏆 Stay updated with live scores, match schedules, transfer news, and tournament brackets.',
+    politics: '🏛️ Follow parliamentary sessions, policy updates, election news, and government announcements.',
+    business: '💰 Track market movements, corporate earnings, economic indicators, and investment opportunities.',
+    entertainment: '🎭 Discover new releases, celebrity news, award shows, and trending content.',
+    health: '🏥 Get the latest on medical research, health tips, wellness advice, and public health updates.',
+    world: '🌍 Stay informed about international affairs, global conflicts, climate news, and diplomatic events.',
+    maharashtra: '🇮🇳 महाराष्ट्रातील ताज्या बातम्या — राजकीय, खेळ, मनोरंजन आणि बऱ्याच अन्य बातम्या.',
+    general: '📰 Here are the latest headlines from around the world.'
+  };
+  
+  return {
+    text: `${categoryIcon} **${category.charAt(0).toUpperCase() + category.slice(1)} News** — ${dateStr} ${timeStr}\n\n${tips[category]}\n\n**🔗 Read Latest News:**\n${linksText}\n\n💡 **Tip:** You can ask me about specific topics like "AI news", "cricket scores", "Maharashtra news", "stock market" etc. for category-specific updates!`,
+    quickReplies: ['Tech news', 'Sports news', 'Maharashtra news', 'World news', 'Business news']
   };
 }
 
