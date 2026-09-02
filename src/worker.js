@@ -9,8 +9,9 @@ import { seedAgents } from './agents.js';
 import { schedulerTick } from './scheduler.js';
 import { queueCommand } from './orchestrator.js';
 import { saveCommandResult } from './result-recorder.js';
-import { json, now, ok, fail } from './core.js';
+import { json, now, fail } from './core.js';
 import { requireFounder, checkRateLimit } from './auth.js';
+import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
 async function hydrate(env) {
   await ensureSchema(env);
@@ -22,6 +23,14 @@ async function hydrate(env) {
 
 function isIsolatedTestEnv(env) {
   return env?.SKIP_RESULT_PERSISTENCE === true || env?.SKIP_RESULT_PERSISTENCE === 'true' || env?.MAULI_TEST_MODE === true || env?.MAULI_TEST_MODE === 'true';
+}
+
+function injectDashboardLive(response) {
+  const type = response.headers.get('content-type') || '';
+  if (!type.includes('text/html')) return response;
+  return new HTMLRewriter()
+    .on('body', { element(element) { element.append(DASHBOARD_LIVE_SCRIPT, { html: true }); } })
+    .transform(response);
 }
 
 export default {
@@ -62,8 +71,6 @@ export default {
           runId: queued.runId,
           resultFile: saved
         };
-        // Keep both the standard API envelope and the legacy dashboard contract.
-        // dashboard.js reads r.result directly, while newer clients use r.data.result.
         return Response.json({ ok: true, data: responseData, ...responseData }, { status: 202 });
       } catch (error) {
         const result = { status: 'error', error: error?.message || 'Command queue failed', command: body.command };
@@ -71,7 +78,13 @@ export default {
       }
     }
 
-    return app.fetch(request, env, ctx);
+    const response = await app.fetch(request, env, ctx);
+    // The existing dashboard remains authoritative for data/rendering; this only adds a
+    // small live lifecycle layer so Founder Command never looks idle after a successful queue.
+    if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/dashboard')) {
+      return injectDashboardLive(response);
+    }
+    return response;
   },
 
   async scheduled(event, env, ctx) {
