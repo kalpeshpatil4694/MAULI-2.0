@@ -81,7 +81,7 @@ export default { async fetch(request, env) { try {
   // Project Detail: full lifecycle JSON for any project
   if(request.method==='GET'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/detail')){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
-    const parts=url.pathname.split('/');const pid=parts[2];
+    const parts=url.pathname.split('/');const pid=parts[3];
     const project=store.get('projects',pid);if(!project)return fail('Project not found',404);
     const tasks=store.list('tasks').filter(t=>t.projectId===pid);
     const artifacts=store.list('artifacts').filter(a=>a.projectId===pid);
