@@ -60,6 +60,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     try{
       const r=await fetch('/api/projects/'+encodeURIComponent(pid)+'/detail');
       const d=await r.json();
+      if(!r.ok||!d.ok){const err=d.error||d.message||'API error';alert('Error: '+err);return;}
       const det=d.detail||d.data?.detail;
       if(!det)return alert('Project not found');
       const p=det.project;const s=det.summary;

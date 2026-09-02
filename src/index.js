@@ -82,7 +82,8 @@ export default { async fetch(request, env) { try {
   if(request.method==='GET'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/detail')){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const parts=url.pathname.split('/');const pid=parts[3];
-    const project=store.get('projects',pid);if(!project)return fail('Project not found',404);
+    const allProjects=hasD1(env)?await d1List(env,'projects'):listProjects();
+    const project=allProjects.find(p=>p.id===pid)||store.get('projects',pid);if(!project)return fail('Project not found',404);
     const tasks=store.list('tasks').filter(t=>t.projectId===pid);
     const artifacts=store.list('artifacts').filter(a=>a.projectId===pid);
     const events=store.recentEvents().filter(e=>e.payload?.projectId===pid);

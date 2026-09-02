@@ -423,12 +423,14 @@ function renderAgents(){
   }
   $('agList').innerHTML=h||'<div style="text-align:center;padding:40px;color:var(--text2)">No agents</div>';
 }
+function projRealState(p){const t=S.tasks.filter(t=>t.projectId===p.id);if(!t.length)return p.state||'queued';if(t.some(t=>t.state==='failed')&&!t.some(t=>['working','assigned','queued'].includes(t.state)))return 'failed';if(t.some(t=>['working','assigned'].includes(t.state)))return 'active';if(t.every(t=>t.state==='completed'))return 'completed';if(t.some(t=>t.state==='completed'))return 'active';return p.state||'queued';}
 function renderProjects(){
   const search=($('projSearch')?.value||'').toLowerCase();const filter=$('projFilter')?.value||'';
-  let list=S.projects;if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>p.state===filter);
+  let list=S.projects;if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>projRealState(p)===filter);
   let h='<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
-  for(const p of list){const hasCode=S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
-    h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(p.state)+'">'+esc(p.state)+'</span></td><td>'+(p.taskCount||'—')+'</td><td style="display:flex;gap:4px">';
+  for(const p of list){const hasCode=S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');const rs=projRealState(p);const tasks=S.tasks.filter(t=>t.projectId===p.id);const done=tasks.filter(t=>t.state==='completed').length;const total=tasks.length;
+    h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(rs)+'">'+esc(rs)+'</span></td><td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
+    h+='<button class="btn btn-a btn-s proj-detail" data-pid="'+p.id+'">📄 Details</button>';
     h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥</button>';
     if(hasCode)h+='<button class="btn btn-a btn-s" onclick="window.open(\\'/api/preview-app?projectId='+p.id+'\\',\\'_blank\\')">👁️</button>';
     if(hasCode)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android">📱</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop">🖥️</button>';
