@@ -35,10 +35,28 @@ import { getAgentPatterns, getPatternForProject, getPatternCategories } from './
 function artifactJson(artifact) { return artifact ? ok({ artifact }) : fail('Artifact not found',404); }
 function isIsolatedTestEnv(env) { return env?.SKIP_RESULT_PERSISTENCE === true || env?.SKIP_RESULT_PERSISTENCE === 'true' || env?.MAULI_TEST_MODE === true || env?.MAULI_TEST_MODE === 'true'; }
 
+// Lazy initialization — only run once per Worker lifetime
+let _initialized = false;
+let _toolsReady = false;
+async function initOnce(env) {
+  if (_initialized) return;
+  await ensureSchema(env);
+  store.configure(env);
+  if (!store.hydrated) await store.hydrate();
+  _initialized = true;
+}
+function ensureTools() {
+  if (_toolsReady) return;
+  ensureBuiltinTools();
+  seedAgents();
+  _toolsReady = true;
+}
+
 export default { async fetch(request, env) { try {
-  await ensureSchema(env); store.configure(env); if(!store.hydrated) await store.hydrate(); ensureBuiltinTools(); seedAgents(); const recoveredRuns=recoverRunningExecutions(); const url=new URL(request.url);
+  await initOnce(env);
+  ensureTools();
+  const url=new URL(request.url);
   if(request.method==='GET'&&url.pathname==='/') return new Response(dashboardHTML(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
-  if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);return ok({usage:report});}
   if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);return ok({usage:report});}
   if(request.method==='POST'&&url.pathname==='/api/cleanup'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const result=await cleanupD1(env,body);return ok({cleanup:result});}
   // ── SYSTEM STATUS: Full health check with all subsystems ──

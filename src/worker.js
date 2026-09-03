@@ -13,12 +13,15 @@ import { json, now, fail } from './core.js';
 import { requireFounder, checkRateLimit } from './auth.js';
 import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
+let _workerInit = false;
 async function hydrate(env) {
+  if (_workerInit) return;
   await ensureSchema(env);
   store.configure(env);
   if (!store.hydrated) await store.hydrate();
   ensureBuiltinTools();
   seedAgents();
+  _workerInit = true;
 }
 
 function isIsolatedTestEnv(env) {
