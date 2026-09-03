@@ -40,21 +40,23 @@ let _initialized = false;
 let _toolsReady = false;
 async function initOnce(env) {
   if (_initialized) return;
+  _initialized = true;
   await ensureSchema(env);
   store.configure(env);
-  if (!store.hydrated) await store.hydrate();
-  _initialized = true;
+  // Hydrate in background — don't block the first response
+  if (!store.hydrated) store.hydrate().catch(()=>{});
 }
 function ensureTools() {
   if (_toolsReady) return;
+  _toolsReady = true;
   ensureBuiltinTools();
   seedAgents();
-  _toolsReady = true;
 }
 
 export default { async fetch(request, env) { try {
   await initOnce(env);
   ensureTools();
+  const recoveredRuns=recoverRunningExecutions();
   const url=new URL(request.url);
   if(request.method==='GET'&&url.pathname==='/') return new Response(dashboardHTML(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
   if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);return ok({usage:report});}
