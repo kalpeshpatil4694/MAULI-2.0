@@ -1,4 +1,4 @@
-import { ok, fail, json, now } from './core.js';
+import { ok, fail, json, now, validateString, validateId, sanitize, corsHeaders } from './core.js';
 import { store } from './store.js';
 import { d1QuotaSnapshot } from './d1-quota.js';
 import { seedAgents, listAgents } from './agents.js';
@@ -9,9 +9,9 @@ import { planCommand, resumeApprovedCommand } from './orchestrator.js';
 import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { collectProjectFiles, createZip } from './zip.js';
-import { ensureSchema, hasD1, d1List, d1Events, claimBuildVersion, getBuildVersion } from './db.js';
+import { ensureSchema, hasD1, d1List, d1Events, claimBuildVersion, getBuildVersion, getUsageReport, cleanupD1 } from './db.js';
 import { recoverRunningExecutions } from './execution.js';
-import { requireFounder, checkRateLimit } from './auth.js';
+import { requireFounder, checkRateLimit, checkCommandRateLimit, getRateLimitStats } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
 import { diagnoseResultPersistence, saveCommandResult, listCommandResults, getCommandResult } from './result-recorder.js';
 import { dashboardHTML } from './dashboard.js';
@@ -24,6 +24,9 @@ import { generateProjectDocs } from './docs-generator.js';
 import { searchAPIs, recommendAPIs, getAPICatalog, getAPICategories } from './public-apis.js';
 import { getMCPForAgent, getMCPByCapability, getAllMCPServers, getMCPCategories, suggestMCPForProject } from './mcp-integration.js';
 import { checkOllama, ollamaGenerate, ollamaChat, ollamaCode, getRecommendedModels, getModelForTask } from './ollama-ai.js';
+import { registerWebhook, updateWebhook, deleteWebhook, listWebhooks, triggerWebhooks, getWebhookDeliveries, retryDelivery } from './webhooks.js';
+import { createNotification, getNotifications, getUnreadCount, markRead, markAllRead, deleteNotification, clearAll, NOTIFICATION_TYPES } from './notifications.js';
+import { createVersion, getVersionHistory, getVersion, compareVersions, restoreVersion, getVersionStats } from './version-history.js';
 import { scrapePage, researchTopic } from './scraper.js';
 import { getFreeServices, getServicesByCategory, getServiceCategories, estimateFreeTierCost } from './free-services.js';
 import { generateDesignCSS, getThemes, createDesignSystem } from './design-system.js';
@@ -35,6 +38,62 @@ function isIsolatedTestEnv(env) { return env?.SKIP_RESULT_PERSISTENCE === true |
 export default { async fetch(request, env) { try {
   await ensureSchema(env); store.configure(env); if(!store.hydrated) await store.hydrate(); ensureBuiltinTools(); seedAgents(); const recoveredRuns=recoverRunningExecutions(); const url=new URL(request.url);
   if(request.method==='GET'&&url.pathname==='/') return new Response(dashboardHTML(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
+  if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);return ok({usage:report});}
+  if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);return ok({usage:report});}
+  if(request.method==='POST'&&url.pathname==='/api/cleanup'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const result=await cleanupD1(env,body);return ok({cleanup:result});}
+  // ── SYSTEM STATUS: Full health check with all subsystems ──
+  if(request.method==='GET'&&url.pathname==='/api/system-status'){
+    const projects=listProjects();const tasks=listTasks();const agents=listAgents();const tools=listTools();
+    const running=tasks.filter(t=>['working','assigned'].includes(t.state)).length;
+    const completed=tasks.filter(t=>t.state==='completed').length;
+    const failed=tasks.filter(t=>t.state==='failed').length;
+    const queued=tasks.filter(t=>t.state==='queued').length;
+    const approvals=listApprovals().filter(a=>a.state==='pending').length;
+    const artifacts=store.list('artifacts').length;
+    const executions=store.list('runs').length;
+    const rateLimit=getRateLimitStats();
+    const learning=getSystemLearningStats();
+    return ok({
+      service:'mauli2.0',version:'2.0.0',status:'healthy',time:now(),
+      persistence:{d1:hasD1(env),hydrated:store.hydrated},
+      ai:{cloudflare:Boolean(env?.AI),ollama:false},
+      stats:{projects:projects.length,tasks:tasks.length,agents:agents.length,tools:tools.length,artifacts,executions,approvals},
+      tasks:{running,completed,failed,queued,total:tasks.length},
+      agents:{total:agents.length,available:agents.filter(a=>a.state==='available').length,working:agents.filter(a=>a.state==='working').length},
+      rateLimit,learning
+    });
+  }
+  // ── SYSTEM METRICS: Store health and data integrity ──
+  if(request.method==='GET'&&url.pathname==='/api/system-metrics'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const metrics=store.metrics();
+    const integrity=store.integrity();
+    return ok({metrics,integrity});
+  }
+  // ── PROJECT ANALYTICS: Detailed insights for a project ──
+  if(request.method==='GET'&&url.pathname==='/api/project-analytics'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const projectId=url.searchParams.get('projectId');
+    const projects=listProjects();const allTasks=listTasks();const allArtifacts=store.list('artifacts');
+    const allRuns=store.list('runs');
+    if(projectId){
+      const project=projects.find(p=>p.id===projectId);
+      if(!project)return fail('Project not found',404);
+      const tasks=allTasks.filter(t=>t.projectId===projectId);
+      const artifacts=allArtifacts.filter(a=>a.projectId===projectId);
+      const runs=allRuns.filter(r=>tasks.some(t=>t.id===r.taskId));
+      const completed=tasks.filter(t=>t.state==='completed').length;
+      const failed=tasks.filter(t=>t.state==='failed').length;
+      const avgDuration=runs.filter(r=>r.completedAt&&r.startedAt).map(r=>Date.parse(r.completedAt)-Date.parse(r.startedAt)).reduce((a,b)=>a+b,0)/(runs.length||1);
+      return ok({project,tasks:tasks.length,completed,failed,artifacts:artifacts.length,runs:runs.length,avgDurationMs:Math.round(avgDuration),progressPct:tasks.length?Math.round(completed/tasks.length*100):0,createdAt:project.createdAt,updatedAt:project.updatedAt});
+    }
+    // Global analytics
+    const byState={};for(const p of projects){const s=p.state||'unknown';byState[s]=(byState[s]||0)+1;}
+    const byAgent={};for(const t of allTasks){const a=t.agentId||t.assignedAgentId||'unassigned';byAgent[a]=(byAgent[a]||0)+1;}
+    const completedRuns=allRuns.filter(r=>r.state==='completed');
+    const avgRunDuration=completedRuns.filter(r=>r.completedAt&&r.startedAt).map(r=>Date.parse(r.completedAt)-Date.parse(r.startedAt)).reduce((a,b)=>a+b,0)/(completedRuns.length||1);
+    return ok({analytics:{projects:projects.length,tasks:allTasks.length,artifacts:allArtifacts.length,runs:allRuns.length,byState,byAgent,avgRunDurationMs:Math.round(avgRunDuration),completionRate:allTasks.length?Math.round(allTasks.filter(t=>t.state==='completed').length/allTasks.length*100):0}});
+  }
   if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),time:now()});
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   if(request.method==='POST'&&url.pathname==='/api/reset'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const keepAgents=body.keepAgents!==false;const before={projects:store.list('projects').length,tasks:store.list('tasks').length,artifacts:store.list('artifacts').length};store.put('projects',[]);store.put('tasks',[]);store.put('artifacts',[]);store.put('builds',[]);store.put('events',[]);store.put('approvals',[]);if(!keepAgents){const agents=store.list('agents');const fresh=agents.filter(a=>a._builtin);store.put('agents',fresh);}await store.flush();store.addEvent('system.reset',{before,keepAgents,time:now()});return ok({reset:true,before,keepAgents});}
@@ -56,8 +115,25 @@ export default { async fetch(request, env) { try {
   if(request.method==='GET'&&url.pathname==='/api/learning/skill-tree'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const agentId=url.searchParams.get('agentId');if(!agentId)return fail('agentId required',400);return ok({skillTree:getAgentSkillTree(agentId),collaboration:getAgentCollaborationStats(agentId)});}
   if(request.method==='GET'&&url.pathname==='/api/collaboration/stats'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({stats:getCollaborationStats()});}
   if(request.method==='GET'&&url.pathname==='/api/agents/best'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const caps=(url.searchParams.get('capabilities')||'').split(',').filter(Boolean);const best=getBestAgentForTask(caps);return ok({agent:best});}
+  // ── WEBHOOKS ──
+  if(request.method==='GET'&&url.pathname==='/api/webhooks'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({webhooks:listWebhooks()});}
+  if(request.method==='POST'&&url.pathname==='/api/webhooks'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(!body.url)return fail('URL is required',400);try{const wh=registerWebhook(body);return ok({webhook:wh},201)}catch(e){return fail(e.message,400)}}
+  if(request.method==='PUT'&&url.pathname.startsWith('/api/webhooks/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const whId=url.pathname.split('/').pop();const body=await json(request);const wh=updateWebhook(whId,body);if(!wh)return fail('Webhook not found',404);return ok({webhook:wh})}
+  if(request.method==='DELETE'&&url.pathname.startsWith('/api/webhooks/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const whId=url.pathname.split('/').pop();const deleted=deleteWebhook(whId);if(!deleted)return fail('Webhook not found',404);return ok({deleted:true})}
+  if(request.method==='GET'&&url.pathname.includes('/deliveries')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const whId=parts[parts.indexOf('webhooks')+1];return ok({deliveries:getWebhookDeliveries(whId)})}
+  if(request.method==='POST'&&url.pathname.includes('/retry')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const deliveryId=parts[parts.indexOf('retry')-1];const result=await retryDelivery(deliveryId);if(!result)return fail('Delivery not found',404);return ok({delivery:result})}
+  // ── NOTIFICATIONS ──
+  if(request.method==='GET'&&url.pathname==='/api/notifications'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const unreadOnly=url.searchParams.get('unread')==='true';const limit=parseInt(url.searchParams.get('limit')||'50');return ok({notifications:getNotifications('founder',{unreadOnly,limit}),unreadCount:getUnreadCount('founder')})}
+  if(request.method==='POST'&&url.pathname==='/api/notifications/read'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(body.id){markRead(body.id);return ok({marked:1})}markAllRead('founder');return ok({marked:'all'})}
+  if(request.method==='DELETE'&&url.pathname==='/api/notifications'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));if(body.id){deleteNotification(body.id);return ok({deleted:1})}clearAll('founder');return ok({cleared:'all'})}
+  // ── VERSION HISTORY ──
+  if(request.method==='GET'&&url.pathname==='/api/versions'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');if(!projectId)return fail('projectId required',400);return ok({versions:getVersionHistory(projectId),stats:getVersionStats(projectId)})}
+  if(request.method==='POST'&&url.pathname==='/api/versions'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(!body.projectId)return fail('projectId required',400);const version=createVersion(body.projectId,body);if(!version)return fail('Project not found',404);return ok({version},201)}
+  if(request.method==='GET'&&url.pathname.startsWith('/api/versions/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const vId=url.pathname.split('/').pop();const version=getVersion(vId);if(!version)return fail('Version not found',404);return ok({version})}
+  if(request.method==='POST'&&url.pathname.includes('/compare')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(!body.version1||!body.version2)return fail('version1 and version2 required',400);const comparison=compareVersions(body.version1,body.version2);if(!comparison)return fail('Versions not found',404);return ok({comparison})}
+  if(request.method==='POST'&&url.pathname.includes('/restore')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(!body.versionId)return fail('versionId required',400);const restored=restoreVersion(body.versionId);if(!restored)return fail('Version not found',404);return ok({project:restored})}
   // Chat API
-  if(request.method==='POST'&&url.pathname==='/api/chat'){try{const body=await request.json();const result=await processChatMessage({message:body.message,userId:'founder',env});return ok({result});}catch(e){return ok({result:{reply:'I had trouble processing that. Try again!',error:e.message}})}}
+  if(request.method==='POST'&&url.pathname==='/api/chat'){try{const body=await request.json();const msgValidation=validateString(body.message,'message',{minLength:1,maxLength:5000});if(!msgValidation.ok)return fail(msgValidation.error,400);const result=await processChatMessage({message:msgValidation.value,userId:'founder',env});return ok({result});}catch(e){return ok({result:{reply:'I had trouble processing that. Try again!',error:e.message}})}}
   if(request.method==='GET'&&url.pathname==='/api/chat/history'){const limit=parseInt(url.searchParams.get('limit')||'50');return ok({messages:getChatHistory({limit})});}
   if(request.method==='GET'&&url.pathname==='/api/chat/active'){return ok({conversations:getActiveConversations()});}
   // File Edit API
@@ -127,7 +203,7 @@ export default { async fetch(request, env) { try {
   if(request.method==='GET'&&url.pathname==='/api/artifacts'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');const taskId=url.searchParams.get('taskId');const artifacts=projectId?listProjectArtifacts(projectId):taskId?listTaskArtifacts(taskId):store.list('artifacts');return ok({artifacts});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')&&url.pathname.endsWith('/download')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const artifactId=parts[parts.length-2];const artifact=getArtifact(artifactId);if(!artifact)return fail('Artifact not found',404);let files=collectProjectFiles(artifact.projectId,artifact,store);if(!files.length){const tasks=store.list('tasks').filter(t=>t.projectId===artifact.projectId);const summary=[];summary.push({path:'README.md',content:`# MAULI 2.0 — Project Delivery\n\n## Project\n- **ID:** ${artifact.projectId}\n- **Type:** ${artifact.type}\n- **Delivered:** ${new Date().toISOString()}\n\n## Tasks (${tasks.length})\n${tasks.map(t=>`- [${t.state}] ${t.title}${t.assignedAgentId?' (Agent: '+t.assignedAgentId+')':''}`).join('\n')}\n`});summary.push({path:'project-data.json',content:JSON.stringify({projectId:artifact.projectId,type:artifact.type,content:artifact.content,metadata:artifact.metadata},null,2)});files=summary;}const zip=createZip(files);const safeName=String(artifact.projectId).replace(/[^a-zA-Z0-9_-]/g,'_');return new Response(zip,{status:200,headers:{'content-type':'application/zip','content-disposition':`attachment; filename="mauli-${safeName}.zip"`,'cache-control':'no-store'}});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return artifactJson(getArtifact(url.pathname.split('/').pop()));}
-  if(request.method==='POST'&&url.pathname==='/api/command'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const body=await json(request);if(!body.command)return fail('Founder command is required',400);const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const isolatedTest=isIsolatedTestEnv(env);let result;try{result=await Promise.race([planCommand(body.command,env),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),60000))]);}catch(e){return ok({result:{status:'error',error:e.message,command:body.command}});}const persistedPayload={command:body.command,generatedAt:now(),result};const saved=isolatedTest?{saved:true,skipped:true,testMode:true}:await saveCommandResult(persistedPayload,env).catch(()=>({saved:false}));return ok({result,resultFile:saved},201);}
+  if(request.method==='POST'&&url.pathname==='/api/command'){const limit=checkCommandRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const body=await json(request);const cmdValidation=validateString(body.command,'command',{minLength:1,maxLength:2000});if(!cmdValidation.ok)return fail(cmdValidation.error,400);const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const isolatedTest=isIsolatedTestEnv(env);let result;try{result=await Promise.race([planCommand(body.command,env),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),60000))]);}catch(e){return ok({result:{status:'error',error:e.message,command:body.command}});}const persistedPayload={command:body.command,generatedAt:now(),result};const saved=isolatedTest?{saved:true,skipped:true,testMode:true}:await saveCommandResult(persistedPayload,env).catch(()=>({saved:false}));return ok({result,resultFile:saved},201);}
   if(request.method==='POST'&&url.pathname.startsWith('/api/approvals/')){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const approvalId=url.pathname.split('/').pop();const body=await json(request);const result=decideApproval(approvalId,Boolean(body.approved),body.note??'');if(!result)return fail('Approval not found',404);if(result.state==='rejected')return ok({approval:result,status:'rejected'});
     // Unblock project + tasks so the persistent scheduler picks them up
     if(result.projectId){const project=store.get('projects',result.projectId);if(project)store.put('projects',{...project,state:'queued',updatedAt:now(),id:project.id});const tasks=store.list('tasks').filter(t=>t.projectId===result.projectId&&t.state!=='completed'&&t.state!=='failed'&&t.state!=='cancelled');for(const t of tasks)store.put('tasks',{...t,state:'queued',updatedAt:now(),id:t.id});}

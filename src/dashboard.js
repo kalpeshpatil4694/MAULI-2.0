@@ -169,6 +169,7 @@ select.inp{cursor:pointer}
       <div class="sb-sec">Governance</div>
       <div class="nav-i" data-p="approvals"><span>🛡️</span>Approvals<span class="nav-b" id="navAp" style="background:var(--yellow)">0</span></div>
       <div class="sb-sec">System</div>
+      <div class="nav-i" data-p="usage"><span>📊</span>Limits & Usage</div>
       <div class="nav-i" data-p="activity"><span>📡</span>Activity</div>
       <div class="nav-i" data-p="health"><span>💚</span>Health</div>
       <div class="nav-i" data-p="memory"><span>🧠</span>Memory</div>
@@ -350,6 +351,39 @@ select.inp{cursor:pointer}
         </div>
         <div class="card"><div class="card-h"><div class="card-t">🔌 MCP Servers</div></div><div id="mcpOut" style="max-height:300px;overflow-y:auto"></div></div>
       </div>
+      <!-- USAGE / LIMITS -->
+      <div class="page" id="pg-usage">
+        <div class="g g3" style="margin-bottom:16px">
+          <div class="card stat"><div class="stat-i">💾</div><div class="stat-v" id="uDb">—</div><div class="stat-l">D1 Storage</div></div>
+          <div class="card stat"><div class="stat-i">⚡</div><div class="stat-v" id="uReq">—</div><div class="stat-l">Workers Requests</div></div>
+          <div class="card stat"><div class="stat-i">⏱️</div><div class="stat-v" id="uCpu">10ms</div><div class="stat-l">CPU Limit</div></div>
+        </div>
+        <div class="g g2">
+          <div class="card">
+            <div class="card-h"><div class="card-t">💾 D1 Database Storage</div><button class="btn btn-a btn-s" onclick="loadUsage()">↻</button></div>
+            <div id="uD1Bar" style="margin-bottom:12px"></div>
+            <div id="uD1Detail"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><div class="card-t">⚡ Workers Limits (Free Tier)</div></div>
+            <div id="uWorkers"></div>
+          </div>
+        </div>
+        <div class="g g2">
+          <div class="card">
+            <div class="card-h"><div class="card-t">🔑 KV Storage Limits</div></div>
+            <div id="uKv"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><div class="card-t">🧹 Storage Cleanup</div><button class="btn btn-r btn-s" onclick="runCleanup()">🧹 Clean</button></div>
+            <div id="uCleanup"><div style="font-size:11px;color:var(--text2)">Click Clean to remove old events, results, builds, and verifications.</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><div class="card-t">📋 Storage Breakdown by Type</div></div>
+          <div id="uBreakdown"></div>
+        </div>
+      </div>
       <!-- DOWNLOADS -->
       <div class="page" id="pg-downloads"><div class="card"><div class="card-h"><div class="card-t">📥 Downloads</div><button class="btn btn-g btn-s" onclick="loadDl()">↻</button></div><div id="dlList"></div></div></div>
     </div>
@@ -382,9 +416,9 @@ async function api(path,opts={}){
 }
 
 // ─── NAVIGATION ───
-const titles={command:'Command Center',chat:'Chat',overview:'Overview',agents:'Agents',monitor:'Monitor',projects:'Projects',tasks:'Tasks',docs:'Docs',approvals:'Approvals',activity:'Activity',health:'Health',memory:'Memory',integrations:'Integrations',editor:'File Editor',learning:'Learning',builds:'Builds',messaging:'Messaging',apiexp:'API Explorer',downloads:'Downloads'};
+const titles={command:'Command Center',chat:'Chat',overview:'Overview',agents:'Agents',monitor:'Monitor',projects:'Projects',tasks:'Tasks',docs:'Docs',approvals:'Approvals',activity:'Activity',health:'Health',memory:'Memory',integrations:'Integrations',editor:'File Editor',learning:'Learning',builds:'Builds',messaging:'Messaging',apiexp:'API Explorer',downloads:'Downloads',usage:'Limits & Usage'};
 function go(p){curPage=p;closeSb();document.querySelectorAll('.page').forEach(e=>e.classList.remove('on'));const pg=$('pg-'+p);if(pg)pg.classList.add('on');document.querySelectorAll('.nav-i').forEach(e=>e.classList.remove('on'));const nav=document.querySelector('.nav-i[data-p="'+p+'"]');if(nav)nav.classList.add('on');$('pageTitle').textContent=titles[p]||p;renderPage(p)}
-function renderPage(p){const r={overview:renderOverview,agents:renderAgents,projects:renderProjects,tasks:renderTasks,activity:renderActivity,health:renderHealth,memory:renderMemory,monitor:renderMonitor,integrations:renderIntegrations,learning:renderLearning,editor:loadEdits,builds:loadBuilds,messaging:loadMsgs,apiexp:loadMcp,downloads:loadDl,chat:loadChat,docs:()=>{},approvals:renderApprovals};if(r[p])r[p]()}
+function renderPage(p){const r={overview:renderOverview,agents:renderAgents,projects:renderProjects,tasks:renderTasks,activity:renderActivity,health:renderHealth,memory:renderMemory,monitor:renderMonitor,integrations:renderIntegrations,learning:renderLearning,editor:loadEdits,builds:loadBuilds,messaging:loadMsgs,apiexp:loadMcp,downloads:loadDl,usage:loadUsage,chat:loadChat,docs:()=>{},approvals:renderApprovals};if(r[p])r[p]()}
 document.querySelectorAll('.nav-i[data-p]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();go(el.dataset.p)}));
 function toggleSb(){$('sidebar').classList.toggle('open');$('sbOverlay').classList.toggle('show');document.body.classList.toggle('sb-open')}
 function closeSb(){$('sidebar').classList.remove('open');$('sbOverlay').classList.remove('show');document.body.classList.remove('sb-open')}
@@ -473,6 +507,79 @@ function renderMonitor(){
   $('monGrid').innerHTML=grid.map(g=>'<div class="card stat" style="margin-bottom:0;'+(g.a?'border-color:var(--accent)':'')+'"><div class="stat-l">'+g.i+' '+g.l+'</div><div class="stat-v" style="font-size:22px">'+g.v+'</div></div>').join('');
   $('monAgents').innerHTML=S.agents.map(a=>'<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="width:6px;height:6px;border-radius:50%;background:var(--green);margin-top:4px"></div><div style="font-size:12px"><b>'+esc(a.name||a.id)+'</b> — '+esc(a.role||'Agent')+'</div></div>').join('')||'<div style="color:var(--text2);padding:10px">No agents</div>';
   $('monTasks').innerHTML=S.tasks.slice(-10).reverse().map(t=>'<div style="padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px">'+esc(t.title||t.id)+'</span><span class="badge badge-'+tBadge(t.state)+'">'+esc(t.state)+'</span></div><div class="pbar"><div class="pfill'+(t.state==='completed'?' done':'')+'" style="width:'+pct(t.state)+'%"></div></div></div>').join('')||'<div style="color:var(--text2);padding:10px">No tasks</div>';
+}
+// ─── USAGE / LIMITS ───
+function usageBar(pct,color){const c=pct>90?'var(--red)':pct>70?'var(--yellow)':color||'var(--accent)';return '<div class="pbar" style="height:8px;margin:4px 0"><div style="height:100%;border-radius:3px;background:'+c+';width:'+Math.min(100,pct)+'%"></div></div>'}
+function usageRow(label,used,limit,unit){const pct=limit>0?(used/limit*100):0;const c=pct>90?'var(--red)':pct>70?'var(--yellow)':'var(--green)';return '<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:11px;color:var(--text2)">'+label+'</span><span style="font-size:11px;font-weight:600;color:'+c+'">'+used+' / '+limit+' '+unit+' ('+pct.toFixed(1)+'%)</span></div>'+usageBar(pct)+'</div>'}
+async function loadUsage(){
+  try{
+    const r=await api('/api/usage');const u=r.usage||r.data||r;
+    const d1=u.d1||{};const w=u.workers||{};const kv=u.kv||{};
+    if($('uDb'))$('uDb').textContent=d1.usedMB?d1.usedMB+'MB':'—';
+    if($('uReq'))$('uReq').textContent=w.requestsPerDay?w.requestsPerDay.toLocaleString():'—';
+    if($('uCpu'))$('uCpu').textContent=w.cpuMs?w.cpuMs+'ms':'—';
+    // D1 bar
+    if($('uD1Bar')){
+      const pct=parseFloat(d1.pct||'0');
+      const c=pct>90?'var(--red)':pct>70?'var(--yellow)':'var(--accent)';
+      $('uD1Bar').innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">'+d1.usedMB+' MB / '+d1.limitMB+' MB</span><span style="font-size:12px;font-weight:600;color:'+c+'">'+pct+'%</span></div>'+usageBar(pct)+'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)"><span>Remaining: <b style="color:var(--green)">'+d1.remainingMB+' MB</b></span><span>'+d1.rows+' rows total</span></div>';
+    }
+    if($('uDetail')||$('uD1Detail')){
+      const el=$('uDetail')||$('uD1Detail');
+      let h='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Events: '+(d1.events?.count||0)+' stored</div>';
+      h+=usageRow('Events Storage',((d1.events?.bytes||0)/1048576).toFixed(2),Math.min(d1.limitMB*0.1,50).toFixed(2),'MB');
+      el.innerHTML=h;
+    }
+    // Workers
+    if($('uWorkers')){
+      let h='';
+      h+=usageRow('Requests / Day','—',w.requestsPerDay?.toLocaleString()||'100K','req');
+      h+=usageRow('CPU Time','—',w.cpuMs||10,'ms');
+      h+=usageRow('Memory','—',w.memoryMB||128,'MB');
+      h+=usageRow('Subrequests','—',w.subrequests||50,'/req');
+      h+=usageRow('Worker Size','—',w.sizeMB||3,'MB');
+      $('uWorkers').innerHTML=h;
+    }
+    // KV
+    if($('uKv')){
+      let h='';
+      h+=usageRow('Reads / Day','—',kv.readsPerDay?.toLocaleString()||'100K','req');
+      h+=usageRow('Writes / Day','—',kv.writesPerDay?.toLocaleString()||'1K','req');
+      h+=usageRow('Storage','—',kv.storageMB?.toLocaleString()||'25K','MB');
+      $('uKv').innerHTML=h;
+    }
+    // Breakdown
+    if($('uBreakdown')){
+      const breakdown=d1.breakdown||[];
+      let h='<table class="tbl"><thead><tr><th>Type</th><th>Rows</th><th>Size</th><th>% of DB</th></tr></thead><tbody>';
+      for(const t of breakdown){
+        const pct=t.bytes>0?(t.bytes/(d1.usedMB*1048576||1)*100):0;
+        h+='<tr><td style="font-weight:600">'+esc(t.type)+'</td><td>'+t.count+'</td><td>'+t.mb+' MB</td><td>'+usageBar(pct)+'<span style="font-size:10px;color:var(--text3)">'+pct.toFixed(1)+'%</span></td></tr>';
+      }
+      h+='</tbody></table>';
+      $('uBreakdown').innerHTML=h||'<div style="color:var(--text2)">No data</div>';
+    }
+  }catch(e){console.warn('Usage:',e.message)}
+}
+async function runCleanup(){
+  if(!confirm('This will delete old events, results, builds, and verifications to free D1 storage. Continue?'))return;
+  try{
+    $('uCleanup').innerHTML='<div class="spinner"></div>';
+    const r=await api('/api/cleanup',{method:'POST',body:JSON.stringify({})});
+    const c=r.cleanup||r.data||r;
+    let h='<div style="padding:8px 0">';
+    h+='<div style="font-size:12px;font-weight:600;color:var(--green)">✅ Cleanup Complete!</div>';
+    if(c.eventsPruned)h+='<div style="font-size:11px;color:var(--text2)">Events pruned: '+c.eventsPruned+'</div>';
+    if(c.resultsPruned)h+='<div style="font-size:11px;color:var(--text2)">Results pruned: '+c.resultsPruned+'</div>';
+    if(c.buildsPruned)h+='<div style="font-size:11px;color:var(--text2)">Builds pruned: '+c.buildsPruned+'</div>';
+    if(c.verificationsPruned)h+='<div style="font-size:11px;color:var(--text2)">Verifications pruned: '+c.verificationsPruned+'</div>';
+    if(c.runsPruned)h+='<div style="font-size:11px;color:var(--text2)">Runs pruned: '+c.runsPruned+'</div>';
+    h+='<div style="font-size:11px;margin-top:6px"><b>Storage freed: '+c.freedMB+' MB</b> | After: '+c.afterMB+' MB</div>';
+    h+='</div>';
+    $('uCleanup').innerHTML=h;
+    toast('Cleanup done! Freed '+c.freedMB+' MB','ok');
+    loadUsage();
+  }catch(e){$('uCleanup').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';toast('Cleanup failed','err')}
 }
 function renderIntegrations(){
   const ints=[{n:'GitHub',i:'🐙',s:'Connected',d:'Source control'},{n:'Cloudflare Workers',i:'☁️',s:'Deployed',d:'Hosting'},{n:'Cloudflare AI',i:'🧠',s:'Active',d:'LLM'},{n:'D1 Database',i:'💾',s:'Connected',d:'SQL'},{n:'MCP Servers',i:'🔌',s:'Integrated',d:'Agent tools'},{n:'Ollama',i:'🤖',s:'Optional',d:'Local LLMs'}];

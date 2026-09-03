@@ -13,6 +13,7 @@ import { remember } from './memory.js';
 // In-memory conversation context (last 10 messages per user)
 const conversationContext = new Map();
 const MAX_CONTEXT = 10;
+const MAX_USERS = 500; // Prevent memory leak
 
 // ═══ APP-SPECIFIC FEATURES ═══
 // Detailed feature lists for common app types — shown in chat responses
@@ -227,7 +228,14 @@ function getContext(userId) {
 }
 
 function addContext(userId, msg) {
-  if (!conversationContext.has(userId)) conversationContext.set(userId, []);
+  if (!conversationContext.has(userId)) {
+    // Evict oldest users if at capacity
+    if (conversationContext.size >= MAX_USERS) {
+      const firstKey = conversationContext.keys().next().value;
+      conversationContext.delete(firstKey);
+    }
+    conversationContext.set(userId, []);
+  }
   const ctx = conversationContext.get(userId);
   ctx.push(msg);
   if (ctx.length > MAX_CONTEXT) ctx.shift();
