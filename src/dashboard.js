@@ -383,6 +383,14 @@ select.inp{cursor:pointer}
           <div class="card-h"><div class="card-t">📋 Storage Breakdown by Type</div></div>
           <div id="uBreakdown"></div>
         </div>
+        <div class="card">
+          <div class="card-h"><div class="card-t">🌐 Cloudflare API Status</div><span id="cfStatus"></span></div>
+          <div id="cfD1"></div>
+          <div id="cfWorkers"></div>
+          <div id="cfKv"></div>
+          <div style="padding:8px 0"><div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:4px">🚨 Alerts</div><div id="cfAlerts"></div></div>
+          <div style="padding:4px 0 8px"><button class="btn btn-a btn-s" onclick="loadCFData()">🔄 Refresh Cloudflare Data</button></div>
+        </div>
       </div>
       <!-- DOWNLOADS -->
       <div class="page" id="pg-downloads"><div class="card"><div class="card-h"><div class="card-t">📥 Downloads</div><button class="btn btn-g btn-s" onclick="loadDl()">↻</button></div><div id="dlList"></div></div></div>
@@ -418,7 +426,7 @@ async function api(path,opts={}){
 // ─── NAVIGATION ───
 const titles={command:'Command Center',chat:'Chat',overview:'Overview',agents:'Agents',monitor:'Monitor',projects:'Projects',tasks:'Tasks',docs:'Docs',approvals:'Approvals',activity:'Activity',health:'Health',memory:'Memory',integrations:'Integrations',editor:'File Editor',learning:'Learning',builds:'Builds',messaging:'Messaging',apiexp:'API Explorer',downloads:'Downloads',usage:'Limits & Usage'};
 function go(p){curPage=p;closeSb();document.querySelectorAll('.page').forEach(e=>e.classList.remove('on'));const pg=$('pg-'+p);if(pg)pg.classList.add('on');document.querySelectorAll('.nav-i').forEach(e=>e.classList.remove('on'));const nav=document.querySelector('.nav-i[data-p="'+p+'"]');if(nav)nav.classList.add('on');$('pageTitle').textContent=titles[p]||p;renderPage(p)}
-function renderPage(p){const r={overview:renderOverview,agents:renderAgents,projects:renderProjects,tasks:renderTasks,activity:renderActivity,health:renderHealth,memory:renderMemory,monitor:renderMonitor,integrations:renderIntegrations,learning:renderLearning,editor:loadEdits,builds:loadBuilds,messaging:loadMsgs,apiexp:loadMcp,downloads:loadDl,usage:loadUsage,chat:loadChat,docs:()=>{},approvals:renderApprovals};if(r[p])r[p]()}
+function renderPage(p){const r={overview:renderOverview,agents:renderAgents,projects:renderProjects,tasks:renderTasks,activity:renderActivity,health:renderHealth,memory:renderMemory,monitor:renderMonitor,integrations:renderIntegrations,learning:renderLearning,editor:loadEdits,builds:loadBuilds,messaging:loadMsgs,apiexp:loadMcp,downloads:loadDl,usage:()=>{loadUsage();loadCFData();},chat:loadChat,docs:()=>{},approvals:renderApprovals};if(r[p])r[p]()}
 document.querySelectorAll('.nav-i[data-p]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();go(el.dataset.p)}));
 function toggleSb(){$('sidebar').classList.toggle('open');$('sbOverlay').classList.toggle('show');document.body.classList.toggle('sb-open')}
 function closeSb(){$('sidebar').classList.remove('open');$('sbOverlay').classList.remove('show');document.body.classList.remove('sb-open')}
@@ -581,6 +589,66 @@ async function runCleanup(){
     loadUsage();
   }catch(e){$('uCleanup').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>';toast('Cleanup failed','err')}
 }
+async function loadCFData(){
+  try{
+    const r=await api('/api/cf/usage');
+    const u=r.usage||r;
+    if($('cfStatus')){
+      const connected=u.apiConnected;
+      $('cfStatus').innerHTML='<span class="badge badge-'+(connected?'g':'y')+'">'+(connected?'🟢 Connected':'⚪ Not Connected')+'</span>';
+    }
+    if(u.d1&&u.d1.available&&$('cfD1')){
+      const d=u.d1;
+      let h='<div style="padding:8px 0">';
+      h+='<div style="font-size:12px;font-weight:600;color:var(--accent)">☁️ Real D1 Usage (Cloudflare API)</div>';
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px">Total Used</span><b style="font-size:11px">'+d.totalMB+' MB / '+d.limit+' MB</b></div>';
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px">Remaining</span><b style="font-size:11px;color:var(--green)">'+d.remaining+' MB</b></div>';
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px">Usage</span><b style="font-size:11px;color:'+(parseFloat(d.percent)>80?'var(--red)':'var(--accent)')+'">'+d.percent+'%</b></div>';
+      if(d.tables&&d.tables.length){
+        h+='<div style="margin-top:8px;font-size:11px;font-weight:600">Table Breakdown:</div>';
+        for(const t of d.tables)h+='<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:10px"><span style="color:var(--text2)">'+esc(t.type)+'</span><span>'+t.count+' rows ('+t.mb+' MB)</span></div>';
+      }
+      h+='</div>';
+      $('cfD1').innerHTML=h;
+    }else if($('cfD1')){
+      $('cfD1').innerHTML='<div style="padding:8px;color:var(--text2);font-size:11px">'+esc(u.d1?.error||'Not available')+'</div>';
+    }
+    if(u.workers&&u.workers.available&&$('cfWorkers')){
+      const w=u.workers;
+      let h='<div style="padding:8px 0">';
+      h+='<div style="font-size:12px;font-weight:600;color:var(--accent)">⚡ Worker Info (Cloudflare API)</div>';
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px">Script Size</span><b style="font-size:11px">'+w.sizeMB+' MB</b></div>';
+      if(w.created)h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px">Created</span><span style="font-size:11px">'+new Date(w.created).toLocaleDateString()+'</span></div>';
+      if(w.modified)h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px">Modified</span><span style="font-size:11px">'+new Date(w.modified).toLocaleDateString()+'</span></div>';
+      h+='</div>';
+      $('cfWorkers').innerHTML=h;
+    }else if($('cfWorkers')){
+      $('cfWorkers').innerHTML='<div style="padding:8px;color:var(--text2);font-size:11px">'+esc(u.workers?.error||'Not available')+'</div>';
+    }
+    if(u.kv&&u.kv.available&&$('cfKv')){
+      const k=u.kv;
+      let h='<div style="padding:8px 0">';
+      h+='<div style="font-size:12px;font-weight:600;color:var(--accent)">🔑 KV Status (Cloudflare API)</div>';
+      h+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px">Namespaces</span><b style="font-size:11px">'+k.namespaces.length+'</b></div>';
+      for(const ns of k.namespaces)h+='<div style="padding:4px 0 4px 12px;font-size:10px;color:var(--text2)">📁 '+esc(ns.title)+' ('+ns.keyCount+' keys)</div>';
+      h+='</div>';
+      $('cfKv').innerHTML=h;
+    }
+    if(u.alerts&&$('cfAlerts')){
+      if(u.alerts.length){
+        let h='';
+        for(const a of u.alerts){
+          const c=a.level==='critical'?'r':a.level==='warning'?'y':'a';
+          h+='<div style="padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;align-items:center;gap:6px"><span class="badge badge-'+c+'">'+a.level.toUpperCase()+'</span><span style="font-size:11px">'+esc(a.message)+'</span></div>';
+        }
+        $('cfAlerts').innerHTML=h;
+      }else{
+        $('cfAlerts').innerHTML='<div style="padding:8px;color:var(--green);font-size:11px">✅ No alerts — all limits OK</div>';
+      }
+    }
+  }catch(e){console.warn('CF API:',e.message)}
+}
+
 function renderIntegrations(){
   const ints=[{n:'GitHub',i:'🐙',s:'Connected',d:'Source control'},{n:'Cloudflare Workers',i:'☁️',s:'Deployed',d:'Hosting'},{n:'Cloudflare AI',i:'🧠',s:'Active',d:'LLM'},{n:'D1 Database',i:'💾',s:'Connected',d:'SQL'},{n:'MCP Servers',i:'🔌',s:'Integrated',d:'Agent tools'},{n:'Ollama',i:'🤖',s:'Optional',d:'Local LLMs'}];
   $('intList').innerHTML=ints.map(i=>'<div class="card" style="margin-bottom:0"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px">'+i.i+'</span><div><b style="font-size:13px">'+esc(i.n)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(i.d)+'</div></div><span class="badge badge-g" style="margin-left:auto">'+i.s+'</span></div></div>').join('');

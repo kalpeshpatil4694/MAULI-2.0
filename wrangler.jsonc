@@ -6,7 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   "triggers": { "crons": ["*/1 * * * *"] },
-  "secrets": { "required": ["GITHUB_TOKEN"] },
+  "secrets": { "required": ["GITHUB_TOKEN", "CLOUDFLARE_API_TOKEN"] },
   "vars": {
     "APP_NAME": "MAULI 2.0",
     "ENVIRONMENT": "production",

@@ -8,3 +8,4 @@ coverage/
 Result/
 *.bak
 bun.lock
+.dev.vars

@@ -31,6 +31,7 @@ import { scrapePage, researchTopic } from './scraper.js';
 import { getFreeServices, getServicesByCategory, getServiceCategories, estimateFreeTierCost } from './free-services.js';
 import { generateDesignCSS, getThemes, createDesignSystem } from './design-system.js';
 import { getAgentPatterns, getPatternForProject, getPatternCategories } from './agent-patterns.js';
+import { getD1UsageFromAPI, getWorkerAnalytics, getKVUsage, getFullUsageReport, checkLimits } from './cloudflare-api.js';
 
 function artifactJson(artifact) { return artifact ? ok({ artifact }) : fail('Artifact not found',404); }
 function isIsolatedTestEnv(env) { return env?.SKIP_RESULT_PERSISTENCE === true || env?.SKIP_RESULT_PERSISTENCE === 'true' || env?.MAULI_TEST_MODE === true || env?.MAULI_TEST_MODE === 'true'; }
@@ -512,5 +513,41 @@ export default { async fetch(request, env) { try {
     return fail('No HTML files',404);
   }
   
-    return fail('Route not found',404);
+    // ── CLOUDFLARE API: Debug endpoint ──
+  if(request.method==='GET'&&url.pathname==='/api/cf/debug'){
+    return ok({
+      tokenSet: Boolean(env?.CLOUDFLARE_API_TOKEN),
+      tokenLength: env?.CLOUDFLARE_API_TOKEN?.length || 0,
+      tokenPrefix: env?.CLOUDFLARE_API_TOKEN?.substring(0,5) || 'none',
+      allEnvKeys: Object.keys(env || {}).filter(k => !k.startsWith('_'))
+    });
+  }
+  // ── CLOUDFLARE API: Real-time usage from Cloudflare ──
+  if(request.method==='GET'&&url.pathname==='/api/cf/usage'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const report=await getFullUsageReport(env);
+    return ok({usage:report});
+  }
+  if(request.method==='GET'&&url.pathname==='/api/cf/d1'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const d1=await getD1UsageFromAPI(env);
+    return ok({d1});
+  }
+  if(request.method==='GET'&&url.pathname==='/api/cf/workers'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const workers=await getWorkerAnalytics(env);
+    return ok({workers});
+  }
+  if(request.method==='GET'&&url.pathname==='/api/cf/kv'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const kv=await getKVUsage(env);
+    return ok({kv});
+  }
+  if(request.method==='GET'&&url.pathname==='/api/cf/alerts'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const result=await checkLimits(env);
+    return ok(result);
+  }
+
+  return fail('Route not found',404);
 } catch(error){return fail(error.message||'Internal error',500);} } };
