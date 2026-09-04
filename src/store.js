@@ -41,7 +41,7 @@ export class MemoryStore {
   }
   async flush() { if(this.pendingWrites.size) await Promise.all([...this.pendingWrites]); return true; }
   recentEvents(limit=50) { return this.events.slice(-limit).reverse(); }
-  async hydrate(types=['agents','projects','tasks','approvals','memory','runs','verifications','tools','artifacts','command_results']) { if(!hasD1(this.env))return false; for(const type of types){const rows=await d1List(this.env,type);const existing=this.data.get(type)??new Map();for(const item of rows)if(item?.id)existing.set(item.id,item);if(existing.size)this.data.set(type,existing);}this.events=await d1Events(this.env);this.hydrated=true;this._pruneEventsIfNeeded();return true; }
+  async hydrate(types=['agents','projects','tasks','approvals','tools']) { if(!hasD1(this.env))return false; for(const type of types){const rows=await d1List(this.env,type);const existing=this.data.get(type)??new Map();for(const item of rows)if(item?.id)existing.set(item.id,item);if(existing.size)this.data.set(type,existing);}this.events=await d1Events(this.env);this.hydrated=true;this._pruneEventsIfNeeded();return true; }
   async _pruneEventsIfNeeded() {
     if(!hasD1(this.env))return;
     try {

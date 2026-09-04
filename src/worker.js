@@ -13,15 +13,15 @@ import { json, now, fail } from './core.js';
 import { requireFounder, checkRateLimit } from './auth.js';
 import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
-let _workerInit = false;
+let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 60000;
 async function hydrate(env) {
-  if (_workerInit) return;
+  if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
   await ensureSchema(env);
   store.configure(env);
   if (!store.hydrated) await store.hydrate();
   ensureBuiltinTools();
   seedAgents();
-  _workerInit = true;
+  _workerInit = true; _lastHydrateTime = Date.now();
 }
 
 function isIsolatedTestEnv(env) {
@@ -38,8 +38,9 @@ function injectDashboardLive(response) {
 
 export default {
   async fetch(request, env, ctx) {
-    await hydrate(env);
     const url = new URL(request.url);
+    const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname === "/api/cf/debug";
+    if (!lightPath) await hydrate(env);
 
     // Founder commands are queued immediately. Execution is owned by the persistent scheduler,
     // so a long build can never turn into a false 60-second timeout response.
