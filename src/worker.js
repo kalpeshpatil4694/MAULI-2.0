@@ -14,11 +14,26 @@ import { requireFounder, checkRateLimit } from './auth.js';
 import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
 let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 60000;
+let _d1Failed = false; let _d1FailTime = 0; const D1_FAIL_COOLDOWN = 300000; // 5 min retry after D1 failure
 async function hydrate(env) {
   if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
-  await ensureSchema(env);
-  store.configure(env);
-  if (!store.hydrated) await store.hydrate();
+  // If D1 previously failed, wait 5 min before retrying
+  if (_d1Failed && (Date.now() - _d1FailTime) < D1_FAIL_COOLDOWN) {
+    // Still initialize tools/agents (no D1 needed)
+    if (!_workerInit) { ensureBuiltinTools(); seedAgents(); _workerInit = true; _lastHydrateTime = Date.now(); }
+    return;
+  }
+  try {
+    await ensureSchema(env);
+    store.configure(env);
+    if (!store.hydrated) await store.hydrate();
+    _d1Failed = false; // D1 is working again
+  } catch (d1Error) {
+    console.warn('D1 unavailable, running in-memory mode:', d1Error?.message);
+    _d1Failed = true; _d1FailTime = Date.now();
+    // Configure store anyway — it works in-memory without D1
+    store.configure(env);
+  }
   ensureBuiltinTools();
   seedAgents();
   _workerInit = true; _lastHydrateTime = Date.now();
