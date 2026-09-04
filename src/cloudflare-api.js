@@ -44,20 +44,13 @@ export async function getD1UsageFromAPI(env) {
     const dbData = await cfFetch(`/accounts/${accountId}/d1/database/${dbId}`, token);
     const db = dbData.result || {};
 
-    // Note: D1 SQL queries count as rows_read — skipped to stay within free tier limits
-
-    const totalBytes = tables.reduce((sum, t) => sum + (t.bytes || 0), 0);
+    // D1 SQL queries count as rows_read — use only REST API for size info
+    const totalBytes = db.file_size || 0;
 
     return {
       available: true,
       databaseId: dbId,
       databaseName: db.name || 'mauli2-production',
-      tables: tables.map(t => ({
-        type: t.type,
-        count: t.count,
-        bytes: t.bytes,
-        mb: ((t.bytes || 0) / 1024 / 1024).toFixed(2)
-      })),
       totalMB: (totalBytes / 1024 / 1024).toFixed(2),
       totalBytes,
       limit: 500, // MB free tier
@@ -160,7 +153,7 @@ export async function getKVUsage(env) {
 
 // ─── Full Usage Report ───
 export async function getFullUsageReport(env) {
-  const [d1, workers, kv] = await Promise.all([
+  const [d1, workers, kv] = await Promise.allSettled([
     getD1UsageFromAPI(env),
     getWorkerAnalytics(env),
     getKVUsage(env)
@@ -169,9 +162,9 @@ export async function getFullUsageReport(env) {
   return {
     timestamp: new Date().toISOString(),
     apiConnected: Boolean(env?.CLOUDFLARE_API_TOKEN),
-    d1,
-    workers,
-    kv,
+    d1: d1.status === 'fulfilled' ? d1.value : { error: d1.reason?.message || 'Failed', available: false },
+    workers: workers.status === 'fulfilled' ? workers.value : { error: workers.reason?.message || 'Failed', available: false },
+    kv: kv.status === 'fulfilled' ? kv.value : { error: kv.reason?.message || 'Failed', available: false },
     freeTierLimits: {
       d1: { storage: '500MB', reads: '5M/day', writes: '100K/day' },
       workers: { requests: '100K/day', cpuTime: '10ms', memory: '128MB', subrequests: '50', scriptSize: '3MB' },
