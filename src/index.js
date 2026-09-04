@@ -515,10 +515,11 @@ export default { async fetch(request, env) { try {
   
     // ── CLOUDFLARE API: Debug endpoint ──
   if(request.method==='GET'&&url.pathname==='/api/cf/debug'){
+    const token = env?.CLOUDFLARE_API_TOKEN || process.env?.CLOUDFLARE_API_TOKEN;
     return ok({
-      tokenSet: Boolean(env?.CLOUDFLARE_API_TOKEN),
-      tokenLength: env?.CLOUDFLARE_API_TOKEN?.length || 0,
-      tokenPrefix: env?.CLOUDFLARE_API_TOKEN?.substring(0,5) || 'none',
+      tokenSet: Boolean(token),
+      tokenLength: token?.length || 0,
+      tokenPrefix: token?.substring(0,5) || 'none',
       allEnvKeys: Object.keys(env || {}).filter(k => !k.startsWith('_'))
     });
   }

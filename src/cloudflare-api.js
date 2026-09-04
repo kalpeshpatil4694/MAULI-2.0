@@ -5,6 +5,11 @@ const CF_BASE = 'https://api.cloudflare.com/client/v4';
 
 let _accountId = null;
 
+// Get token from Worker env binding OR process.env (for local/preview)
+function getToken(env) {
+  return env?.CLOUDFLARE_API_TOKEN || process.env?.CLOUDFLARE_API_TOKEN || null;
+}
+
 async function cfFetch(path, token, options = {}) {
   const resp = await fetch(CF_BASE + path, {
     ...options,
@@ -31,7 +36,7 @@ async function getAccountId(token) {
 
 // ─── D1 Usage ───
 export async function getD1UsageFromAPI(env) {
-  const token = env?.CLOUDFLARE_API_TOKEN;
+  const token = getToken(env);
   if (!token) return { error: 'CLOUDFLARE_API_TOKEN not set', available: false };
 
   try {
@@ -64,7 +69,7 @@ export async function getD1UsageFromAPI(env) {
 
 // ─── Worker Analytics ───
 export async function getWorkerAnalytics(env) {
-  const token = env?.CLOUDFLARE_API_TOKEN;
+  const token = getToken(env);
   if (!token) return { error: 'CLOUDFLARE_API_TOKEN not set', available: false };
 
   try {
@@ -108,7 +113,7 @@ export async function getWorkerAnalytics(env) {
 
 // ─── KV Usage ───
 export async function getKVUsage(env) {
-  const token = env?.CLOUDFLARE_API_TOKEN;
+  const token = getToken(env);
   if (!token) return { error: 'CLOUDFLARE_API_TOKEN not set', available: false };
 
   try {
@@ -161,7 +166,7 @@ export async function getFullUsageReport(env) {
 
   return {
     timestamp: new Date().toISOString(),
-    apiConnected: Boolean(env?.CLOUDFLARE_API_TOKEN),
+    apiConnected: Boolean(getToken(env)),
     d1: d1.status === 'fulfilled' ? d1.value : { error: d1.reason?.message || 'Failed', available: false },
     workers: workers.status === 'fulfilled' ? workers.value : { error: workers.reason?.message || 'Failed', available: false },
     kv: kv.status === 'fulfilled' ? kv.value : { error: kv.reason?.message || 'Failed', available: false },
