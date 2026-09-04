@@ -805,7 +805,7 @@ setInterval(()=>{
     S.approvals=(dd.approvals||[]).filter(a=>a.state==='pending');S.tools=dd.tools||[];
     updateStats();
   }).catch(()=>{});
-},10000);
+},60000);
 
 // Clock
 setInterval(()=>{if($('clock'))$('clock').textContent=new Date().toLocaleTimeString()},1000);

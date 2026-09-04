@@ -44,19 +44,7 @@ export async function getD1UsageFromAPI(env) {
     const dbData = await cfFetch(`/accounts/${accountId}/d1/database/${dbId}`, token);
     const db = dbData.result || {};
 
-    // Get table sizes via SQL
-    let tables = [];
-    try {
-      const sqlResp = await cfFetch(`/accounts/${accountId}/d1/database/${dbId}/query`, token, {
-        method: 'POST',
-        body: JSON.stringify({
-          sql: "SELECT type, COUNT(*) as count, SUM(LENGTH(data)) as bytes FROM entities GROUP BY type ORDER BY bytes DESC"
-        })
-      });
-      tables = sqlResp.result?.[0]?.results || [];
-    } catch (e) {
-      // Query might fail if schema is different
-    }
+    // Note: D1 SQL queries count as rows_read — skipped to stay within free tier limits
 
     const totalBytes = tables.reduce((sum, t) => sum + (t.bytes || 0), 0);
 

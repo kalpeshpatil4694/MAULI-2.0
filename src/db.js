@@ -85,7 +85,9 @@ const FREE_LIMITS = {
 };
 
 /** Get D1 storage usage breakdown by entity type */
+let _usageCache=null;let _usageCacheTime=0;const USAGE_CACHE_TTL=5*60*1000;
 export async function getD1Usage(env) {
+  const now=Date.now();if(_usageCache&&(now-_usageCacheTime)<USAGE_CACHE_TTL)return _usageCache;
   if (!hasD1(env)) return { d1: false, types: [], totalBytes: 0, totalRows: 0 };
   try {
     const typeRows = await env.DB.prepare(
@@ -103,7 +105,7 @@ export async function getD1Usage(env) {
     const eventCount = await env.DB.prepare('SELECT COUNT(*) as cnt FROM events').first();
     const eventBytes = await env.DB.prepare('SELECT COALESCE(SUM(LENGTH(payload)),0) as bytes FROM events').first();
 
-    return {
+    const result={
       d1: true,
       types,
       events: { count: eventCount?.cnt ?? 0, bytes: eventBytes?.bytes ?? 0 },
@@ -111,6 +113,8 @@ export async function getD1Usage(env) {
       totalRows,
       totalMB: (totalBytes / 1048576).toFixed(2),
     };
+    _usageCache=result;_usageCacheTime=Date.now();
+    return result;
   } catch (e) {
     return { d1: false, error: e.message, types: [], totalBytes: 0, totalRows: 0 };
   }
