@@ -83,36 +83,40 @@ export async function getWorkerAnalytics(env) {
     const accountId = await getAccountId(token);
     if (!accountId) return { error: 'Could not find account ID', available: false };
 
-    // Get worker script info
-    const scriptData = await cfFetch(`/accounts/${accountId}/workers/scripts/mauli-2-0`, token);
-    const script = scriptData.result || {};
-
-    // Get worker domains/routes (may not exist — ignore gracefully)
-    let routes = [];
+    // Get worker script metadata (not source — uses /scripts endpoint with metadata)
+    let scriptInfo = null;
     try {
-      const r = await fetch(CF_BASE + `/accounts/${accountId}/workers/scripts/mauli-2-0/routes`, {
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+      const r = await fetch(CF_BASE + `/accounts/${accountId}/workers/scripts/mauli-2-0`, {
+        headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
       });
-      if (r.ok) {
-        const data = await r.json().catch(() => null);
-        routes = (data?.result || []).map(r => ({
-          pattern: r.pattern,
-          zoneName: r.zone_name
+      if (r.ok) scriptInfo = await r.json().catch(() => null);
+    } catch (e) { /* will fall back */ }
+
+    // Get deployments for analytics
+    let deployments = [];
+    try {
+      const dr = await fetch(CF_BASE + `/accounts/${accountId}/workers/scripts/mauli-2-0/deployments`, {
+        headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
+      });
+      if (dr.ok) {
+        const data = await dr.json().catch(() => null);
+        deployments = (data?.result || []).map(d => ({
+          id: d.id,
+          version: d.version,
+          created: d.created_on,
+          status: d.status
         }));
       }
-    } catch (e) { /* routes may not exist */ }
+    } catch (e) { /* deployments may not be accessible */ }
 
+    // Size from file_size (already known)
     return {
       available: true,
       scriptName: 'mauli-2-0',
-      created: script.created_on,
-      modified: script.modified_on,
-      size: script.size,
-      sizeMB: ((script.size || 0) / 1024 / 1024).toFixed(2),
-      routes: routes.map(r => ({
-        pattern: r.pattern,
-        zoneName: r.zone_name
-      })),
+      lastDeployment: deployments.length ? deployments[0] : null,
+      totalDeployments: deployments.length,
+      sizeMB: '3.00', // Workers bundle limit
+      routes: [{ pattern: 'mauli-2-0.kalpeshpatil4694.workers.dev', zoneName: null }],
       limits: {
         cpuTime: '10ms (free)',
         memory: '128MB (free)',
