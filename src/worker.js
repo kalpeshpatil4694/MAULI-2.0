@@ -24,7 +24,7 @@ async function hydrate(env) {
     return;
   }
   try {
-    await ensureSchema(env);
+    if (!_workerInit) await ensureSchema(env);
     store.configure(env);
     if (!store.hydrated) await store.hydrate();
     _d1Failed = false; // D1 is working again
@@ -54,7 +54,7 @@ function injectDashboardLive(response) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname === "/api/cf/debug";
+    const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname === "/api/cf/debug" || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status";
     if (!lightPath) await hydrate(env);
 
     // Founder commands are queued immediately. Execution is owned by the persistent scheduler,

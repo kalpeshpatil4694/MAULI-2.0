@@ -41,7 +41,11 @@ export class MemoryStore {
   }
   async flush() { if(this.pendingWrites.size) await Promise.all([...this.pendingWrites]); return true; }
   recentEvents(limit=50) { return this.events.slice(-limit).reverse(); }
-  async hydrate(types=['agents','projects','tasks','approvals','tools']) { if(!hasD1(this.env))return false; for(const type of types){const rows=await d1List(this.env,type);const existing=this.data.get(type)??new Map();for(const item of rows)if(item?.id)existing.set(item.id,item);if(existing.size)this.data.set(type,existing);}this.events=await d1Events(this.env);this.hydrated=true;this._pruneEventsIfNeeded();return true; }
+  async hydrate(types=['agents','projects','tasks','approvals','tools']) { if(!hasD1(this.env))return false; // Reorder: tasks before projects so project state calc avoids extra D1 read
+  const ordered=[...types].sort((a,b)=>{if(a==='tasks')return -1;if(b==='tasks')return 1;return 0;});
+  const taskRows=[];
+  for(const type of ordered){const isProject=type==='projects';const rows=await d1List(this.env,type,isProject?{existingTasks:taskRows}:undefined);const existing=this.data.get(type)??new Map();for(const item of rows)if(item?.id)existing.set(item.id,item);if(existing.size)this.data.set(type,existing);if(type==='tasks')taskRows.push(...rows);}
+  this.events=await d1Events(this.env);this.hydrated=true;return true; }
   async _pruneEventsIfNeeded() {
     if(!hasD1(this.env))return;
     try {

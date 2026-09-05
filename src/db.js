@@ -22,12 +22,16 @@ function projectStateFromTasks(project, tasks) {
   return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
 }
 
-export async function d1List(env, type) {
+export async function d1List(env, type, { existingTasks } = {}) {
   const result = await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC').bind(type).all();
   const rows = (result.results ?? []).map(row => JSON.parse(row.data));
   if (type !== 'projects' || !rows.length) return rows;
-  const taskResult = await env.DB.prepare('SELECT data FROM entities WHERE type = ?').bind('tasks').all();
-  const tasks = (taskResult.results ?? []).map(row => JSON.parse(row.data));
+  // Use existing tasks if provided to avoid extra D1 read
+  let tasks = existingTasks;
+  if (!tasks) {
+    const taskResult = await env.DB.prepare('SELECT data FROM entities WHERE type = ?').bind('tasks').all();
+    tasks = (taskResult.results ?? []).map(row => JSON.parse(row.data));
+  }
   return rows.map(project => ({ ...project, state: projectStateFromTasks(project, tasks) }));
 }
 
