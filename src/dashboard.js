@@ -384,7 +384,7 @@ select.inp{cursor:pointer}
           <div id="uBreakdown"></div>
         </div>
         <div class="card">
-          <div class="card-h"><div class="card-t">🌐 Cloudflare API Status</div><span id="cfStatus"></span></div>
+          <div class="card-h"><div class="card-t">🌐 Cloudflare API Status</div><span id="cfStatus"><span class="badge badge-y">Loading...</span></span></div>
           <div id="cfD1"></div>
           <div id="cfWorkers"></div>
           <div id="cfKv"></div>
@@ -646,7 +646,7 @@ async function loadCFData(){
         $('cfAlerts').innerHTML='<div style="padding:8px;color:var(--green);font-size:11px">✅ No alerts — all limits OK</div>';
       }
     }
-  }catch(e){console.warn('CF API:',e.message)}
+  }catch(e){console.warn('CF API:',e.message);if($('cfStatus'))$('cfStatus').innerHTML='<span class="badge badge-r">❌ '+esc(e.message)+'</span>'}
 }
 
 function renderIntegrations(){
