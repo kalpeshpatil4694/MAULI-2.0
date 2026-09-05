@@ -87,11 +87,19 @@ export async function getWorkerAnalytics(env) {
     const scriptData = await cfFetch(`/accounts/${accountId}/workers/scripts/mauli-2-0`, token);
     const script = scriptData.result || {};
 
-    // Get worker domains/routes
+    // Get worker domains/routes (may not exist — ignore gracefully)
     let routes = [];
     try {
-      const routeData = await cfFetch(`/accounts/${accountId}/workers/scripts/mauli-2-0/routes`, token);
-      routes = routeData.result || [];
+      const r = await fetch(CF_BASE + `/accounts/${accountId}/workers/scripts/mauli-2-0/routes`, {
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+      });
+      if (r.ok) {
+        const data = await r.json().catch(() => null);
+        routes = (data?.result || []).map(r => ({
+          pattern: r.pattern,
+          zoneName: r.zone_name
+        }));
+      }
     } catch (e) { /* routes may not exist */ }
 
     return {
