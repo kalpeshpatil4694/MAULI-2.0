@@ -592,7 +592,7 @@ async function runCleanup(){
 async function loadCFData(){
   try{
     const r=await api('/api/cf/usage');
-    const u=r.usage||r;
+    const u=r.usage||r.data?.usage||r;
     if($('cfStatus')){
       const connected=u.apiConnected;
       $('cfStatus').innerHTML='<span class="badge badge-'+(connected?'g':'y')+'">'+(connected?'🟢 Connected':'⚪ Not Connected')+'</span>';
