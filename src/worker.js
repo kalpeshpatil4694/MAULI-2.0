@@ -13,7 +13,7 @@ import { json, now, fail } from './core.js';
 import { requireFounder, checkRateLimit } from './auth.js';
 import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
-let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 60000;
+let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 300000; // 5 min cooldown to prevent D1 row exhaustion
 let _d1Failed = false; let _d1FailTime = 0; const D1_FAIL_COOLDOWN = 300000; // 5 min retry after D1 failure
 async function hydrate(env) {
   if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
@@ -54,8 +54,9 @@ function injectDashboardLive(response) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname === "/api/cf/debug" || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status";
-    if (!lightPath) await hydrate(env);
+    const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname === "/api/cf/debug" || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status" || url.pathname === "/api/learning/stats" || url.pathname === "/api/learning/skill-tree" || url.pathname === "/api/collaboration/stats" || url.pathname === "/api/messages" || url.pathname === "/api/mcp/servers" || url.pathname === "/api/self-test" || url.pathname === "/api/result-diagnostic";
+    // Only hydrate on POST requests (commands/approvals) or if not yet initialized
+    if (!lightPath && !_workerInit) await hydrate(env);
 
     // Founder commands are queued immediately. Execution is owned by the persistent scheduler,
     // so a long build can never turn into a false 60-second timeout response.
