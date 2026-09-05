@@ -7,7 +7,8 @@ let _accountId = null;
 
 // Get token from Worker env binding OR process.env (for local/preview)
 function getToken(env) {
-  return env?.CLOUDFLARE_API_TOKEN || process.env?.CLOUDFLARE_API_TOKEN || null;
+  const raw = env?.CLOUDFLARE_API_TOKEN || process.env?.CLOUDFLARE_API_TOKEN || null;
+  return raw ? raw.trim() : null;
 }
 
 async function cfFetch(path, token, options = {}) {
@@ -29,9 +30,15 @@ async function cfFetch(path, token, options = {}) {
 // Get account ID (cached after first call)
 async function getAccountId(token) {
   if (_accountId) return _accountId;
-  const data = await cfFetch('/accounts?per_page=1', token);
-  _accountId = data.result?.[0]?.id;
-  return _accountId;
+  try {
+    const data = await cfFetch('/accounts?per_page=1', token);
+    _accountId = data.result?.[0]?.id;
+    return _accountId;
+  } catch (e) {
+    // Token may not have Account:Read permission
+    console.warn('getAccountId failed:', e.message);
+    return null;
+  }
 }
 
 // ─── D1 Usage ───
@@ -164,12 +171,18 @@ export async function getFullUsageReport(env) {
     getKVUsage(env)
   ]);
 
+  const token = getToken(env);
+  const d1Result = d1.status === 'fulfilled' ? d1.value : { error: d1.reason?.message || 'Failed', available: false };
+  const workersResult = workers.status === 'fulfilled' ? workers.value : { error: workers.reason?.message || 'Failed', available: false };
+  const kvResult = kv.status === 'fulfilled' ? kv.value : { error: kv.reason?.message || 'Failed', available: false };
+  // API is connected if token is set AND at least one call succeeded
+  const anyAvailable = d1Result.available || workersResult.available || kvResult.available;
   return {
     timestamp: new Date().toISOString(),
-    apiConnected: Boolean(getToken(env)),
-    d1: d1.status === 'fulfilled' ? d1.value : { error: d1.reason?.message || 'Failed', available: false },
-    workers: workers.status === 'fulfilled' ? workers.value : { error: workers.reason?.message || 'Failed', available: false },
-    kv: kv.status === 'fulfilled' ? kv.value : { error: kv.reason?.message || 'Failed', available: false },
+    apiConnected: Boolean(token) && (anyAvailable || !d1Result.error?.includes('not set')),
+    d1: d1Result,
+    workers: workersResult,
+    kv: kvResult,
     freeTierLimits: {
       d1: { storage: '500MB', reads: '5M/day', writes: '100K/day' },
       workers: { requests: '100K/day', cpuTime: '10ms', memory: '128MB', subrequests: '50', scriptSize: '3MB' },

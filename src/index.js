@@ -515,7 +515,7 @@ export default { async fetch(request, env) { try {
   
     // ── CLOUDFLARE API: Debug endpoint ──
   if(request.method==='GET'&&url.pathname==='/api/cf/debug'){
-    const token = env?.CLOUDFLARE_API_TOKEN || process.env?.CLOUDFLARE_API_TOKEN;
+    const token = (env?.CLOUDFLARE_API_TOKEN || process.env?.CLOUDFLARE_API_TOKEN || '').trim();
     let apiTest = null;
     if (token) {
       try {
