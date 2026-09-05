@@ -30,7 +30,14 @@ assert.equal(canWriteD1(env, true), false);
 
 const overflowEnv = {};
 recordD1Write(overflowEnv, 150000);
-assert.equal(d1QuotaSnapshot(overflowEnv).used, 150000);
+assert.equal(d1QuotaSnapshot(overflowEnv).used, 100000);
+assert.equal(d1QuotaSnapshot(overflowEnv).remaining, 0);
 assert.equal(canWriteD1(overflowEnv, true), false);
+
+const projectedEnv = {};
+recordD1Write(projectedEnv, 89999);
+assert.equal(canWriteD1(projectedEnv, false), false);
+assert.equal(canWriteD1(projectedEnv, true, 2), true);
+assert.equal(canWriteD1(projectedEnv, true, 2) && projectedEnv.__MAULI_D1_QUOTA.writes + 2 <= 100000, true);
 
 console.log('D1 quota guard tests passed');
