@@ -15,11 +15,12 @@ import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
 let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 300000; // 5 min cooldown to prevent D1 row exhaustion
 let _d1Failed = false; let _d1FailTime = 0; const D1_FAIL_COOLDOWN = 300000; // 5 min retry after D1 failure
+let _d1LimitReset = false; // Reset flag — set when D1 limit is no longer hit
+const _lastResetCheckTime = 0;
 async function hydrate(env) {
   if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
-  // If D1 previously failed, wait 5 min before retrying
-  if (_d1Failed && (Date.now() - _d1FailTime) < D1_FAIL_COOLDOWN) {
-    // Still initialize tools/agents (no D1 needed)
+  // If D1 previously failed and limit not reset, skip entirely (no retries until next day)
+  if (_d1Failed && !_d1LimitReset) {
     if (!_workerInit) { ensureBuiltinTools(); seedAgents(); _workerInit = true; _lastHydrateTime = Date.now(); }
     return;
   }
@@ -27,11 +28,12 @@ async function hydrate(env) {
     if (!_workerInit) await ensureSchema(env);
     store.configure(env);
     if (!store.hydrated) await store.hydrate();
-    _d1Failed = false; // D1 is working again
+    _d1Failed = false;
+    _d1LimitReset = false; // D1 working again
   } catch (d1Error) {
     console.warn('D1 unavailable, running in-memory mode:', d1Error?.message);
-    _d1Failed = true; _d1FailTime = Date.now();
-    // Configure store anyway — it works in-memory without D1
+    _d1Failed = true;
+    _d1LimitReset = false;
     store.configure(env);
   }
   ensureBuiltinTools();
@@ -131,12 +133,10 @@ export default {
       return injectDashboardLive(response);
     }
     return response;
-  },
-
-  async scheduled(event, env, ctx) {
-    await hydrate(env);
+  },  async scheduled(event, env, ctx) {
+    // Skip hydration if store is already hydrated — avoids D1 reads every 5 min
+    if (!store.hydrated) await hydrate(env);
     const run = () => schedulerTick(env, { trigger: 'cloudflare-scheduled', scheduledTime: event?.scheduledTime ?? Date.now() });
-    if (ctx?.waitUntil) ctx.waitUntil(run());
-    else await run();
+    if (ctx?.waitUntil) ctx.waitUntil(run()); else await run();
   }
 };
