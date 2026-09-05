@@ -28,4 +28,9 @@ assert.equal(d1QuotaSnapshot(env).protectionMode, true);
 assert.equal(canWriteD1(env, false), false);
 assert.equal(canWriteD1(env, true), false);
 
+const overflowEnv = {};
+recordD1Write(overflowEnv, 150000);
+assert.equal(d1QuotaSnapshot(overflowEnv).used, 150000);
+assert.equal(canWriteD1(overflowEnv, true), false);
+
 console.log('D1 quota guard tests passed');
