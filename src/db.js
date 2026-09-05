@@ -37,8 +37,8 @@ export async function d1List(env, type, { existingTasks } = {}) {
 }
 
 export async function d1Put(env, type, value, { critical = false } = {}) {
-  // An UPSERT can update indexed rows as well as the entity row; reserve a small
-  // amount before executing so the guard cannot knowingly cross the hard ceiling.
+  // Reserve a small write budget before executing. Actual rows_written is recorded
+  // from D1 metadata after success, so the dashboard remains honest about writes.
   if (!canWriteD1(env, critical, 2)) return { ...value, _d1WriteDeferred: true };
   const now = new Date().toISOString();
   const item = { ...value, createdAt: value.createdAt ?? now, updatedAt: now };
@@ -52,7 +52,8 @@ export async function d1Put(env, type, value, { critical = false } = {}) {
 }
 
 export async function d1Events(env, limit = 50) {
-  const result = await env.DB.prepare('SELECT id,type,payload,created_at FROM events ORDER BY created_at DESC LIMIT ?').bind(limit).all();
+  const safeLimit = Math.min(50, Math.max(1, Number(limit) || 50));
+  const result = await env.DB.prepare('SELECT id,type,payload,created_at FROM events ORDER BY created_at DESC LIMIT ?').bind(safeLimit).all();
   return (result.results ?? []).map(r => ({ id:r.id, type:r.type, payload:JSON.parse(r.payload), at:r.created_at }));
 }
 
@@ -81,18 +82,32 @@ export async function getBuildVersion(env, projectId) {
 const FREE_LIMITS = {
   d1DatabaseMB: 500,
   d1AccountMB: 5000,
+  d1RowsReadPerDay: 5000000,
+  d1RowsWrittenPerDay: 100000,
   d1QueriesPerInvocation: 50,
   workersRequestsPerDay: 100000,
+  workersSafeRequestsPerDay: 90000,
   workersCpuMs: 10,
   workersMemoryMB: 128,
   workersSubrequests: 50,
-  workersSizeMB: 3,
+  workersConfiguredSubrequests: 40,
+  workersSizeMB: 64,
+  cronTriggersPerAccount: 5,
   kvReadsPerDay: 100000,
   kvWritesPerDay: 1000,
-  kvStorageMB: 25000,
+  kvDeletesPerDay: 1000,
+  kvListRequestsPerDay: 1000,
+  kvStorageMB: 1024,
+  workersAiNeuronsPerDay: 10000,
+  workersAiSafeRequestsPerDay: 18,
+  r2StorageGBMonth: 10,
+  r2ClassAOperationsMonth: 1000000,
+  r2ClassBOperationsMonth: 10000000,
+  queuesOperationsPerDay: 10000,
+  hyperdriveQueriesPerDay: 100000
 };
 
-let _usageCache=null;let _usageCacheTime=0;const USAGE_CACHE_TTL=5*60*1000;
+let _usageCache=null;let _usageCacheTime=0;const USAGE_CACHE_TTL=15*60*1000;
 export async function getD1Usage(env) {
   const now=Date.now();if(_usageCache&&(now-_usageCacheTime)<USAGE_CACHE_TTL)return _usageCache;
   if (!hasD1(env)) return { d1: false, types: [], totalBytes: 0, totalRows: 0 };
@@ -109,7 +124,7 @@ export async function getD1Usage(env) {
 
 export async function getUsageReport(env) {
   const d1=await getD1Usage(env);const limits=FREE_LIMITS;const usedMB=parseFloat(d1.totalMB??'0');
-  return {limits,d1:{connected:hasD1(env),usedMB,limitMB:limits.d1DatabaseMB,remainingMB:Math.max(0,limits.d1DatabaseMB-usedMB).toFixed(2),pct:Math.min(100,(usedMB/limits.d1DatabaseMB)*100).toFixed(1),rows:d1.totalRows,events:d1.events,breakdown:d1.types},workers:{requestsPerDay:limits.workersRequestsPerDay,cpuMs:limits.workersCpuMs,memoryMB:limits.workersMemoryMB,subrequests:limits.workersSubrequests,sizeMB:limits.workersSizeMB},kv:{readsPerDay:limits.kvReadsPerDay,writesPerDay:limits.kvWritesPerDay,storageMB:limits.kvStorageMB},account:{d1StorageMB:limits.d1AccountMB,d1Databases:10}};
+  return {limits,d1:{connected:hasD1(env),usedMB,limitMB:limits.d1DatabaseMB,remainingMB:Math.max(0,limits.d1DatabaseMB-usedMB).toFixed(2),pct:Math.min(100,(usedMB/limits.d1DatabaseMB)*100).toFixed(1),rows:d1.totalRows,events:d1.events,breakdown:d1.types},workers:{requestsPerDay:limits.workersRequestsPerDay,safeRequestsPerDay:limits.workersSafeRequestsPerDay,cpuMs:limits.workersCpuMs,memoryMB:limits.workersMemoryMB,subrequests:limits.workersSubrequests,configuredSubrequests:limits.workersConfiguredSubrequests,sizeMB:limits.workersSizeMB,cronTriggers:limits.cronTriggersPerAccount},d1Free:{rowsReadPerDay:limits.d1RowsReadPerDay,rowsWrittenPerDay:limits.d1RowsWrittenPerDay,queriesPerInvocation:limits.d1QueriesPerInvocation},kv:{readsPerDay:limits.kvReadsPerDay,writesPerDay:limits.kvWritesPerDay,deletesPerDay:limits.kvDeletesPerDay,listRequestsPerDay:limits.kvListRequestsPerDay,storageMB:limits.kvStorageMB},workersAI:{freeNeuronsPerDay:limits.workersAiNeuronsPerDay,safeRequestsPerDay:limits.workersAiSafeRequestsPerDay},r2:{storageGBMonth:limits.r2StorageGBMonth,classAOperationsMonth:limits.r2ClassAOperationsMonth,classBOperationsMonth:limits.r2ClassBOperationsMonth},queues:{operationsPerDay:limits.queuesOperationsPerDay},hyperdrive:{queriesPerDay:limits.hyperdriveQueriesPerDay},account:{d1StorageMB:limits.d1AccountMB,d1Databases:10}};
 }
 
 export async function cleanupD1(env, options = {}) {
