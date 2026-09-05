@@ -1,13 +1,53 @@
 import './functional-code-executor.js';
 
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const AI_DAILY_REQUEST_LIMIT = 20;
+const AI_SAFE_REQUEST_LIMIT = 18;
+
+function dayKey(date = new Date()) { return date.toISOString().slice(0, 10); }
+function aiState(env) {
+  if (!env.__MAULI_AI_QUOTA) env.__MAULI_AI_QUOTA = { day: dayKey(), requests: 0 };
+  const state = env.__MAULI_AI_QUOTA;
+  const day = dayKey();
+  if (state.day !== day) { state.day = day; state.requests = 0; }
+  return state;
+}
+export function aiQuotaSnapshot(env) {
+  const state = aiState(env);
+  const used = Math.min(AI_DAILY_REQUEST_LIMIT, Math.max(0, Number(state.requests) || 0));
+  return {
+    date: state.day,
+    limit: AI_DAILY_REQUEST_LIMIT,
+    used,
+    remaining: Math.max(0, AI_DAILY_REQUEST_LIMIT - used),
+    percent: Number(((used / AI_DAILY_REQUEST_LIMIT) * 100).toFixed(2)),
+    status: used >= AI_DAILY_REQUEST_LIMIT ? 'limit_reached' : used >= AI_SAFE_REQUEST_LIMIT ? 'critical' : used >= Math.ceil(AI_DAILY_REQUEST_LIMIT * 0.7) ? 'watch' : 'healthy',
+    source: 'MAULI tracked AI requests (not Cloudflare Neurons account meter)'
+  };
+}
+function reserveAIRequest(env) {
+  const state = aiState(env);
+  if (state.requests >= AI_DAILY_REQUEST_LIMIT) return false;
+  state.requests += 1;
+  return true;
+}
+
 function resolveModel(env, options = {}) { return options.model ?? env?.MAULI_MODEL ?? DEFAULT_MODEL; }
 function getProvider(env, options = {}) { return options.provider ?? env?.MAULI_AI_PROVIDER ?? 'cloudflare'; }
-async function cloudflareGenerate(env, messages, options = {}) { if (!env?.AI?.run) throw new Error('Cloudflare AI binding is not configured'); const response = await env.AI.run(resolveModel(env, options), { messages, temperature: options.temperature ?? 0.2, max_tokens: options.maxTokens ?? 1200 }); return response?.response ?? response; }
-export async function generateAI(env, messages, options = {}) { switch (getProvider(env, options)) { case 'cloudflare': return cloudflareGenerate(env, messages, options); default: throw new Error(`Unsupported AI provider: ${getProvider(env)}`); } }
+async function cloudflareGenerate(env, messages, options = {}) {
+  if (!env?.AI?.run) throw new Error('Cloudflare AI binding is not configured');
+  if (!reserveAIRequest(env)) throw new Error('MAULI AI daily safety limit reached; deterministic fallback should be used');
+  const response = await env.AI.run(resolveModel(env, options), {
+    messages,
+    temperature: options.temperature ?? 0.2,
+    max_tokens: Math.min(1200, Math.max(1, Number(options.maxTokens ?? 900)))
+  });
+  return response?.response ?? response;
+}
+export async function generateAI(env, messages, options = {}) { switch (getProvider(env, options)) { case 'cloudflare': return cloudflareGenerate(env, messages, options); default: throw new Error(`Unsupported AI provider: ${getProvider(env, options)}`); } }
 export async function generate(env, messages, options = {}) { return generateAI(env, messages, options); }
-export async function reason(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 1800 }); }
-export async function code(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 2400 }); }
+export async function reason(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 900 }); }
+export async function code(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 1200 }); }
 
 const CAPABILITIES = ['research','planning','product-planning','frontend','ui','backend','api','database','schema','sql','security','testing','verification'];
 function cleanList(value, limit = 30) { return Array.isArray(value) ? value.map(x => String(x).trim()).filter(Boolean).slice(0, limit) : []; }
@@ -34,4 +74,5 @@ export async function interpretWithAI(env, command, options = {}) {
   const raw=await reason(env,[{role:'system',content:system},{role:'user',content:String(command)}],options); const parsed=extractJson(raw);
   if(!parsed)return {objective:String(command),requirements:[],capabilities:[],risks:['AI planning response was not valid JSON'],acceptanceCriteria:[],raw}; return normalizePlan(parsed,command);
 }
-export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'deterministic-free-planner' }; }
+export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'deterministic-free-planner', quota:aiQuotaSnapshot(env) }; }
+export { AI_DAILY_REQUEST_LIMIT, AI_SAFE_REQUEST_LIMIT };
