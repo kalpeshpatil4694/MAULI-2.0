@@ -60,7 +60,7 @@ export default { async fetch(request, env) { try {
   const recoveredRuns=recoverRunningExecutions();
   const url=new URL(request.url);
   if(request.method==='GET'&&url.pathname==='/') return new Response(dashboardHTML(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
-  if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);return ok({usage:report});}
+  if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);const cfReport=await import('./cloudflare-api.js').then(m=>m.getFullUsageReport(env)).catch(()=>null);if(cfReport&&cfReport.apiConnected){report.d1.cfTotalMB=cfReport.d1.totalMB;report.d1.cfPercent=cfReport.d1.percent;report.d1.cfAvailable=true;}return ok({usage:report});}
   if(request.method==='POST'&&url.pathname==='/api/cleanup'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const result=await cleanupD1(env,body);return ok({cleanup:result});}
   // ── SYSTEM STATUS: Full health check with all subsystems ──
   if(request.method==='GET'&&url.pathname==='/api/system-status'){

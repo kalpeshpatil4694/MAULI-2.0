@@ -523,19 +523,23 @@ async function loadUsage(){
   try{
     const r=await api('/api/usage');const u=r.usage||r.data||r;
     const d1=u.d1||{};const w=u.workers||{};const kv=u.kv||{};
-    if($('uDb'))$('uDb').textContent=d1.usedMB?d1.usedMB+'MB':'—';
+    // Fallback to CF API data when local D1 is empty (limit exceeded)
+    const cfD1=d1.cfTotalMB?{usedMB:d1.cfTotalMB,limitMB:500,pct:d1.cfPercent,remainingMB:parseFloat(d1.cfTotalMB)?(500-parseFloat(d1.cfTotalMB)).toFixed(2):'—',rows:null,events:null,cfAvailable:true}:null;
+    const displayD1=cfD1||d1;
+    if($('uDb'))$('uDb').textContent=displayD1.usedMB?displayD1.usedMB+'MB':'—';
     if($('uReq'))$('uReq').textContent=w.requestsPerDay?w.requestsPerDay.toLocaleString():'—';
     if($('uCpu'))$('uCpu').textContent=w.cpuMs?w.cpuMs+'ms':'—';
     // D1 bar
     if($('uD1Bar')){
-      const pct=parseFloat(d1.pct||'0');
+      const pct=parseFloat(displayD1.pct||'0');
       const c=pct>90?'var(--red)':pct>70?'var(--yellow)':'var(--accent)';
-      $('uD1Bar').innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">'+d1.usedMB+' MB / '+d1.limitMB+' MB</span><span style="font-size:12px;font-weight:600;color:'+c+'">'+pct+'%</span></div>'+usageBar(pct)+'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)"><span>Remaining: <b style="color:var(--green)">'+d1.remainingMB+' MB</b></span><span>'+d1.rows+' rows total</span></div>';
+      $('uD1Bar').innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600">'+displayD1.usedMB+' MB / '+displayD1.limitMB+' MB</span><span style="font-size:12px;font-weight:600;color:'+c+'">'+pct+'%</span></div>'+usageBar(pct)+'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)"><span>Remaining: <b style="color:var(--green)">'+displayD1.remainingMB+' MB</b></span><span>'+displayD1.rows||'—'+(cfD1?' (CF API)':'')+' rows total</span></div>';
     }
     if($('uDetail')||$('uD1Detail')){
       const el=$('uDetail')||$('uD1Detail');
-      let h='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Events: '+(d1.events?.count||0)+' stored</div>';
-      h+=usageRow('Events Storage',((d1.events?.bytes||0)/1048576).toFixed(2),Math.min(d1.limitMB*0.1,50).toFixed(2),'MB');
+      const evtCount=cfD1?null:(d1.events?.count||0);
+      let h='<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Events: '+(evtCount??'— CF API')+' stored</div>';
+      h+=usageRow('Events Storage',((displayD1.events?.bytes||0)/1048576).toFixed(2),Math.min(displayD1.limitMB*0.1,50).toFixed(2),'MB');
       el.innerHTML=h;
     }
     // Workers
