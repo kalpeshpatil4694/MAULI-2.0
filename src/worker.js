@@ -54,7 +54,7 @@ function injectDashboardLive(response) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname === "/api/cf/debug" || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status" || url.pathname === "/api/learning/stats" || url.pathname === "/api/learning/skill-tree" || url.pathname === "/api/collaboration/stats" || url.pathname === "/api/messages" || url.pathname === "/api/mcp/servers" || url.pathname === "/api/self-test" || url.pathname === "/api/result-diagnostic";
+    const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname.startsWith("/api/cf/") || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status" || url.pathname === "/api/learning/stats" || url.pathname === "/api/learning/skill-tree" || url.pathname === "/api/collaboration/stats" || url.pathname === "/api/messages" || url.pathname === "/api/mcp/servers" || url.pathname === "/api/self-test" || url.pathname === "/api/result-diagnostic";
     // Only hydrate on POST requests (commands/approvals) or if not yet initialized
     if (!lightPath && !_workerInit) await hydrate(env);
 

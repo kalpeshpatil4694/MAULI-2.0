@@ -42,7 +42,7 @@ let _toolsReady = false;
 async function initOnce(env) {
   if (_initialized) return;
   _initialized = true;
-  await ensureSchema(env);
+  try { await ensureSchema(env); } catch(_) {} // DDL may fail if D1 limit exceeded — non-fatal
   store.configure(env);
   // Hydrate in background — don't block the first response
   if (!store.hydrated) store.hydrate().catch(()=>{});
@@ -516,11 +516,24 @@ export default { async fetch(request, env) { try {
     // ── CLOUDFLARE API: Debug endpoint ──
   if(request.method==='GET'&&url.pathname==='/api/cf/debug'){
     const token = env?.CLOUDFLARE_API_TOKEN || process.env?.CLOUDFLARE_API_TOKEN;
+    let apiTest = null;
+    if (token) {
+      try {
+        const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 5000);
+        const r = await fetch('https://api.cloudflare.com/client/v4/accounts?per_page=1', {
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          signal: ctrl.signal
+        }); clearTimeout(t);
+        const d = await r.json();
+        apiTest = { success: d.success, accountId: d.result?.[0]?.id || null, errors: d.errors?.map(e=>e.message) || [] };
+      } catch (e) { apiTest = { success: false, error: e.message }; }
+    }
     return ok({
       tokenSet: Boolean(token),
       tokenLength: token?.length || 0,
       tokenPrefix: token?.substring(0,5) || 'none',
-      allEnvKeys: Object.keys(env || {}).filter(k => !k.startsWith('_'))
+      allEnvKeys: Object.keys(env || {}).filter(k => !k.startsWith('_')),
+      apiTest
     });
   }
   // ── CLOUDFLARE API: Real-time usage from Cloudflare ──
