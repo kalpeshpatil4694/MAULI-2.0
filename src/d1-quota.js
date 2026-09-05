@@ -27,7 +27,9 @@ export function canWriteD1(env, critical = false, estimatedRows = 1) {
   const s = state(env);
   const estimate = Math.max(1, Number(estimatedRows) || 1);
   if (s.writes + estimate > DAILY_ROW_WRITE_LIMIT) return false;
-  if (!critical && s.writes + estimate > SAFETY_LIMIT) return false;
+  // Non-critical writes must remain strictly below the safety ceiling.
+  // Critical writes may continue up to the Cloudflare hard daily limit.
+  if (!critical && s.writes + estimate >= SAFETY_LIMIT) return false;
   return true;
 }
 
