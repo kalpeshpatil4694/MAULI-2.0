@@ -41,14 +41,17 @@ export class MemoryStore {
   }
   async flush() { if(this.pendingWrites.size) await Promise.all([...this.pendingWrites]); return true; }
   recentEvents(limit=50) { return this.events.slice(-limit).reverse(); }
-  async hydrate(types=['agents','projects','tasks','approvals','tools']) {
+  async hydrate(types=['agents','projects','tasks','approvals','tools','artifacts','command_results','memory','runs','verifications','executions','builds']) {
     if(!hasD1(this.env))return false;
     // Load tasks before projects so project-state calculation never performs a second task query.
     const ordered=[...types].sort((a,b)=>{if(a==='tasks')return -1;if(b==='tasks')return 1;return 0;});
     const taskRows=[];
+    // command_results are ~19KB each (74MB total in D1) — cap so the Results tab
+    // stays usable without blowing the 128MB worker memory limit.
+    const limits={command_results:50};
     for(const type of ordered){
       const isProject=type==='projects';
-      const rows=await d1List(this.env,type,isProject?{existingTasks:taskRows}:undefined);
+      const rows=await d1List(this.env,type,{existingTasks:isProject?taskRows:undefined,limit:limits[type]});
       const existing=this.data.get(type)??new Map();
       for(const item of rows)if(item?.id)existing.set(item.id,item);
       if(existing.size)this.data.set(type,existing);

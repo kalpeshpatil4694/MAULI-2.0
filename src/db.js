@@ -25,8 +25,10 @@ function projectStateFromTasks(project, tasks) {
   return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
 }
 
-export async function d1List(env, type, { existingTasks } = {}) {
-  const result = await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC').bind(type).all();
+export async function d1List(env, type, { existingTasks, limit } = {}) {
+  const result = limit
+    ? await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC LIMIT ?').bind(type, limit).all()
+    : await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC').bind(type).all();
   const rows = (result.results ?? []).map(row => JSON.parse(row.data));
   if (type !== 'projects' || !rows.length) return rows;
   let tasks = existingTasks;
