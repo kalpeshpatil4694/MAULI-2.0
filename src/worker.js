@@ -83,7 +83,7 @@ export default {
           : await saveCommandResult(payload, env).catch(() => ({ saved: false }));
 
         if (queued.status === 'queued' && ctx?.waitUntil) {
-          ctx.waitUntil(schedulerTick(env, { trigger: 'founder-command', runId: queued.runId }).catch(error => {
+          ctx.waitUntil(schedulerTick(env, { trigger: 'founder-command', runId: queued.runId, projectId: queued.project?.id }).catch(error => {
             store.addEvent('command.scheduler_error', { runId: queued.runId, error: error?.message || 'Scheduler error', at: now() });
           }));
         }
@@ -106,8 +106,10 @@ export default {
     if (request.method === 'POST' && url.pathname.startsWith('/api/approvals/')) {
       const response = await app.fetch(request, env, ctx);
       if (response.ok && ctx?.waitUntil) {
-        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId: url.pathname.split('/').pop() }).catch(error => {
-          store.addEvent('approval.scheduler_error', { approvalId: url.pathname.split('/').pop(), error: error?.message || 'Scheduler error after approval', at: now() });
+        const approvalId = url.pathname.split('/').pop();
+        const approval = store.get('approvals', approvalId);
+        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId, projectId: approval?.projectId }).catch(error => {
+          store.addEvent('approval.scheduler_error', { approvalId, error: error?.message || 'Scheduler error after approval', at: now() });
         }));
       }
       return response;
