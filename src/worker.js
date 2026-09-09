@@ -2,7 +2,7 @@
 // HTTP remains owned by index.js; scheduled execution is owned by the persistent scheduler.
 
 import app from './index.js';
-import { ensureSchema } from './db.js';
+import { ensureSchema, pruneEvents } from './db.js';
 import { store } from './store.js';
 import { ensureBuiltinTools } from './tools.js';
 import { seedAgents } from './agents.js';
@@ -15,12 +15,11 @@ import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
 let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 300000; // 5 min cooldown to prevent D1 row exhaustion
 let _d1Failed = false; let _d1FailTime = 0; const D1_FAIL_COOLDOWN = 300000; // 5 min retry after D1 failure
-let _d1LimitReset = false; // Reset flag — set when D1 limit is no longer hit
-const _lastResetCheckTime = 0;
 async function hydrate(env) {
   if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
-  // If D1 previously failed and limit not reset, skip entirely (no retries until next day)
-  if (_d1Failed && !_d1LimitReset) {
+  // After a D1 failure (e.g. daily rows_read limit), retry after the cooldown so the
+  // worker self-heals when the limit resets instead of staying in memory mode forever.
+  if (_d1Failed && (Date.now() - _d1FailTime) < D1_FAIL_COOLDOWN) {
     if (!_workerInit) { ensureBuiltinTools(); seedAgents(); _workerInit = true; _lastHydrateTime = Date.now(); }
     return;
   }
@@ -29,11 +28,11 @@ async function hydrate(env) {
     store.configure(env);
     if (!store.hydrated) await store.hydrate();
     _d1Failed = false;
-    _d1LimitReset = false; // D1 working again
+    _d1FailTime = 0;
   } catch (d1Error) {
     console.warn('D1 unavailable, running in-memory mode:', d1Error?.message);
     _d1Failed = true;
-    _d1LimitReset = false;
+    _d1FailTime = Date.now();
     store.configure(env);
   }
   ensureBuiltinTools();
@@ -138,7 +137,12 @@ export default {
   },  async scheduled(event, env, ctx) {
     // Skip hydration if store is already hydrated — avoids D1 reads every 5 min
     if (!store.hydrated) await hydrate(env);
-    const run = () => schedulerTick(env, { trigger: 'cloudflare-scheduled', scheduledTime: event?.scheduledTime ?? Date.now() });
+    const run = async () => {
+      await schedulerTick(env, { trigger: 'cloudflare-scheduled', scheduledTime: event?.scheduledTime ?? Date.now() });
+      // Self-throttling: prunes at most once per 6h, capped batch — shrinks the
+      // events table (503K+ rows was making every usage scan read ~1M rows).
+      await pruneEvents(env).catch(() => null);
+    };
     if (ctx?.waitUntil) ctx.waitUntil(run()); else await run();
   }
 };

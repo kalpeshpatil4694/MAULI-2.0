@@ -109,6 +109,38 @@ const FREE_LIMITS = {
 };
 
 let _usageCache=null;let _usageCacheTime=0;const USAGE_CACHE_TTL=15*60*1000;
+// Events stats are scanned once per hour at most (COUNT+SUM over the events table
+// used to scan 500K+ rows on EVERY usage-page visit — a rows_read bomb).
+let _eventStats=null;let _eventStatsTime=0;const EVENT_STATS_TTL=60*60*1000;
+async function eventStats(env){
+  const now=Date.now();
+  if(_eventStats&&(now-_eventStatsTime)<EVENT_STATS_TTL)return _eventStats;
+  const row=await env.DB.prepare('SELECT COUNT(*) as cnt, COALESCE(SUM(LENGTH(payload)),0) as bytes FROM events').first();
+  _eventStats={count:row?.cnt??0,bytes:row?.bytes??0};_eventStatsTime=Date.now();
+  return _eventStats;
+}
+// Self-throttling events pruning: keeps audit history bounded, shrinks scan costs,
+// protects the 500MB storage. Bounded batch per run to respect the daily write quota.
+let _lastEventPrune=0;
+export async function pruneEvents(env,{keep=3000,batchLimit=15000,minIntervalMs=6*60*60*1000}={}){
+  if(!hasD1(env))return{pruned:0,reason:'no-d1'};
+  const now=Date.now();if(now-_lastEventPrune<minIntervalMs)return{pruned:0,reason:'cooldown'};
+  try{
+    const {canWriteD1,recordD1Write}=await import('./d1-quota.js');
+    const countRow=await env.DB.prepare('SELECT COUNT(*) as cnt FROM events').first();
+    const count=Number(countRow?.cnt??0);
+    if(count<=keep)return{pruned:0,reason:'under-threshold',count};
+    const toDelete=Math.min(count-keep,batchLimit);
+    if(!canWriteD1(env,false,toDelete))return{pruned:0,reason:'write-quota',count};
+    const old=await env.DB.prepare('SELECT id FROM events ORDER BY created_at ASC LIMIT ?').bind(toDelete).all();
+    const ids=(old.results??[]).map(r=>r.id);if(!ids.length)return{pruned:0,count};
+    const ph=ids.map(()=>'?').join(',');
+    const result=await env.DB.prepare(`DELETE FROM events WHERE id IN (${ph})`).bind(...ids).run();
+    recordD1Write(env,Math.max(1,Number(result?.meta?.rows_written)||ids.length));
+    _lastEventPrune=Date.now();_eventStats=null;_eventStatsTime=0;
+    return{pruned:ids.length,count:count-ids.length};
+  }catch(e){return{pruned:0,error:e.message};}
+}
 export async function getD1Usage(env) {
   const now=Date.now();if(_usageCache&&(now-_usageCacheTime)<USAGE_CACHE_TTL)return _usageCache;
   if (!hasD1(env)) return { d1: false, types: [], totalBytes: 0, totalRows: 0 };
@@ -116,9 +148,8 @@ export async function getD1Usage(env) {
     const typeRows = await env.DB.prepare('SELECT type, COUNT(*) as cnt, SUM(LENGTH(data)) as bytes FROM entities GROUP BY type ORDER BY bytes DESC').all();
     const types = (typeRows.results ?? []).map(r => ({ type:r.type, count:r.cnt, bytes:r.bytes ?? 0, mb:((r.bytes ?? 0)/1048576).toFixed(2) }));
     const totalBytes = types.reduce((s,t)=>s+t.bytes,0); const totalRows=types.reduce((s,t)=>s+t.count,0);
-    const eventCount=await env.DB.prepare('SELECT COUNT(*) as cnt FROM events').first();
-    const eventBytes=await env.DB.prepare('SELECT COALESCE(SUM(LENGTH(payload)),0) as bytes FROM events').first();
-    const result={d1:true,types,events:{count:eventCount?.cnt??0,bytes:eventBytes?.bytes??0},totalBytes,totalRows,totalMB:(totalBytes/1048576).toFixed(2)};
+    const events=await eventStats(env);
+    const result={d1:true,types,events,totalBytes,totalRows,totalMB:(totalBytes/1048576).toFixed(2)};
     _usageCache=result;_usageCacheTime=Date.now();return result;
   } catch(e){return {d1:false,error:e.message,types:[],totalBytes:0,totalRows:0};}
 }

@@ -125,7 +125,30 @@
   🟢 Builds: /api/build-app uses GitHub Actions (free 2,000
      min/month) — repeated builds can hit GitHub minutes.
 
-7. BOTTOM LINE
+7. LIVE-CHECK FINDINGS (2026-09-09) + EXTRA FIXES
+──────────────────────────────────────────────────
+  Live worker check revealed 3 more root causes:
+
+  a) STUCK HYDRATION: worker showed hydrated:false and /api/state
+     returned 0 projects even though D1 reads WORKED (limit had reset).
+     Cause: hydrate() had a _d1Failed flag that was never cleared — the
+     "daily reset check" was never actually implemented, so once a
+     failure happened the isolate stayed in memory mode forever.
+     ✅ FIXED: D1_FAIL_COOLDOWN (5 min) now retries hydration, so the
+     worker self-heals within minutes of the limit resetting.
+
+  b) EVENTS TABLE BOMB: events table had 503,389 rows / 161 MB.
+     getD1Usage scanned it TWICE per call (COUNT + SUM) = ~1M rows_read
+     per usage-page visit, plus 352 MB total storage (70.5% of 500MB).
+     ✅ FIXED: single combined COUNT+SUM query, cached for 1 hour, and
+     new pruneEvents() (cron, self-throttled 6h, batch 15K) shrinks the
+     table to ~3K events over ~8 days.
+
+  c) /api/state on a cold/non-hydrated isolate showed empty data.
+     ✅ FIXED: falls back to direct D1 reads (rate-limited, 20/min)
+     until hydration completes, then serves memory (0 D1 reads).
+
+8. BOTTOM LINE
 ──────────────
   ✅ Command → product delivery WORKS and now completes in minutes
      instead of ~40 minutes.
