@@ -3,6 +3,7 @@
 
 import app from './index.js';
 import { ensureSchema, pruneEvents } from './db.js';
+import { dedupeAgents } from './maintenance.js';
 import { store } from './store.js';
 import { ensureBuiltinTools } from './tools.js';
 import { seedAgents } from './agents.js';
@@ -138,6 +139,9 @@ export default {
     // Skip hydration if store is already hydrated — avoids D1 reads every 5 min
     if (!store.hydrated) await hydrate(env);
     const run = async () => {
+      // Collapse duplicate agents (old cold-start registration created ~60 copies per
+      // name) and re-point task/run references before the tick so stuck tasks unstick.
+      await dedupeAgents(env).catch(() => null);
       await schedulerTick(env, { trigger: 'cloudflare-scheduled', scheduledTime: event?.scheduledTime ?? Date.now() });
       // Self-throttling: prunes at most once per 6h, capped batch — shrinks the
       // events table (503K+ rows was making every usage scan read ~1M rows).
