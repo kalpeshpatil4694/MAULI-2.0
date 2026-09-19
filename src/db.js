@@ -9,6 +9,9 @@ export async function ensureSchema(env) {
     `CREATE TABLE IF NOT EXISTS entities (type TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(type,id))`,
     `CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, type TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL)`,
     `CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type)`,
+    // Without this, "WHERE type=? ORDER BY updated_at DESC LIMIT n" still scans every row
+    // of that type (2560 duplicate agents) to sort — the LIMIT only helped with this index.
+    `CREATE INDEX IF NOT EXISTS idx_entities_type_updated ON entities(type, updated_at)`,
     `CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)`
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
@@ -113,12 +116,18 @@ const FREE_LIMITS = {
 let _usageCache=null;let _usageCacheTime=0;const USAGE_CACHE_TTL=15*60*1000;
 // Events stats are scanned once per hour at most (COUNT+SUM over the events table
 // used to scan 500K+ rows on EVERY usage-page visit — a rows_read bomb).
-let _eventStats=null;let _eventStatsTime=0;const EVENT_STATS_TTL=60*60*1000;
+let _eventStats=null;let _eventStatsTime=0;const EVENT_STATS_TTL=6*60*60*1000;
+// COUNT(*)+SUM(LENGTH(payload)) over the events table reads every row — with 500K+ rows
+// that single query blew most of the daily 5M rows_read budget on its own. Sample the
+// newest window instead: bounded to EVENT_SAMPLE rows, and exact once the table is small.
+const EVENT_SAMPLE=1200;
 async function eventStats(env){
   const now=Date.now();
   if(_eventStats&&(now-_eventStatsTime)<EVENT_STATS_TTL)return _eventStats;
-  const row=await env.DB.prepare('SELECT COUNT(*) as cnt, COALESCE(SUM(LENGTH(payload)),0) as bytes FROM events').first();
-  _eventStats={count:row?.cnt??0,bytes:row?.bytes??0};_eventStatsTime=Date.now();
+  const row=await env.DB.prepare('SELECT COUNT(*) as cnt, COALESCE(SUM(LENGTH(payload)),0) as bytes FROM (SELECT payload FROM events ORDER BY created_at DESC LIMIT ?)').bind(EVENT_SAMPLE).first();
+  const sampled=Number(row?.cnt??0);
+  _eventStats={count:sampled,bytes:Number(row?.bytes??0),sampled:true,exact:sampled<EVENT_SAMPLE,window:EVENT_SAMPLE};
+  _eventStatsTime=Date.now();
   return _eventStats;
 }
 // Self-throttling events pruning: keeps audit history bounded, shrinks scan costs,
@@ -129,18 +138,26 @@ export async function pruneEvents(env,{keep=3000,batchLimit=15000,minIntervalMs=
   const now=Date.now();if(now-_lastEventPrune<minIntervalMs)return{pruned:0,reason:'cooldown'};
   try{
     const {canWriteD1,recordD1Write}=await import('./d1-quota.js');
-    const countRow=await env.DB.prepare('SELECT COUNT(*) as cnt FROM events').first();
-    const count=Number(countRow?.cnt??0);
-    if(count<=keep)return{pruned:0,reason:'under-threshold',count};
-    const toDelete=Math.min(count-keep,batchLimit);
-    if(!canWriteD1(env,false,toDelete))return{pruned:0,reason:'write-quota',count};
-    const old=await env.DB.prepare('SELECT id FROM events ORDER BY created_at ASC LIMIT ?').bind(toDelete).all();
-    const ids=(old.results??[]).map(r=>r.id);if(!ids.length)return{pruned:0,count};
-    const ph=ids.map(()=>'?').join(',');
-    const result=await env.DB.prepare(`DELETE FROM events WHERE id IN (${ph})`).bind(...ids).run();
-    recordD1Write(env,Math.max(1,Number(result?.meta?.rows_written)||ids.length));
-    _lastEventPrune=Date.now();_eventStats=null;_eventStatsTime=0;
-    return{pruned:ids.length,count:count-ids.length};
+    // Walk the created_at index to the keep-th newest event instead of COUNT(*)ing the
+    // whole table — costs ~keep rows instead of every row in the table.
+    const cutoffRow=await env.DB.prepare('SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1 OFFSET ?').bind(keep).first();
+    if(!cutoffRow?.created_at){_lastEventPrune=Date.now();return{pruned:0,reason:'under-threshold'};}
+    _lastEventPrune=Date.now();
+    const cutoff=cutoffRow.created_at;
+    if(!canWriteD1(env,false,batchLimit))return{pruned:0,reason:'write-quota'};
+    const old=await env.DB.prepare('SELECT id FROM events WHERE created_at < ? ORDER BY created_at ASC LIMIT ?').bind(cutoff,batchLimit).all();
+    const ids=(old.results??[]).map(r=>r.id);if(!ids.length)return{pruned:0,reason:'under-threshold'};
+    // D1 rejects statements with more than 100 bound parameters — delete in chunks.
+    let pruned=0;
+    for(let i=0;i<ids.length;i+=90){
+      const chunk=ids.slice(i,i+90);
+      const ph=chunk.map(()=>'?').join(',');
+      const result=await env.DB.prepare(`DELETE FROM events WHERE id IN (${ph})`).bind(...chunk).run();
+      recordD1Write(env,Math.max(1,Number(result?.meta?.rows_written)||chunk.length));
+      pruned+=chunk.length;
+    }
+    _eventStats=null;_eventStatsTime=0;
+    return{pruned,cutoff};
   }catch(e){return{pruned:0,error:e.message};}
 }
 export async function getD1Usage(env) {

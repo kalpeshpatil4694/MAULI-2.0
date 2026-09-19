@@ -39,6 +39,9 @@ export async function dedupeAgents(env) {
     const rows = await env.DB.prepare('SELECT id, data FROM entities WHERE type = ?').bind('agents').all();
     const agents = (rows.results ?? []).map(r => ({ id: r.id, data: JSON.parse(r.data) }));
     if (!agents.length) { _lastAgentDedupe = now; return { deduped: 0, reason: 'none' }; }
+    // Once collapsed the table holds only the built-ins — nothing left to dedupe, and
+    // skipping avoids re-reading every referenced entity type on each hourly run.
+    if (agents.length <= 40) { _lastAgentDedupe = now; return { deduped: 0, reason: 'clean', total: agents.length }; }
 
     const byName = new Map();
     for (const a of agents) {
@@ -86,9 +89,15 @@ export async function dedupeAgents(env) {
       }
     }
 
-    // Delete duplicate agents from D1 + memory store.
-    const ph = [...removeIds].map(() => '?').join(',');
-    await env.DB.prepare(`DELETE FROM entities WHERE type = 'agents' AND id IN (${ph})`).bind(...removeIds).run();
+    // Delete duplicate agents from D1 in small chunks: D1 rejects statements with more
+    // than 100 bound parameters, so the previous single giant IN(...) failed silently and
+    // the duplicates were never actually removed.
+    const removeList = [...removeIds];
+    for (let i = 0; i < removeList.length; i += 90) {
+      const chunk = removeList.slice(i, i + 90);
+      const ph = chunk.map(() => '?').join(',');
+      await env.DB.prepare(`DELETE FROM entities WHERE type = 'agents' AND id IN (${ph})`).bind(...chunk).run();
+    }
     const keptInMemory = store.list('agents').filter(a => keepIds.has(a.id));
     store.data.set('agents', new Map(keptInMemory.map(a => [a.id, a])));
 

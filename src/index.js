@@ -39,13 +39,35 @@ function isIsolatedTestEnv(env) { return env?.SKIP_RESULT_PERSISTENCE === true |
 // Lazy initialization — only run once per Worker lifetime
 let _initialized = false;
 let _toolsReady = false;
-async function initOnce(env) {
+async function initOnce(env, ctx) {
   if (_initialized) return;
   _initialized = true;
   try { await ensureSchema(env); } catch(_) {} // DDL may fail if D1 limit exceeded — non-fatal
   store.configure(env);
-  // Hydrate in background — don't block the first response
-  if (!store.hydrated) store.hydrate().catch(()=>{});
+  // Hydrate in the background. ctx.waitUntil keeps the promise alive after the response
+  // is sent: without it the isolate is torn down mid-hydration, the store never becomes
+  // hydrated, and every /api/state poll re-read all of D1 (the rows_read bleed).
+  if (!store.hydrated) {
+    const hydration = store.hydrateOnce().catch(()=>{});
+    if (ctx?.waitUntil) ctx.waitUntil(hydration);
+  }
+}
+// Bounded, cached snapshot used only until a cold isolate finishes hydrating.
+const STATE_SNAPSHOT_TTL = 5 * 60 * 1000;
+let _stateSnapshot = null; let _stateSnapshotTime = 0;
+async function stateSnapshot(env) {
+  const nowMs = Date.now();
+  if (_stateSnapshot && (nowMs - _stateSnapshotTime) < STATE_SNAPSHOT_TTL) return _stateSnapshot;
+  const tasks = await d1List(env, 'tasks', { limit: 600 });
+  const [agents, projects, approvals, events] = await Promise.all([
+    d1List(env, 'agents', { limit: 200 }),
+    d1List(env, 'projects', { existingTasks: tasks }),
+    d1List(env, 'approvals', { limit: 100 }),
+    d1Events(env)
+  ]);
+  _stateSnapshot = { agents, projects, tasks, approvals, events };
+  _stateSnapshotTime = Date.now();
+  return _stateSnapshot;
 }
 function ensureTools() {
   if (_toolsReady) return;
@@ -54,8 +76,8 @@ function ensureTools() {
   seedAgents();
 }
 
-export default { async fetch(request, env) { try {
-  await initOnce(env);
+export default { async fetch(request, env, ctx) { try {
+  await initOnce(env, ctx);
   ensureTools();
   const recoveredRuns=recoverRunningExecutions();
   const url=new URL(request.url);
@@ -118,7 +140,7 @@ export default { async fetch(request, env) { try {
   if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),time:now()});
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   if(request.method==='POST'&&url.pathname==='/api/reset'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const keepAgents=body.keepAgents!==false;const before={projects:store.list('projects').length,tasks:store.list('tasks').length,artifacts:store.list('artifacts').length};store.put('projects',[]);store.put('tasks',[]);store.put('artifacts',[]);store.put('builds',[]);store.put('events',[]);store.put('approvals',[]);if(!keepAgents){const agents=store.list('agents');const fresh=agents.filter(a=>a._builtin);store.put('agents',fresh);}await store.flush();if(hasD1(env)){try{await env.DB.prepare('DELETE FROM entities').run();await env.DB.prepare('DELETE FROM events').run();}catch(e){console.warn('D1 reset failed:',e.message);}}store.addEvent('system.reset',{before,keepAgents,time:now()});return ok({reset:true,before,keepAgents});}
-  if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});let agents,projects,tasks,approvals,events;if(!store.hydrated&&hasD1(env)){try{[agents,projects,tasks,approvals,events]=await Promise.all([d1List(env,'agents'),d1List(env,'projects'),d1List(env,'tasks'),d1List(env,'approvals'),d1Events(env)]);}catch(_){[agents,projects,tasks,approvals,events]=[listAgents(),listProjects(),listTasks(),listApprovals(),store.recentEvents()];}}else{[agents,projects,tasks,approvals,events]=[listAgents(),listProjects(),listTasks(),listApprovals(),store.recentEvents()];}return ok({agents,projects,tasks,approvals,tools:listTools(),artifacts:store.list('artifacts'),events,recoveredRuns});}
+  if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const memoryState=()=>({agents:listAgents(),projects:listProjects(),tasks:listTasks(),approvals:listApprovals(),tools:listTools(),artifacts:store.list('artifacts'),events:store.recentEvents(),recoveredRuns});if(store.hydrated)return ok(memoryState());if(hasD1(env)){try{const snap=await stateSnapshot(env);return ok({...snap,tools:listTools(),artifacts:store.list('artifacts'),recoveredRuns,snapshot:true});}catch(_){}}return ok(memoryState());}
   if(request.method==='GET'&&url.pathname==='/api/self-test'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const result=runL1SelfTest();store.addEvent('self_test.completed',{score:result.score,status:result.status});return ok({result});}
   if(request.method==='GET'&&url.pathname==='/api/result-diagnostic'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});try{const result=await Promise.race([diagnoseResultPersistence(env),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))]);store.addEvent('result_persistence.diagnostic',{ok:result.ok,tokenConfigured:result.tokenConfigured,reason:result.reason||null});return ok({result});}catch(e){return ok({result:{ok:false,tokenConfigured:false,reason:e.message||'Diagnostic failed'}})}}
   // List all command results

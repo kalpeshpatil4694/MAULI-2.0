@@ -12,7 +12,15 @@ function comparable(value) {
 }
 
 export class MemoryStore {
-  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); }
+  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this._hydrating=null; }
+  // Single-flight hydration: concurrent callers (worker light paths and the HTTP init
+  // path) share one in-flight promise instead of each re-reading every D1 table.
+  hydrateOnce() {
+    if (this.hydrated) return Promise.resolve(true);
+    if (this._hydrating) return this._hydrating;
+    this._hydrating = this.hydrate().catch(()=>false).finally(()=>{ this._hydrating=null; });
+    return this._hydrating;
+  }
   configure(env) { this.env=env??null; }
   list(type) { return [...(this.data.get(type)??new Map()).values()]; }
   get(type,key) { return this.data.get(type)?.get(key)??null; }
@@ -48,7 +56,7 @@ export class MemoryStore {
     const taskRows=[];
     // command_results are ~19KB each (74MB total in D1) — cap so the Results tab
     // stays usable without blowing the 128MB worker memory limit.
-    const limits={command_results:50};
+    const limits={command_results:50,agents:400,tasks:1500,artifacts:300,runs:300,verifications:300,executions:300,memory:500,builds:200,approvals:500,tools:200};
     for(const type of ordered){
       const isProject=type==='projects';
       const rows=await d1List(this.env,type,{existingTasks:isProject?taskRows:undefined,limit:limits[type]});

@@ -27,7 +27,7 @@ async function hydrate(env) {
   try {
     if (!_workerInit) await ensureSchema(env);
     store.configure(env);
-    if (!store.hydrated) await store.hydrate();
+    if (!store.hydrated) await store.hydrateOnce();
     _d1Failed = false;
     _d1FailTime = 0;
   } catch (d1Error) {
@@ -57,8 +57,13 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname.startsWith("/api/cf/") || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status" || url.pathname === "/api/learning/stats" || url.pathname === "/api/learning/skill-tree" || url.pathname === "/api/collaboration/stats" || url.pathname === "/api/messages" || url.pathname === "/api/mcp/servers" || url.pathname === "/api/self-test" || url.pathname === "/api/result-diagnostic";
-    // Only hydrate on POST requests (commands/approvals) or if not yet initialized
-    if (!lightPath && !_workerInit) await hydrate(env);
+    // Only block on hydration for POST/command traffic. Light polling paths (the dashboard
+    // hits these every 60s) hydrate in the background so the response stays cheap while the
+    // isolate still converges to memory-served data instead of re-reading D1 forever.
+    if (!_workerInit) {
+      if (lightPath) { if (ctx?.waitUntil) ctx.waitUntil(hydrate(env).catch(() => {})); }
+      else await hydrate(env);
+    }
 
     // Founder commands are queued immediately. Execution is owned by the persistent scheduler,
     // so a long build can never turn into a false 60-second timeout response.
