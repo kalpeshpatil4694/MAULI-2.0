@@ -120,8 +120,8 @@
      (currently 8,000) for heavy generation.
   🟡 /api/usage is public and calls CF API + cached D1 scans.
      CF API has 100k requests/day free — fine unless hammered.
-  🟢 D1 storage: 319-320 MB / 500 MB (64%) — grows with artifacts.
-     CleanupD1 (/api/cleanup) exists for manual pruning.
+  🟢 D1 storage: 268 MB / 500 MB (54%) after the storage pruning in
+     section 9. CleanupD1 (/api/cleanup) exists for manual pruning.
   🟢 Builds: /api/build-app uses GitHub Actions (free 2,000
      min/month) — repeated builds can hit GitHub minutes.
 
@@ -145,8 +145,10 @@
      table to ~3K events over ~8 days.
 
   c) /api/state on a cold/non-hydrated isolate showed empty data.
-     ✅ FIXED: falls back to direct D1 reads (rate-limited, 20/min)
-     until hydration completes, then serves memory (0 D1 reads).
+     "FIXED" with a direct D1 read per poll — see section 9: because the
+     in-memory hydration never completed, that fallback re-read ALL of D1
+     on every 60s dashboard poll and consumed the whole daily rows_read
+     budget by itself.
 
 8. BOTTOM LINE
 ──────────────
@@ -158,6 +160,68 @@
   ✅ Repeated commands are rate-limited (5/min command, 20/min state).
   ⚠️ The ONE limit that can still bite daily is Workers AI neurons
      (10k/day free) — 1-2 big commands per day max on free tier.
-     Template fallback keeps the app working regardless.
-  🚀 Deploy: push → Cloudflare Dashboard → Workers & Pages →
-     mauli-2-0 → Deployments → Retry deployment.
+     Template fallback keeps the app working regardless.  🚀 Deploy: push to main only. Verified on 2026-09-19 that the Cloudflare
+     Worker is rebuilt automatically within ~1-2 minutes of the push (no
+     manual "Retry deployment" needed).
+
+9. D1 rows_read BLEED + AGENT DUPLICATION (2026-09-19) — ROOT CAUSES & FIXES
+──────────────────────────────────────────────────────────────────────────
+  Measured on the live Worker: /api/state was returning 2.5 MB of data and
+  reading ~3.2K rows per call while /api/health reported hydrated:false.
+
+  ROOT CAUSES
+  a) HYDRATION NEVER COMPLETED. initOnce() started store.hydrate() without
+     ctx.waitUntil, so the isolate was torn down mid-hydration; _initialized
+     was already true, so it was never retried. The store therefore stayed
+     cold for the isolate's whole life and every /api/state poll took the
+     cold-isolate path: 5 full-table reads ≈ 3.2K rows × 1,440 polls/day
+     ≈ 4.6M rows_read/day — the entire 5M/day free budget, with no user
+     activity at all.
+  b) AGENT DUPLICATION. seedAgents() only checked the in-memory store, so
+     every cold isolate start inserted 18 brand-new agent rows. Measured
+     growth: 1,090 → 2,649 agents in ~24h (~77 cold starts).
+  c) DEDUPE AND PRUNE NEVER RAN. dedupeAgents() and pruneEvents() each built
+     a single DELETE binding thousands of parameters; D1 rejects statements
+     with more than 100 bound parameters, so both failed silently and the
+     duplicates (and the 500K-row events table) were never cleaned.
+  d) eventStats() ran COUNT(*) + SUM(LENGTH(payload)) over the whole events
+     table on every usage refresh — a full ~500K-row scan.
+  e) STORAGE 93% FULL. command_results held 8,592 rows / 175 MB and the
+     cleanup path (cleanupD1) failed for the same 100-parameter reason.
+
+  FIXES (commit d2f223d / 6451fa0 / e437c32)
+  ✅ /api/state now serves memory when hydrated, otherwise a 5-minute cached
+     bounded snapshot (agents ≤200, tasks ≤600, approvals ≤100) — a repeat
+     poll inside the cache window costs 0 extra rows.
+  ✅ Hydration runs via ctx.waitUntil and is single-flight (store.hydrateOnce),
+     so concurrent light-path requests cannot each re-read every table and
+     the store actually converges to memory-served data (0 D1 reads).
+  ✅ Built-in agents use deterministic ids (agent-builtin-*) and seeding
+     writes nothing before hydration → re-seeding is an idempotent upsert.
+  ✅ All pruning deletes are set-based (row cap inside the statement) or
+     chunked, honouring the 100-parameter and ~50-queries-per-invocation
+     limits. New pruneOldResults() keeps the newest 300 command results plus
+     recent runs/verifications/builds.
+  ✅ Cooldowns and daily delete budgets live in a single D1 row, because
+     Cloudflare recycles isolates and runs concurrent crons — per-isolate
+     counters cannot bound the account-wide rows_written budget.
+  ✅ eventStats() samples a bounded 1,200-row window instead of scanning the
+     whole events table; hydration has per-type row caps.
+
+  VERIFIED LIVE (2026-09-19)
+    agents            2,649 duplicates → 18 (18 unique names), stable
+    agents growth     +18 rows per cold start → 0
+    D1 storage        466 MB (93.3%) → 268 MB (53.6%)
+    command_results   8,629 rows / 175 MB → 20 kept (automated prune keeps
+                      300 going forward); artifacts/products untouched
+    /api/state        2.5 MB unbounded D1 read per poll → bounded + cached
+    dashboard         /api/state, /api/results, /api/system-status,
+                      /api/project-analytics, /api/learning/stats all 200
+    projects/tasks    74 projects / 527 tasks preserved (347 completed)
+    tests             140/140 pass, incl. new tests/d1-read-budget.test.js
+
+  STILL OPEN
+    🟡 events table (~260 MB) shrinks at the daily budget of ~50K row
+       deletes/day and reaches ~3K rows in roughly two weeks.
+    🟡 Workers AI neurons (10K/day free) — the next limit a busy day hits.
+    🟡 70 blocked + 23 failed legacy tasks still need a delivery-path review.
