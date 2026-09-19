@@ -153,7 +153,7 @@ async function saveMaintenanceState(env,data){
 // set-based DELETEs with the row cap inside the statement, instead of hundreds of 90-id
 // chunks (which also blew the daily rows_written budget).
 let _lastEventPrune=0;
-export async function pruneEvents(env,{keep=3000,batchLimit=8000,maxStatements=3,minIntervalMs=2*60*60*1000,dailyCap=50000}={}){
+export async function pruneEvents(env,{keep=3000,batchLimit=8000,maxStatements=2,minIntervalMs=2*60*60*1000,dailyCap=50000}={}){
   if(!hasD1(env))return{pruned:0,reason:'no-d1'};
   const now=Date.now();
   const data=await maintenanceState(env);
@@ -187,7 +187,7 @@ export async function pruneEvents(env,{keep=3000,batchLimit=8000,maxStatements=3
 }
 // Prunes the 20KB-per-row command results, plus stale runs/verifications/builds — the
 // command_results table was the single largest storage consumer (8,592 rows / 175MB).
-export async function pruneOldResults(env,{keep={command_results:300,runs:400,verifications:400,builds:50},batchLimit=4000,maxStatements=3,minIntervalMs=2*60*60*1000,dailyCap=30000}={}){
+export async function pruneOldResults(env,{keep={command_results:300,runs:400,verifications:400,builds:50},batchLimit=4000,maxStatements=1,minIntervalMs=2*60*60*1000,dailyCap=30000}={}){
   if(!hasD1(env))return{pruned:0,reason:'no-d1'};
   const now=Date.now();
   const data=await maintenanceState(env);
