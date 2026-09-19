@@ -2,24 +2,39 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { store } from '../src/store.js';
 import { seedAgents } from '../src/agents.js';
-import { pruneEvents } from '../src/db.js';
+import { pruneEvents, pruneOldResults } from '../src/db.js';
 import app from '../src/index.js';
 
-// Minimal D1 double. It also enforces the real D1 rule that a statement may not bind
-// more than 100 parameters, so a chunked-delete regression fails loudly.
+// Minimal stateful D1 double. It enforces the real D1 rules that broke production:
+//  - a statement may not bind more than 100 parameters
+//  - the free tier allows only ~50 queries per invocation
+// and it actually deletes rows so chunking/pruning behaviour is observable.
 function mockD1({ entities = {}, events = [] } = {}) {
   const calls = [];
   let rowsRead = 0;
+  const norm = sql => sql.replace(/\s+/g, ' ').trim();
+  const rowsOf = type => (entities[type] ??= []);
+  const updated = row => row.updatedAt ?? row.updated_at;
   const sortedEvents = () => [...events].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  const select = (sql, args) => {
-    if (sql.includes('FROM entities WHERE type = ?')) {
-      const rows = entities[args[0]] ?? [];
-      const limited = sql.includes('LIMIT') ? rows.slice(0, Number(args[1]) || rows.length) : rows;
-      return limited.map(data => ({ data: JSON.stringify(data) }));
+
+  const select = (rawSql, args) => {
+    const sql = norm(rawSql);
+    if (sql.includes('SELECT data FROM entities WHERE type=? AND id=?')) {
+      const row = rowsOf(args[0]).find(r => r.id === args[1]);
+      if (!row) return [];
+      return [{ data: typeof row.data === 'string' ? row.data : JSON.stringify(row) }];
+    }
+    if (sql.startsWith('SELECT data FROM entities WHERE type = ?')) {
+      const rows = [...rowsOf(args[0])].sort((a, b) => (updated(a) < updated(b) ? 1 : -1));
+      return (sql.includes('LIMIT') ? rows.slice(0, Number(args[1])) : rows).map(row => ({ data: JSON.stringify(row) }));
+    }
+    if (sql.includes('SELECT updated_at FROM entities WHERE type=? ORDER BY updated_at DESC LIMIT 1 OFFSET')) {
+      const rows = [...rowsOf(args[0])].sort((a, b) => (updated(a) < updated(b) ? 1 : -1));
+      const row = rows[Number(args[1])];
+      return row ? [{ updated_at: updated(row) }] : [];
     }
     if (sql.includes('FROM (SELECT payload FROM events')) {
-      const limit = Number(args[0]);
-      const window = sortedEvents().slice(0, limit);
+      const window = sortedEvents().slice(0, Number(args[0]));
       return [{ cnt: window.length, bytes: window.reduce((s, e) => s + JSON.stringify(e.payload).length, 0) }];
     }
     if (sql.includes('SELECT id,type,payload,created_at FROM events')) {
@@ -29,40 +44,62 @@ function mockD1({ entities = {}, events = [] } = {}) {
       const row = sortedEvents()[Number(args[0])];
       return row ? [{ created_at: row.created_at }] : [];
     }
-    if (sql.includes('SELECT id FROM events WHERE created_at <')) {
-      const stale = events.filter(e => e.created_at < args[0]).sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
-      return stale.slice(0, Number(args[1])).map(e => ({ id: e.id }));
-    }
     return [];
   };
+
+  const remove = (rawSql, args) => {
+    const sql = norm(rawSql);
+    if (sql.startsWith('DELETE FROM events WHERE id IN (SELECT id FROM events')) {
+      const [cutoff, limit] = args;
+      const stale = events.filter(e => e.created_at < cutoff).sort((a, b) => (a.created_at < b.created_at ? -1 : 1)).slice(0, limit);
+      for (const row of stale) events.splice(events.indexOf(row), 1);
+      return stale.length;
+    }
+    if (sql.startsWith('DELETE FROM entities WHERE type=? AND id IN (SELECT id FROM entities')) {
+      const [type, , cutoff, limit] = args;
+      const rows = rowsOf(type).filter(r => updated(r) < cutoff).sort((a, b) => (updated(a) < updated(b) ? -1 : 1)).slice(0, limit);
+      for (const row of rows) rowsOf(type).splice(rowsOf(type).indexOf(row), 1);
+      return rows.length;
+    }
+    if (sql.startsWith('INSERT INTO entities')) {
+      const [type, id, data, createdAt, updatedAt] = args;
+      const rows = rowsOf(type);
+      const index = rows.findIndex(r => r.id === id);
+      const row = { id, data, createdAt, updatedAt };
+      if (index >= 0) rows[index] = row; else rows.push(row);
+      return 1;
+    }
+    return 1;
+  };
+
   const DB = {
-    prepare(sql) {
-      calls.push(sql);
+    prepare(rawSql) {
+      calls.push(rawSql);
       const stmt = {
         _args: [],
         bind(...args) {
-          assert.ok(args.length <= 100, `D1 rejects statements with more than 100 bound parameters (got ${args.length}): ${sql.slice(0, 80)}`);
+          assert.ok(args.length <= 100, `D1 rejects statements binding more than 100 parameters (got ${args.length})`);
           stmt._args = args;
           return stmt;
         },
         async all() {
-          const results = select(sql, stmt._args);
+          const results = select(rawSql, stmt._args);
           rowsRead += results.length;
           return { results };
         },
         async first() {
-          const results = select(sql, stmt._args);
+          const results = select(rawSql, stmt._args);
           rowsRead += results.length;
           return results[0] ?? null;
         },
         async run() {
-          return { meta: { rows_written: 1 } };
+          return { meta: { rows_written: remove(rawSql, stmt._args) } };
         }
       };
       return stmt;
     }
   };
-  return { DB, calls, rowsRead: () => rowsRead };
+  return { DB, calls, events, entities, rowsRead: () => rowsRead };
 }
 
 function resetStore(env) {
@@ -71,6 +108,15 @@ function resetStore(env) {
   store.events = [];
   store.hydrated = false;
   store.pendingWrites = new Set();
+}
+
+function isoEvents(count) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `evt-${i}`,
+    type: 'test',
+    payload: { i },
+    created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString()
+  }));
 }
 
 test('cold isolate seeding never inserts duplicate agent rows into D1', () => {
@@ -101,31 +147,50 @@ test('seeding an already-hydrated store reuses the existing D1 agent identity', 
   assert.ok(store.list('agents').every(agent => agent.id.startsWith('agent-old-')), 'existing ids are kept');
 });
 
-test('pruneEvents bounds its scan and chunks deletes under the parameter limit', async () => {
-  const events = Array.from({ length: 500 }, (_, i) => ({
-    id: `evt-${i}`,
-    type: 'test',
-    payload: { i },
-    created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString()
-  }));
-  const db = mockD1({ entities: {}, events });
+test('pruneEvents deletes in a few set-based statements without scanning the table', async () => {
+  const db = mockD1({ events: isoEvents(500) });
   const env = { DB: db.DB };
 
-  const result = await pruneEvents(env, { keep: 100, batchLimit: 250, minIntervalMs: 0 });
+  const result = await pruneEvents(env, { keep: 100, batchLimit: 250, maxStatements: 3, minIntervalMs: 0 });
 
-  assert.equal(result.pruned, 250);
+  assert.equal(result.pruned, 400, 'everything above the keep threshold is removed');
+  assert.equal(db.events.length, 100);
   assert.ok(!db.calls.some(sql => sql.includes('COUNT(*) FROM events')), 'pruning must not full-scan the events table');
   const deletes = db.calls.filter(sql => sql.startsWith('DELETE FROM events'));
-  assert.ok(deletes.length > 1, 'deletes are chunked rather than one oversized IN list');
+  assert.ok(deletes.length <= 3, `prune stays within the per-invocation query budget (${deletes.length} statements)`);
+});
+
+test('pruneEvents honours its cooldown via the shared D1 stamp', async () => {
+  const db = mockD1({ events: isoEvents(500) });
+  const env = { DB: db.DB };
+
+  await pruneEvents(env, { keep: 100, batchLimit: 250, maxStatements: 3, minIntervalMs: 60_000 });
+  const second = await pruneEvents(env, { keep: 100, batchLimit: 250, maxStatements: 3, minIntervalMs: 60_000 });
+
+  assert.equal(second.pruned, 0);
+  assert.equal(second.reason, 'cooldown', 'cooldown survives isolate recycling because it lives in D1');
+});
+
+test('pruneOldResults reclaims oversized command results and stale runs', async () => {
+  const results = Array.from({ length: 500 }, (_, i) => ({ id: `res-${i}`, data: 'x'.repeat(64), updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }));
+  const runs = Array.from({ length: 100 }, (_, i) => ({ id: `run-${i}`, updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }));
+  const db = mockD1({ entities: { command_results: results, runs } });
+  const env = { DB: db.DB };
+
+  const outcome = await pruneOldResults(env, { keep: { command_results: 300, runs: 400 }, batchLimit: 4000, maxStatements: 3, minIntervalMs: 0 });
+
+  assert.equal(outcome.command_results, 200);
+  assert.equal(db.entities.command_results.length, 300);
+  assert.equal(outcome.runs, 0, 'runs below the keep threshold are untouched');
+  assert.ok(!db.calls.some(sql => sql.includes('COUNT(*)')), 'pruning must not count whole tables');
 });
 
 test('GET /api/state on a cold isolate reads a bounded, cached window instead of all of D1', async () => {
   const agents = Array.from({ length: 2560 }, (_, i) => ({ id: `agent-${i}`, name: `Agent ${i % 18}`, updatedAt: '2026-01-01' }));
-  const tasks = Array.from({ length: 527 }, (_, i) => ({ id: `task-${i}`, projectId: `proj-${i % 74}`, state: 'completed' }));
-  const projects = Array.from({ length: 74 }, (_, i) => ({ id: `proj-${i}`, name: `Project ${i}` }));
-  const approvals = Array.from({ length: 7 }, (_, i) => ({ id: `appr-${i}` }));
-  const events = Array.from({ length: 50 }, (_, i) => ({ id: `evt-${i}`, type: 't', payload: {}, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }));
-  const db = mockD1({ entities: { agents, tasks, projects, approvals }, events });
+  const tasks = Array.from({ length: 527 }, (_, i) => ({ id: `task-${i}`, projectId: `proj-${i % 74}`, state: 'completed', updatedAt: '2026-01-01' }));
+  const projects = Array.from({ length: 74 }, (_, i) => ({ id: `proj-${i}`, name: `Project ${i}`, updatedAt: '2026-01-01' }));
+  const approvals = Array.from({ length: 7 }, (_, i) => ({ id: `appr-${i}`, updatedAt: '2026-01-01' }));
+  const db = mockD1({ entities: { agents, tasks, projects, approvals }, events: isoEvents(50) });
   const env = { DB: db.DB };
   resetStore(env);
 

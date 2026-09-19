@@ -130,34 +130,94 @@ async function eventStats(env){
   _eventStatsTime=Date.now();
   return _eventStats;
 }
-// Self-throttling events pruning: keeps audit history bounded, shrinks scan costs,
-// protects the 500MB storage. Bounded batch per run to respect the daily write quota.
+// ── Maintenance bookkeeping ──────────────────────────────────────────────
+// Cooldowns and daily delete budgets live in D1 (one tiny row) instead of module state:
+// Cloudflare recycles isolates and several can run the cron at once, so a per-isolate
+// counter cannot bound the account-wide rows_written budget.
+const MAINTENANCE_ID='maintenance';
+function dayKey(){return new Date().toISOString().slice(0,10);}
+async function maintenanceState(env){
+  try{
+    const row=await env.DB.prepare('SELECT data FROM entities WHERE type=? AND id=?').bind('stats',MAINTENANCE_ID).first();
+    return row?.data?JSON.parse(row.data):{};
+  }catch(_){return{};}
+}
+async function saveMaintenanceState(env,data){
+  try{
+    const stamp=new Date().toISOString();
+    await env.DB.prepare('INSERT INTO entities(type,id,data,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at')
+      .bind('stats',MAINTENANCE_ID,JSON.stringify(data),stamp,stamp).run();
+  }catch(_){}
+}
+// D1 free tier allows ~50 queries per invocation, so each prune run issues a few
+// set-based DELETEs with the row cap inside the statement, instead of hundreds of 90-id
+// chunks (which also blew the daily rows_written budget).
 let _lastEventPrune=0;
-export async function pruneEvents(env,{keep=3000,batchLimit=15000,minIntervalMs=6*60*60*1000}={}){
+export async function pruneEvents(env,{keep=3000,batchLimit=8000,maxStatements=3,minIntervalMs=2*60*60*1000,dailyCap=50000}={}){
   if(!hasD1(env))return{pruned:0,reason:'no-d1'};
-  const now=Date.now();if(now-_lastEventPrune<minIntervalMs)return{pruned:0,reason:'cooldown'};
+  const now=Date.now();
+  const data=await maintenanceState(env);
+  const today=dayKey();
+  const deletedToday=data.eventsDay===today?Number(data.eventsDeleted||0):0;
+  if(now-Number(data.eventsAt||0)<minIntervalMs)return{pruned:0,reason:'cooldown'};
+  if(deletedToday>=dailyCap)return{pruned:0,reason:'daily-cap'};
   try{
     const {canWriteD1,recordD1Write}=await import('./d1-quota.js');
     // Walk the created_at index to the keep-th newest event instead of COUNT(*)ing the
     // whole table — costs ~keep rows instead of every row in the table.
-    const cutoffRow=await env.DB.prepare('SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1 OFFSET ?').bind(keep).first();
-    if(!cutoffRow?.created_at){_lastEventPrune=Date.now();return{pruned:0,reason:'under-threshold'};}
-    _lastEventPrune=Date.now();
+    // OFFSET keep-1 lands on the oldest row we want to keep, so '< cutoff' leaves exactly `keep` rows.
+    const cutoffRow=await env.DB.prepare('SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1 OFFSET ?').bind(Math.max(0,keep-1)).first();
+    if(!cutoffRow?.created_at){data.eventsAt=now;await saveMaintenanceState(env,data);return{pruned:0,reason:'under-threshold'};}
     const cutoff=cutoffRow.created_at;
-    if(!canWriteD1(env,false,batchLimit))return{pruned:0,reason:'write-quota'};
-    const old=await env.DB.prepare('SELECT id FROM events WHERE created_at < ? ORDER BY created_at ASC LIMIT ?').bind(cutoff,batchLimit).all();
-    const ids=(old.results??[]).map(r=>r.id);if(!ids.length)return{pruned:0,reason:'under-threshold'};
-    // D1 rejects statements with more than 100 bound parameters — delete in chunks.
-    let pruned=0;
-    for(let i=0;i<ids.length;i+=90){
-      const chunk=ids.slice(i,i+90);
-      const ph=chunk.map(()=>'?').join(',');
-      const result=await env.DB.prepare(`DELETE FROM events WHERE id IN (${ph})`).bind(...chunk).run();
-      recordD1Write(env,Math.max(1,Number(result?.meta?.rows_written)||chunk.length));
-      pruned+=chunk.length;
+    let pruned=0;let remaining=Math.min(batchLimit*maxStatements,dailyCap-deletedToday);
+    while(remaining>0){
+      const take=Math.min(batchLimit,remaining);
+      if(!canWriteD1(env,false,take))break;
+      const result=await env.DB.prepare('DELETE FROM events WHERE id IN (SELECT id FROM events WHERE created_at < ? ORDER BY created_at ASC LIMIT ?)').bind(cutoff,take).run();
+      const written=Number(result?.meta?.rows_written)||0;
+      if(!written)break;
+      recordD1Write(env,written);pruned+=written;remaining-=written;
+      if(written<take)break;
     }
-    _eventStats=null;_eventStatsTime=0;
+    data.eventsAt=now;data.eventsDay=today;data.eventsDeleted=deletedToday+pruned;
+    await saveMaintenanceState(env,data);
+    if(pruned){_eventStats=null;_eventStatsTime=0;}
     return{pruned,cutoff};
+  }catch(e){return{pruned:0,error:e.message};}
+}
+// Prunes the 20KB-per-row command results, plus stale runs/verifications/builds — the
+// command_results table was the single largest storage consumer (8,592 rows / 175MB).
+export async function pruneOldResults(env,{keep={command_results:300,runs:400,verifications:400,builds:50},batchLimit=4000,maxStatements=3,minIntervalMs=2*60*60*1000,dailyCap=30000}={}){
+  if(!hasD1(env))return{pruned:0,reason:'no-d1'};
+  const now=Date.now();
+  const data=await maintenanceState(env);
+  const today=dayKey();
+  const deletedToday=data.resultsDay===today?Number(data.resultsDeleted||0):0;
+  if(now-Number(data.resultsAt||0)<minIntervalMs)return{pruned:0,reason:'cooldown'};
+  if(deletedToday>=dailyCap)return{pruned:0,reason:'daily-cap'};
+  const out={};
+  let total=0;
+  try{
+    const {canWriteD1,recordD1Write}=await import('./d1-quota.js');
+    for(const [type,max] of Object.entries(keep)){
+      let pruned=0;let remaining=Math.min(batchLimit*maxStatements,dailyCap-deletedToday-total);
+      while(remaining>0){
+        const cutoffRow=await env.DB.prepare('SELECT updated_at FROM entities WHERE type=? ORDER BY updated_at DESC LIMIT 1 OFFSET ?').bind(type,Math.max(0,max-1)).first();
+        if(!cutoffRow?.updated_at)break;
+        const take=Math.min(batchLimit,remaining);
+        if(!canWriteD1(env,false,take))break;
+        const result=await env.DB.prepare('DELETE FROM entities WHERE type=? AND id IN (SELECT id FROM entities WHERE type=? AND updated_at < ? ORDER BY updated_at ASC LIMIT ?)').bind(type,type,cutoffRow.updated_at,take).run();
+        const written=Number(result?.meta?.rows_written)||0;
+        if(!written)break;
+        recordD1Write(env,written);pruned+=written;remaining-=written;total+=written;
+        if(written<take)break;
+      }
+      out[type]=pruned;
+    }
+    data.resultsAt=now;data.resultsDay=today;data.resultsDeleted=deletedToday+total;
+    await saveMaintenanceState(env,data);
+    _usageCache=null;_usageCacheTime=0;
+    return{...out,total};
   }catch(e){return{pruned:0,error:e.message};}
 }
 export async function getD1Usage(env) {
@@ -182,15 +242,30 @@ export async function getUsageReport(env) {
 export async function cleanupD1(env, options = {}) {
   if (!hasD1(env)) return { cleaned:false, reason:'No D1 connection' };
   const { maxEvents=500, deleteOldResults=true }=options; const results={};
+  // Set-based deletes with the row cap inside the statement: a single statement may bind
+  // at most 100 parameters (the old thousands-wide IN list always failed on D1) and the
+  // free tier allows ~50 queries per invocation.
   const pruneIds=async(type,max,table='entities')=>{
-    const countRow=table==='events'?await env.DB.prepare('SELECT COUNT(*) as cnt FROM events').first():await env.DB.prepare('SELECT COUNT(*) as cnt FROM entities WHERE type=?').bind(type).first();
-    const count=Number(countRow?.cnt??0);if(count<=max)return 0;const toDelete=count-max;
-    const old=table==='events'?await env.DB.prepare('SELECT id FROM events ORDER BY created_at ASC LIMIT ?').bind(toDelete).all():await env.DB.prepare('SELECT id FROM entities WHERE type=? ORDER BY updated_at ASC LIMIT ?').bind(type,toDelete).all();
-    const ids=(old.results??[]).map(r=>r.id);if(!ids.length||!canWriteD1(env,false,ids.length))return 0;
-    const ph=ids.map(()=>'?').join(',');let result;
-    if(table==='events')result=await env.DB.prepare(`DELETE FROM events WHERE id IN (${ph})`).bind(...ids).run();
-    else result=await env.DB.prepare(`DELETE FROM entities WHERE type=? AND id IN (${ph})`).bind(type,...ids).run();
-    recordD1Write(env,Math.max(1,Number(result?.meta?.rows_written)||ids.length));return ids.length;
+    let deleted=0;
+    for(let i=0;i<5;i++){
+      const take=2000;
+      if(!canWriteD1(env,false,take))break;
+      let result;
+      if(table==='events'){
+        const cutoff=await env.DB.prepare('SELECT created_at FROM events ORDER BY created_at DESC LIMIT 1 OFFSET ?').bind(Math.max(0,max-1)).first();
+        if(!cutoff?.created_at)break;
+        result=await env.DB.prepare('DELETE FROM events WHERE id IN (SELECT id FROM events WHERE created_at < ? ORDER BY created_at ASC LIMIT ?)').bind(cutoff.created_at,take).run();
+      }else{
+        const cutoff=await env.DB.prepare('SELECT updated_at FROM entities WHERE type=? ORDER BY updated_at DESC LIMIT 1 OFFSET ?').bind(type,Math.max(0,max-1)).first();
+        if(!cutoff?.updated_at)break;
+        result=await env.DB.prepare('DELETE FROM entities WHERE type=? AND id IN (SELECT id FROM entities WHERE type=? AND updated_at < ? ORDER BY updated_at ASC LIMIT ?)').bind(type,type,cutoff.updated_at,take).run();
+      }
+      const written=Number(result?.meta?.rows_written)||0;
+      if(!written)break;
+      recordD1Write(env,written);deleted+=written;
+      if(written<take)break;
+    }
+    return deleted;
   };
   try{results.eventsPruned=await pruneIds('events',maxEvents,'events');}catch(e){results.eventsError=e.message;}
   if(deleteOldResults){try{results.resultsPruned=await pruneIds('command_results',20);}catch(e){results.resultsError=e.message;}}

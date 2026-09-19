@@ -2,7 +2,7 @@
 // HTTP remains owned by index.js; scheduled execution is owned by the persistent scheduler.
 
 import app from './index.js';
-import { ensureSchema, pruneEvents } from './db.js';
+import { ensureSchema, pruneEvents, pruneOldResults } from './db.js';
 import { dedupeAgents } from './maintenance.js';
 import { store } from './store.js';
 import { ensureBuiltinTools } from './tools.js';
@@ -148,9 +148,10 @@ export default {
       // name) and re-point task/run references before the tick so stuck tasks unstick.
       await dedupeAgents(env).catch(() => null);
       await schedulerTick(env, { trigger: 'cloudflare-scheduled', scheduledTime: event?.scheduledTime ?? Date.now() });
-      // Self-throttling: prunes at most once per 6h, capped batch — shrinks the
-      // events table (503K+ rows was making every usage scan read ~1M rows).
+      // Self-throttling storage pruning (DB was at 93% of the 500MB free tier):
+      // events shrink the audit table, results reclaim the 20KB-per-row command results.
       await pruneEvents(env).catch(() => null);
+      await pruneOldResults(env).catch(() => null);
     };
     if (ctx?.waitUntil) ctx.waitUntil(run()); else await run();
   }
