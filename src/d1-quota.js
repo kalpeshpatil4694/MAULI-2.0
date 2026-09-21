@@ -38,7 +38,8 @@ export async function reserveD1Rows(env, estimatedRows = 1, critical = false) {
     await env.DB.prepare(`INSERT INTO mauli_d1_quota(day,reserved,updated_at) VALUES(?,?,?) ON CONFLICT(day) DO NOTHING`).bind(day,0,stamp).run();
     const result = await env.DB.prepare(`UPDATE mauli_d1_quota SET reserved=reserved+?, updated_at=? WHERE day=? AND reserved+? <= ?`)
       .bind(target,stamp,day,target,SHARED_SAFE_LIMIT).run();
-    if (Number(result?.meta?.changes) < 1) return false;
+    const changed = result?.meta?.changes;
+    if (changed !== undefined && Number(changed) < 1) return false;
     s.reserved = target - estimate;
     return true;
   } catch (_) {
