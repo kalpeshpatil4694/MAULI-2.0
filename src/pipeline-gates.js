@@ -30,6 +30,7 @@ export function ensureProjectPipeline(projectId){
   const created = [];
 
   for(const type of GATES){
+    const gateSequence = 900 + GATES.indexOf(type);
     if(type === 'qa'){
       const qa = store.put('tasks', {
         ...finalQa,
@@ -40,13 +41,19 @@ export function ensureProjectPipeline(projectId){
         requiredCapabilities:CAP.qa,
         acceptance:[{field:'type',equals:'plan'}],
         dependsOn:[...previousIds],
-        sequence:990,
+        sequence:gateSequence,
         id:finalQa.id
       });
       existing.set('qa',qa); previousIds=[qa.id];
       continue;
     }
-    if(existing.has(type)){ previousIds=[existing.get(type).id]; continue; }
+    if(existing.has(type)){
+      const existingGate = existing.get(type);
+      // Keep already-created gates aligned with the canonical gate order.
+      if(existingGate.sequence !== gateSequence) existing.set(type, store.put('tasks',{...existingGate,sequence:gateSequence,id:existingGate.id}));
+      previousIds=[existing.get(type).id];
+      continue;
+    }
     const agent=gateAgent(type);
     const task=addTaskToProject(projectId, {
       title:`Pipeline gate: ${type}`,
@@ -57,7 +64,7 @@ export function ensureProjectPipeline(projectId){
       assignedAgentId:agent?.id??null,
       toolNames:[], requiredTools:[],
       executor:'internal.pipeline-gate', maxAttempts:2,
-      sequence:900+GATES.indexOf(type),
+      sequence:gateSequence,
       dependsOn:[...previousIds], pipelineGate:true, gateType:type
     });
     if(task){ created.push(task); previousIds=[task.id]; existing.set(type,task); }
