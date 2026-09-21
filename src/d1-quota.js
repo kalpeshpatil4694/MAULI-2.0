@@ -1,15 +1,17 @@
 const DAILY_ROW_WRITE_LIMIT = 100000;
-const SAFETY_LIMIT = 90000;
+const SAFETY_LIMIT = 75000;
+const SHARED_SAFE_LIMIT = 90000;
+const RESERVATION_SIZE = 250;
 const WARN_LIMIT = 70000;
 const HIGH_LIMIT = 85000;
 
 function dayKey(date = new Date()) { return date.toISOString().slice(0, 10); }
 
 function state(env) {
-  if (!env.__MAULI_D1_QUOTA) env.__MAULI_D1_QUOTA = { day: dayKey(), writes: 0 };
+  if (!env.__MAULI_D1_QUOTA) env.__MAULI_D1_QUOTA = { day: dayKey(), writes: 0, reserved: 0 };
   const s = env.__MAULI_D1_QUOTA;
   const day = dayKey();
-  if (s.day !== day) { s.day = day; s.writes = 0; }
+  if (s.day !== day) { s.day = day; s.writes = 0; s.reserved = 0; }
   return s;
 }
 
@@ -23,6 +25,27 @@ export function d1QuotaSnapshot(env) {
 }
 
 // estimatedRows prevents a write from being started when its expected cost would cross the hard ceiling.
+export async function reserveD1Rows(env, estimatedRows = 1, critical = false) {
+  const s = state(env);
+  const estimate = Math.max(1, Number(estimatedRows) || 1);
+  if (s.reserved >= estimate) { s.reserved -= estimate; return true; }
+  if (!env?.DB?.prepare) return canWriteD1(env, critical, estimate);
+  const day = s.day;
+  const target = Math.max(RESERVATION_SIZE, estimate);
+  try {
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS mauli_d1_quota (day TEXT PRIMARY KEY, reserved INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`).run();
+    const stamp = new Date().toISOString();
+    await env.DB.prepare(`INSERT INTO mauli_d1_quota(day,reserved,updated_at) VALUES(?,?,?) ON CONFLICT(day) DO NOTHING`).bind(day,0,stamp).run();
+    const result = await env.DB.prepare(`UPDATE mauli_d1_quota SET reserved=reserved+?, updated_at=? WHERE day=? AND reserved+? <= ?`)
+      .bind(target,stamp,day,target,SHARED_SAFE_LIMIT).run();
+    if (Number(result?.meta?.changes) < 1) return false;
+    s.reserved = target - estimate;
+    return true;
+  } catch (_) {
+    return canWriteD1(env, critical, estimate);
+  }
+}
+
 export function canWriteD1(env, critical = false, estimatedRows = 1) {
   const s = state(env);
   const estimate = Math.max(1, Number(estimatedRows) || 1);
