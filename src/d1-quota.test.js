@@ -12,7 +12,7 @@ assert.equal(canWriteD1(env, false), true);
 
 recordD1Write(env, 15000);
 assert.equal(d1QuotaSnapshot(env).status, 'high');
-assert.equal(canWriteD1(env, false), true);
+assert.equal(canWriteD1(env, false), false);
 
 recordD1Write(env, 5000);
 assert.equal(d1QuotaSnapshot(env).status, 'critical');

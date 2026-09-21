@@ -20,7 +20,7 @@ export function d1QuotaSnapshot(env) {
   const used = Math.min(DAILY_ROW_WRITE_LIMIT, Math.max(0, Number(s.writes) || 0));
   const remaining = Math.max(0, DAILY_ROW_WRITE_LIMIT - used);
   const percent = Math.min(100, Number(((used / DAILY_ROW_WRITE_LIMIT) * 100).toFixed(2)));
-  const status = used >= DAILY_ROW_WRITE_LIMIT ? 'limit_reached' : used >= SAFETY_LIMIT ? 'critical' : used >= HIGH_LIMIT ? 'high' : used >= WARN_LIMIT ? 'watch' : 'healthy';
+  const status = used >= DAILY_ROW_WRITE_LIMIT ? 'limit_reached' : used >= SHARED_SAFE_LIMIT ? 'critical' : used >= HIGH_LIMIT ? 'high' : used >= WARN_LIMIT ? 'watch' : 'healthy';
   return { date: s.day, limit: DAILY_ROW_WRITE_LIMIT, used, remaining, percent, status, protectionMode: used >= SAFETY_LIMIT, source: 'MAULI tracked writes (not Cloudflare account meter)' };
 }
 
