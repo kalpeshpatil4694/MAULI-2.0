@@ -1,53 +1,10 @@
-# MAULI 2.0
+# Chess Game Server
 
-**Autonomous AI Company Platform**
+A simple chess game server with move validation and error handling.
 
-MAULI 2.0 is the next-generation, modular evolution of the MAULI AI Company concept. It combines an executive company brain, agent hive, real execution, memory, verification, governance, and an upgradeable Virtual Company interface.
+## Getting Started
 
-## Vision
-
-Founder command → Executive AI → company/project planning → agent selection → task orchestration → real execution → verification → approval → delivery.
-
-## Core Principles
-
-- Founder-first governance
-- Modular and upgradeable architecture
-- Agent specialization and coordination
-- Real tool execution with controlled permissions
-- Persistent company/project/task memory
-- Verification before delivery
-- Self-correction and failure recovery
-- Security, auditability, and cost controls
-- UI independent of the core execution engine
-
-## Initial Architecture
-
-```text
-Founder
-  ↓
-Executive / SK
-  ↓
-Company Brain
-  ↓
-Project Engine
-  ↓
-Workflow / Task Engine
-  ↓
-Agent Orchestrator
-  ↓
-Agent Hive
-  ↓
-Execution Runtime + Tools
-  ↓
-Verification / Recovery
-  ↓
-Approval / Governance
-  ↓
-Delivery
-```
-
-The Virtual Company UI is a presentation and control layer over these services; it is not the system's source of truth.
-
-## Repository Status
-
-This repository is intentionally independent from the original `mauli-ai-company` repository. The original project remains unchanged and is not used as a deployment target for MAULI 2.0.
+1. Install dependencies: `npm install`
+2. Start the server: `npm start`
+3. Make a move: `curl -X POST -H "Content-Type: application/json" -d '{"start":"e2","end":"e4"}' http://localhost:3000/move`
+4. Get the current board: `curl http://localhost:3000/board`
