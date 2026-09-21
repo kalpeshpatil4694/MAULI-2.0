@@ -3,10 +3,23 @@
   "name": "mauli-2-0",
   "main": "src/worker.js",
   "compatibility_date": "2026-08-19",
-  "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
-  "triggers": { "crons": ["*/5 * * * *"] },
-  "secrets": { "required": ["GITHUB_TOKEN", "CLOUDFLARE_API_TOKEN"] },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
+  "secrets": {
+    "required": [
+      "GITHUB_TOKEN",
+      "CLOUDFLARE_API_TOKEN"
+    ]
+  },
   "vars": {
     "APP_NAME": "MAULI 2.0",
     "ENVIRONMENT": "production",
@@ -20,5 +33,29 @@
       "migrations_dir": "migrations"
     }
   ],
-  "ai": { "binding": "AI" }
+  "ai": {
+    "binding": "AI"
+  },
+  "r2_buckets": [
+    {
+      "binding": "ARTIFACTS",
+      "bucket_name": "mauli2-artifacts"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MAULI_PROJECT_EXECUTOR",
+        "class_name": "MauliProjectExecutionCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-execution-coordinator",
+      "new_sqlite_classes": [
+        "MauliProjectExecutionCoordinator"
+      ]
+    }
+  ]
 }
