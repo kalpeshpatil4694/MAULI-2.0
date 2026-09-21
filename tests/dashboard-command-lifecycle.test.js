@@ -17,6 +17,8 @@ test('dashboard live bridge is injected by the production worker', () => {
 test('scheduler does not execute approval-gated projects', () => {
   const scheduler=fs.readFileSync(new URL('../src/scheduler.js',import.meta.url),'utf8');
   assert.match(scheduler,/project\?\.state==='awaiting_approval'/);
-  assert.match(scheduler,/if\(project\?\.state==='awaiting_approval'\)\s*continue/);
+  // The guard is valid whether it appears in the single-task claim path as
+  // `return null` or in a project iteration as `continue`.
+  assert.match(scheduler,/if\(project\?\.state==='awaiting_approval'\)\s*(?:return\s+null|continue)/);
   assert.match(scheduler,/return\s*\{recovered,results,at:now\(\)\}/);
 });
