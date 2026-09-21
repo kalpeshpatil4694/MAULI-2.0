@@ -1,4 +1,4 @@
-import { canWriteD1, recordD1Write } from './d1-quota.js';
+import { canWriteD1, reserveD1Rows, recordD1Write } from './d1-quota.js';
 import { queueQuotaSnapshot } from './queue-quota.js';
 
 export function hasD1(env) { return Boolean(env?.DB && typeof env.DB.prepare === 'function'); }
@@ -12,7 +12,8 @@ export async function ensureSchema(env) {
     // Without this, "WHERE type=? ORDER BY updated_at DESC LIMIT n" still scans every row
     // of that type (2560 duplicate agents) to sort — the LIMIT only helped with this index.
     `CREATE INDEX IF NOT EXISTS idx_entities_type_updated ON entities(type, updated_at)`,
-    `CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)`
+    `CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)`,
+    `CREATE TABLE IF NOT EXISTS mauli_d1_quota (day TEXT PRIMARY KEY, reserved INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`
   ];
   for (const sql of statements) await env.DB.prepare(sql).run();
   return true;
@@ -45,7 +46,7 @@ export async function d1List(env, type, { existingTasks, limit } = {}) {
 export async function d1Put(env, type, value, { critical = false } = {}) {
   // Reserve a small write budget before executing. Actual rows_written is recorded
   // from D1 metadata after success, so the dashboard remains honest about writes.
-  if (!canWriteD1(env, critical, 2)) return { ...value, _d1WriteDeferred: true };
+  if (!(await reserveD1Rows(env, 2, critical))) return { ...value, _d1WriteDeferred: true, _d1WriteLimit: true };
   const now = new Date().toISOString();
   const item = { ...value, createdAt: value.createdAt ?? now, updatedAt: now };
   try {
@@ -64,7 +65,7 @@ export async function d1Events(env, limit = 50) {
 }
 
 export async function d1Event(env, event, { critical = false } = {}) {
-  if (!canWriteD1(env, critical, 1)) return { ...event, _d1WriteDeferred: true };
+  if (!(await reserveD1Rows(env, 1, critical))) return { ...event, _d1WriteDeferred: true, _d1WriteLimit: true };
   try {
     const result = await env.DB.prepare('INSERT INTO events(id,type,payload,created_at) VALUES(?,?,?,?)').bind(event.id,event.type,JSON.stringify(event.payload),event.at).run();
     recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1));
