@@ -95,7 +95,7 @@ function qualityProblems(code){
 
 function securityProblems(code){
   return code.flatMap(a=>(a.content?.files??[]).map(f=>({path:f.path,content:f.content})))
-    .filter(f=>/\beval\s*\(|new\\s+Function\s*\(|child_process|execSync\s*\(|rm\\s+-rf|curl\s+[^\n|]*\|\\s*(sh|bash)|-----BEGIN (RSA|PRIVATE) KEY-----/i.test(f.content));
+    .filter(f=>/\beval\s*\(|new\s+Function\s*\(|child_process|execSync\s*\(|rm\s+-rf|curl\s+[^\n|]*\|\s*(sh|bash)|-----BEGIN (RSA|PRIVATE) KEY-----/i.test(f.content));
 }
 
 async function sha256(textValue){
