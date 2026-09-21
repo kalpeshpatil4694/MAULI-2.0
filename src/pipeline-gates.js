@@ -86,7 +86,7 @@ function qualityProblems(code){
     if(a.metadata?.stub===true || a.metadata?.placeholder===true) problems.push(`${a.id}:placeholder-artifact`);
     for(const f of (a.content?.files??[])){
       if(typeof f?.content!=='string') continue;
-      if(/AI generation unavailable|app placeholder|TODO\\b|FIXME\\b|coming soon/i.test(f.content))
+      if(/AI generation unavailable|app placeholder|TODO\b|FIXME\b|coming soon/i.test(f.content))
         problems.push(`${a.id}:${f.path}:placeholder-marker`);
     }
   }
@@ -95,7 +95,7 @@ function qualityProblems(code){
 
 function securityProblems(code){
   return code.flatMap(a=>(a.content?.files??[]).map(f=>({path:f.path,content:f.content})))
-    .filter(f=>/\\beval\\s*\\(|new\\s+Function\\s*\\(|child_process|execSync\\s*\\(|rm\\s+-rf|curl\\s+[^\\n|]*\\|\\s*(sh|bash)|-----BEGIN (RSA|PRIVATE) KEY-----/i.test(f.content));
+    .filter(f=>/\beval\s*\(|new\\s+Function\s*\(|child_process|execSync\s*\(|rm\\s+-rf|curl\s+[^\n|]*\|\\s*(sh|bash)|-----BEGIN (RSA|PRIVATE) KEY-----/i.test(f.content));
 }
 
 async function sha256(textValue){
