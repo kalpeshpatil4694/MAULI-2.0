@@ -1,3 +1,5 @@
+export { MauliProjectExecutionCoordinator } from './execution-coordinator.js';
+
 // MAULI 2.0 — production Worker entrypoint.
 // HTTP remains owned by index.js; scheduled execution is owned by the persistent scheduler.
 
