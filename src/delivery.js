@@ -2,11 +2,8 @@ import { now } from './core.js';
 import { store } from './store.js';
 import { registerArtifact } from './artifacts.js';
 
-/**
- * Build the final delivery for a project only after the project-level QA gate
- * has passed. This is intentionally defensive because delivery is the final
- * trust boundary before MAULI exposes an artifact to the founder.
- */
+const REQUIRED_GATES=['build','test','requirements','security','qa','integrity'];
+
 export function buildFinalDelivery(project) {
   if (!project?.id) throw new Error('project is required');
 
@@ -16,15 +13,19 @@ export function buildFinalDelivery(project) {
   const failed = tasks.filter(t => t.state === 'failed');
   const finalQa = tasks.filter(t => t.finalProjectVerification);
   const codeArtifacts = artifacts.filter(a => a.type === 'code-workspace');
+  const gates = new Map(tasks.filter(t => t.pipelineGate && t.gateType).map(t => [t.gateType,t]));
 
   if (!tasks.length) throw new Error('Delivery blocked: project has no tasks');
   if (failed.length) throw new Error(`Delivery blocked: ${failed.length} task(s) failed`);
   if (completed.length !== tasks.length) throw new Error('Delivery blocked: not all project tasks are completed');
+
+  const missing=REQUIRED_GATES.filter(type=>gates.get(type)?.state!=='completed');
+  if(missing.length) throw new Error(`Delivery blocked: mandatory gates not passed: ${missing.join(', ')}`);
+
   if (finalQa.length !== 1 || finalQa[0].state !== 'completed' || !finalQa[0].verificationId) {
     throw new Error('Delivery blocked: final project QA verification has not passed');
   }
 
-  // Code projects must include a completed security task before delivery.
   if (codeArtifacts.length) {
     const securityTasks = tasks.filter(t =>
       (t.requiredCapabilities || []).includes('security') || /security/i.test(t.title || '')
@@ -34,6 +35,7 @@ export function buildFinalDelivery(project) {
     }
   }
 
+  const integrityResult=gates.get('integrity')?.result??gates.get('integrity')?.output??null;
   const deliveryContent = {
     projectId: project.id,
     project: {
@@ -42,6 +44,16 @@ export function buildFinalDelivery(project) {
       objective: project.objective,
       state: project.state
     },
+    deliveryContract: {
+      mandatoryGates: REQUIRED_GATES,
+      gates: REQUIRED_GATES.map(type => ({
+        type,
+        state:gates.get(type)?.state??'missing',
+        taskId:gates.get(type)?.id??null,
+        verificationId:gates.get(type)?.verificationId??null
+      })),
+      passed:true
+    },
     summary: {
       totalTasks: tasks.length,
       completedTasks: completed.length,
@@ -49,10 +61,13 @@ export function buildFinalDelivery(project) {
       artifactCount: artifacts.length,
       deliveredAt: now()
     },
+    integrityManifest: integrityResult?.manifest??[],
     tasks: tasks.map(t => ({
       id: t.id,
       title: t.title,
       state: t.state,
+      pipelineGate:t.pipelineGate===true,
+      gateType:t.gateType??null,
       assignedAgentId: t.assignedAgentId ?? null,
       verificationId: t.verificationId ?? null
     })),
@@ -73,7 +88,8 @@ export function buildFinalDelivery(project) {
     metadata: {
       state: project.state,
       generatedBy: 'mauli-l1-delivery',
-      gate: 'final-qa+security'
+      gate: 'build+test+requirements+security+qa+integrity',
+      mandatoryGatesPassed:true
     }
   });
 
