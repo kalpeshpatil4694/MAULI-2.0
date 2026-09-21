@@ -98,6 +98,6 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     btn.onclick=()=>showProjectDetail(pid);
   }
   window.setTimeout(poll,500);
-  window.setInterval(poll,3000);
+  window.setInterval(poll,15000);
 })();
 </script>`;
