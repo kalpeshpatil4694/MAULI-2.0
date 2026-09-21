@@ -120,8 +120,7 @@ async function gateResult(task){
     const b=prior(pid,'build'), latest=latestCodeArtifact(pid), files=latest?.content?.files??[], pkg=parsePackage(files);
     check('build_gate_passed',b?.state==='completed','Build gate has not passed');
     check('artifact_structure_test',validFiles(pid),'Artifact structure test failed');
-    check('test_contract_present',Boolean(pkg.testScript||latest?.content?.tests?.length||files.some(f=>/^(www\\/index\\.html|README\\.md)$/.test(f.path))),
-      'No test/static validation contract was found');
+    check('test_contract_present',Boolean(pkg.testScript||latest?.content?.tests?.length||files.some(f=>f.path==='www/index.html'||f.path==='README.md')), 'No test/static validation contract was found');
   } else if(type==='requirements'){
     const t=prior(pid,'test'), p=store.get('projects',pid);
     check('test_gate_passed',t?.state==='completed','Test gate has not passed');
