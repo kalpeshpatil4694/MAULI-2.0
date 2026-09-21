@@ -790,24 +790,9 @@ fetch('/api/heartbeat',{cache:'no-store'}).then(r=>r.json()).then(j=>{
   if(j.ok||j.data){if($('hText'))$('hText').textContent='System Online';if($('hDot'))$('hDot').classList.remove('off')}
 }).catch(()=>{});
 
-fetch('/api/state').then(r=>r.json()).then(d=>{
-  const dd=d.data||d;
-  S.projects=dd.projects||[];S.tasks=dd.tasks||[];S.artifacts=dd.artifacts||[];S.agents=dd.agents||[];S.events=dd.events||[];
-  S.approvals=(dd.approvals||[]).filter(a=>a.state==='pending');S.tools=dd.tools||[];
-  updateStats();
-  if($('hText'))$('hText').textContent='System Online';
-  if($('hDot'))$('hDot').classList.remove('off');
-}).catch(()=>{});
-
 setInterval(()=>{
   fetch('/api/heartbeat',{cache:'no-store'}).then(r=>r.json()).then(j=>{
     if(j.ok||j.data){if($('hText'))$('hText').textContent='System Online';if($('hDot'))$('hDot').classList.remove('off')}
-  }).catch(()=>{});
-  fetch('/api/state').then(r=>r.json()).then(d=>{
-    const dd=d.data||d;
-    S.projects=dd.projects||[];S.tasks=dd.tasks||[];S.artifacts=dd.artifacts||[];S.agents=dd.agents||[];S.events=dd.events||[];
-    S.approvals=(dd.approvals||[]).filter(a=>a.state==='pending');S.tools=dd.tools||[];
-    updateStats();
   }).catch(()=>{});
 },60000);
 
