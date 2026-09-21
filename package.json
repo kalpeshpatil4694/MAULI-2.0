@@ -1,14 +1,15 @@
 {
-  "name": "mauli2.0",
-  "version": "2.0.0",
-  "private": true,
-  "type": "module",
+  "name": "chess-game",
+  "version": "1.0.0",
+  "description": "A simple chess game server",
+  "main": "server.js",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "test": "node --test"
+    "start": "node server.js"
   },
-  "devDependencies": {
-    "wrangler": "^4.0.0"
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1"
   }
 }
