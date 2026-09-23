@@ -79,3 +79,5 @@ jobs:
           done
           echo "::error::Cloudflare deployment failed after 3 attempts."
           exit 1
+
+# R2 is intentionally optional; deployment must not require an R2 bucket.
