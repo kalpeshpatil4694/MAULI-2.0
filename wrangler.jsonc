@@ -36,12 +36,6 @@
   "ai": {
     "binding": "AI"
   },
-  "r2_buckets": [
-    {
-      "binding": "ARTIFACTS",
-      "bucket_name": "mauli2-artifacts"
-    }
-  ],
   "durable_objects": {
     "bindings": [
       {
