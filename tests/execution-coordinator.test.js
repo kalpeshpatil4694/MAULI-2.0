@@ -21,3 +21,25 @@ test('execution coordinator skips a project when its durable lease is busy', asy
   assert.equal(called, false);
   assert.equal(result.status, 'coordinator-busy');
 });
+
+test('execution coordinator renews long-running project leases', async () => {
+  const calls = [];
+  const env = {
+    MAULI_PROJECT_EXECUTOR: {
+      idFromName: () => 'id',
+      get: () => ({
+        acquire: async () => ({ granted: true, token: 'token-1', busyUntil: Date.now() + 120000 }),
+        renew: async (token, leaseMs) => { calls.push(['renew', token, leaseMs]); return { renewed: true }; },
+        release: async (token) => { calls.push(['release', token]); return { released: true }; }
+      })
+    }
+  };
+  const result = await withProjectExecutionLock(env, 'project-1', async ({ leaseHeartbeatMs }) => {
+    assert.equal(leaseHeartbeatMs, 10);
+    await new Promise(resolve => setTimeout(resolve, 35));
+    return { ok: true };
+  }, { leaseMs: 90000, heartbeatMs: 10 });
+  assert.deepEqual(result, { ok: true });
+  assert.ok(calls.some(call => call[0] === 'renew'));
+  assert.deepEqual(calls.at(-1), ['release', 'token-1']);
+});

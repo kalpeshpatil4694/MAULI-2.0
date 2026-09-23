@@ -13,6 +13,7 @@ import './functional-code-executor.js';
 export { registerExecutor, listExecutors, grantExecutor } from './executor-registry.js';
 
 const EXECUTION_LEASE_MS = 90_000;
+const HEARTBEAT_INTERVAL_MS = 30_000;
 const MAX_RECOVERY_ATTEMPTS = 3;
 
 function persistExecution(record) { store.put('executions', { ...record, status:record.state, executionId:record.id }); return record; }
@@ -35,13 +36,17 @@ export async function executeTask(task,context={}) {
   }
   const timestamp=now(); const run={id:id('run'),taskId:task.id,executor:executorName,state:'running',startedAt:timestamp,heartbeatAt:timestamp,attempt:context.attempt??1,agentId:task.agentId??task.assignedAgentId??context.agentId??null,recoverable:true};
   store.put('runs',run);store.addEvent('execution.started',run);
+  const heartbeatTimer=setInterval(()=>heartbeatExecution(run.id),HEARTBEAT_INTERVAL_MS);
   try{
     if(!executor)throw new Error(`No executor registered: ${executorName}`);
     const scope=getExecutorScope(executorName,executor.scope??'internal');if(scope==='external'&&!context.allowExternal)throw new Error('External execution permission is not granted');if((executor.risk==='critical'||task.risk==='critical')&&!context.approved)throw new Error('Critical execution requires explicit approval');
     const callTool=(name,input={})=>executeTool(name,input,{...context,agentId:run.agentId,projectId:task.projectId,approved:context.approved,approvalId:context.approvalId});
     const requiredTools=await authorizeRequiredTools(task,{...context,agentId:run.agentId,projectId:task.projectId},callTool);heartbeatExecution(run.id);
     const result=await executor.handler({task,...context,agentId:run.agentId,callTool,requiredTools});const timestampDone=now();const completed={...store.get('runs',run.id)??run,state:'completed',result,requiredTools,completedAt:timestampDone,heartbeatAt:timestampDone,recoverable:false,id:run.id};store.put('runs',completed);persistExecution(completed);store.addEvent('execution.completed',completed);return publicExecution(completed);
-  }catch(error){const timestampFailed=now();const failed={...store.get('runs',run.id)??run,state:'failed',error:error?.message??String(error),completedAt:timestampFailed,heartbeatAt:timestampFailed,recoverable:false,id:run.id};store.put('runs',failed);persistExecution(failed);store.addEvent('execution.failed',failed);return publicExecution(failed);}
+  }catch(error){const timestampFailed=now();const failed={...store.get('runs',run.id)??run,state:'failed',error:error?.message??String(error),completedAt:timestampFailed,heartbeatAt:timestampFailed,recoverable:false,id:run.id};store.put('runs',failed);persistExecution(failed);store.addEvent('execution.failed',failed);return publicExecution(failed);
+  } finally {
+    clearInterval(heartbeatTimer);
+  }
 }
 
 export async function executeTaskLifecycle(task,context={}) {

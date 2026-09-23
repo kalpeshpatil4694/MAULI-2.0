@@ -24,19 +24,29 @@ export class MauliProjectExecutionCoordinator extends DurableObject {
     });
   }
 
-  acquire(leaseMs = 90000) {
+  acquire(leaseMs = 120000) {
     const now = Date.now();
     const row = this.ctx.storage.sql.exec("SELECT token, busy_until FROM coordinator_lock WHERE id=1").toArray()[0];
     if (row && Number(row.busy_until) > now) {
       return { granted: false, busyUntil: Number(row.busy_until) };
     }
     const token = crypto.randomUUID();
-    const until = now + Math.max(5000, Math.min(120000, Number(leaseMs) || 90000));
+    const until = now + Math.max(5000, Math.min(120000, Number(leaseMs) || 120000));
     this.ctx.storage.sql.exec(
       "UPDATE coordinator_lock SET token=?, busy_until=?, updated_at=? WHERE id=1",
       token, until, now
     );
     return { granted: true, token, busyUntil: until };
+  }
+
+  renew(token, leaseMs = 120000) {
+    if (!token) return { renewed: false };
+    const now = Date.now();
+    const row = this.ctx.storage.sql.exec("SELECT token FROM coordinator_lock WHERE id=1").toArray()[0];
+    if (!row || row.token !== token) return { renewed: false };
+    const until = now + Math.max(5000, Math.min(120000, Number(leaseMs) || 120000));
+    this.ctx.storage.sql.exec("UPDATE coordinator_lock SET busy_until=?, updated_at=? WHERE id=1 AND token=?", until, now, token);
+    return { renewed: true, busyUntil: until };
   }
 
   release(token) {
