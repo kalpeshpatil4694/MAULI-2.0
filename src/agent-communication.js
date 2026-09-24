@@ -55,7 +55,10 @@ export function sendMessage({ fromAgentId, toAgentId, type = 'info', subject, bo
  * Read messages for an agent
  */
 export function getMessages(agentId, { unread = false, limit = 20 } = {}) {
-  let messages = store.list('messages').filter(m => m.toAgentId === agentId);
+  // agentId is optional: the dashboard Messages tab lists the whole feed when no
+  // single agent mailbox is requested.
+  let messages = store.list('messages');
+  if (agentId) messages = messages.filter(m => m.toAgentId === agentId);
   if (unread) messages = messages.filter(m => m.status === 'unread');
   return messages.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, limit);
 }

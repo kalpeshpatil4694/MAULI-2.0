@@ -58,7 +58,11 @@ function injectDashboardLive(response) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const lightPath = url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname.startsWith("/api/cf/") || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status" || url.pathname === "/api/learning/stats" || url.pathname === "/api/learning/skill-tree" || url.pathname === "/api/collaboration/stats" || url.pathname === "/api/messages" || url.pathname === "/api/mcp/servers" || url.pathname === "/api/self-test" || url.pathname === "/api/result-diagnostic";
+    // Light paths never block the response on hydration: they either render static HTML
+    // ("/" is a pure template — dashboardHTML has no store access) or read memory-only
+    // types that hydration does not load (notifications, file_edits). Blocking on those
+    // made first paint take 12-15 s (ensureSchema + full hydrate) on every cold isolate.
+    const lightPath = url.pathname === "/" || url.pathname === "/dashboard" || url.pathname === "/api/notifications" || url.pathname.startsWith("/api/edits") || url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname.startsWith("/api/cf/") || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status" || url.pathname === "/api/learning/stats" || url.pathname === "/api/learning/skill-tree" || url.pathname === "/api/collaboration/stats" || url.pathname === "/api/messages" || url.pathname === "/api/mcp/servers" || url.pathname === "/api/self-test" || url.pathname === "/api/result-diagnostic";
     // Only block on hydration for POST/command traffic. Light polling paths (the dashboard
     // hits these every 60s) hydrate in the background so the response stays cheap while the
     // isolate still converges to memory-served data instead of re-reading D1 forever.
