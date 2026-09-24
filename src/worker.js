@@ -90,7 +90,10 @@ export default {
           : await saveCommandResult(payload, env).catch(() => ({ saved: false }));
 
         if (queued.status === 'queued' && ctx?.waitUntil) {
-          ctx.waitUntil(schedulerTick(env, { trigger: 'founder-command', runId: queued.runId, projectId: queued.project?.id }).catch(error => {
+          // ctx.waitUntil only extends the invocation 30 s past the response (Cloudflare
+          // limit), so the drain gets a 20 s budget: tasks that do not fit stay queued
+          // and the cron scheduler finishes them instead of being cancelled mid-run.
+          ctx.waitUntil(schedulerTick(env, { trigger: 'founder-command', runId: queued.runId, projectId: queued.project?.id, budgetMs: 20_000 }).catch(error => {
             store.addEvent('command.scheduler_error', { runId: queued.runId, error: error?.message || 'Scheduler error', at: now() });
           }));
         }
@@ -115,7 +118,7 @@ export default {
       if (response.ok && ctx?.waitUntil) {
         const approvalId = url.pathname.split('/').pop();
         const approval = store.get('approvals', approvalId);
-        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId, projectId: approval?.projectId }).catch(error => {
+        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId, projectId: approval?.projectId, budgetMs: 20_000 }).catch(error => {
           store.addEvent('approval.scheduler_error', { approvalId, error: error?.message || 'Scheduler error after approval', at: now() });
         }));
       }
@@ -128,7 +131,7 @@ export default {
       const response = await app.fetch(request, env, ctx);
       if (response.ok && ctx?.waitUntil) {
         // Trigger scheduler in background - it picks up any newly queued projects/tasks
-        ctx.waitUntil(schedulerTick(env, { trigger: 'chat-message' }).catch(error => {
+        ctx.waitUntil(schedulerTick(env, { trigger: 'chat-message', budgetMs: 20_000 }).catch(error => {
           store.addEvent('chat.scheduler_error', { error: error?.message || 'Scheduler error after chat', at: now() });
         }));
       }
@@ -149,7 +152,9 @@ export default {
       // Collapse duplicate agents (old cold-start registration created ~60 copies per
       // name) and re-point task/run references before the tick so stuck tasks unstick.
       await dedupeAgents(env).catch(() => null);
-      await schedulerTick(env, { trigger: 'cloudflare-scheduled', scheduledTime: event?.scheduledTime ?? Date.now() });
+      // Cron Triggers are limited to 15 minutes of wall time per invocation on the free
+      // plan: stop starting new tasks after 8 minutes so an in-flight task can finish.
+      await schedulerTick(env, { trigger: 'cloudflare-scheduled', scheduledTime: event?.scheduledTime ?? Date.now(), budgetMs: 8 * 60_000 });
       // Self-throttling storage pruning (DB was at 93% of the 500MB free tier):
       // events shrink the audit table, results reclaim the 20KB-per-row command results.
       await pruneEvents(env).catch(() => null);

@@ -40,7 +40,10 @@ async function cloudflareGenerate(env, messages, options = {}) {
   const response = await env.AI.run(resolveModel(env, options), {
     messages,
     temperature: options.temperature ?? 0.2,
-    max_tokens: Math.min(1200, Math.max(1, Number(options.maxTokens ?? 900)))
+    // The executor requests enough tokens for a complete multi-file artifact; clamping
+    // that to 1200 guaranteed truncated/invalid JSON, so every AI call was wasted and
+    // the pipeline silently fell back to templates. Honour the request up to 3000.
+    max_tokens: Math.min(3000, Math.max(900, Number(options.maxTokens ?? 900)))
   });
   return response?.response ?? response;
 }

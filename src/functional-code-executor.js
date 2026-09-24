@@ -56,6 +56,16 @@ function resolveRuntimeEnv(env) {
   return null;
 }
 
+const AI_ATTEMPT_TIMEOUT_MS = 40_000;
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('AI generation timeout')), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 const WEB_TASK_PROMPT = `You are a senior web developer generating a COMPLETE, WORKING web application.
 
 OUTPUT FORMAT: Return ONLY a valid JSON object with this exact structure:
@@ -125,15 +135,16 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   const systemPrompt = basePrompt + '\n\nTask: ' + objective + '\nAcceptance criteria: ' + JSON.stringify(acceptance);
 
   let parsed = null, lastError = '';
-  for (let attempt = 0; attempt < 3 && !parsed; attempt++) {
+  // Two attempts (not three): each attempt is a Workers AI request, and a hung or slow
+  // generation must not outlive the invocation window — after the timeout we fall back
+  // to templates so the task still completes instead of dying with an expired lease.
+  for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
     try {
-      const prompt = attempt === 0 ? objective : attempt === 1
-        ? objective + '\n\nIMPORTANT: Your previous response was invalid. Generate COMPLETE source code for all files. Each file must have full, working code. Output ONLY the JSON object.'
-        : objective + '\n\nFINAL ATTEMPT: Generate COMPLETE working code. Include ALL files with FULL content. No placeholders. JSON object only.';
-      parsed = parseModel(await code(runtimeEnv, [
+      const prompt = attempt === 0 ? objective : objective + '\n\nIMPORTANT: Your previous response was invalid. Generate COMPLETE source code for all files. Each file must have full, working code. Output ONLY the JSON object.';
+      parsed = parseModel(await withTimeout(code(runtimeEnv, [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
-      ], { maxTokens: 8000 }));
+      ], { maxTokens: 3000 }), AI_ATTEMPT_TIMEOUT_MS));
       if (!parsed || invalid(filesOf(parsed.files), task)) { parsed = null; }
     } catch (e) { lastError = text(e); parsed = null; }
   }

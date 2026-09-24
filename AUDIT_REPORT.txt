@@ -12,7 +12,8 @@
                 100,000 rows_written/day, 500 MB storage)
   AI:           Workers AI @cf/meta/llama-3.3-70b-instruct-fp8-fast
                 (free tier: 10,000 neurons/day)
-  Cron:         every 5 minutes (advances queued work)
+  Cron:         every 5 minutes as of 2026-09-19; changed to every
+                1 minute on 2026-09-23 (see section 10)
   Dashboard:    polls /api/state every 60s + /api/heartbeat every 60s
 
 2. COMMAND → RESULT → PRODUCT WORKFLOW (verified end-to-end)
@@ -225,3 +226,204 @@
        deletes/day and reaches ~3K rows in roughly two weeks.
     🟡 Workers AI neurons (10K/day free) — the next limit a busy day hits.
     🟡 70 blocked + 23 failed legacy tasks still need a delivery-path review.
+
+10. FULL REPOSITORY AUDIT (2026-09-24) — GIT / CI / SECURITY / LIVE
+────────────────────────────────────────────────────────────────────
+  Scope: whole GitHub repo at HEAD d2f1c56 (local main was fast-forwarded
+  33 commits to match origin during this audit; working tree clean).
+
+  A. REPOSITORY & GIT
+    ✅ 673 commits, linear healthy history; NO secrets tracked
+       (.env / .dev.vars are gitignored and untracked; token/secret
+       pattern scan across src/, migrations/, docs/, README: clean).
+    ✅ Minimal dependency surface: only devDependency is wrangler ^4,
+       zero runtime npm dependencies.
+    🟡 27 run-artifact JSON files (~1 MB) under Result/ ARE tracked even
+       though .gitignore lists Result/ (committed before the rule).
+       → fix: git rm -r --cached Result/
+    🟡 NO lockfile tracked (bun.lock ignored, no package-lock.json), so
+       CI's `npm install` is non-reproducible and `npm audit` cannot run
+       at all (verified: ENOLOCK).
+    🟡 Two parallel test trees: tests/ (60 files) and legacy test/
+       (9 files) — CI runs the tests/ suite twice (npm test already
+       matches both trees, then `node --test tests/*.test.js` again).
+    🟡 No SECURITY.md, LICENSE, CONTRIBUTING or CODEOWNERS.
+    🟡 README covers vision/architecture only — no run/deploy/limits doc.
+
+  B. CI / CD (.github/workflows — 5 files)
+    ✅ Only l1-ci.yml runs automatically (push + PR to main); the other
+       four are workflow_dispatch-only → no duplicate CI runs.
+    ✅ l1-ci.yml pipeline: syntax check → full tests → deep tests →
+       wrangler deploy --dry-run → deploy job gated on test success,
+       environment:production, 3 attempts with backoff. Well structured.
+    ✅ Last 100 runs: 39 success / 16 failure / 45 cancelled; both of
+       the most recent runs on current HEAD are green (35906062513).
+    🟡 Syntax gate covers only src/index.js and src/orchestrator.js —
+       a syntax error in any other src file reaches the test step.
+    🟡 `npm install` instead of `npm ci` (no lockfile to use anyway).
+
+  C. PULL REQUESTS & ISSUES
+    ✅ 0 open issues. 48 PRs total; recent merges (#47, #48) clean.
+    🟡 ONE stale PR: #31 "fix: improve calculator planning and execution
+       flow" — open since 2026-08-22, 30 commits, +721/−696, ALL FOUR
+       checks failing (L1 validation, selftest, test ×2). → close it.
+
+  D. SECURITY SURFACE  ← most important section
+    ❌ CRITICAL — auth is a no-op. src/auth.js requireFounder() always
+       returns {ok:true, mode:'keyless-founder'}, so every route's
+       `requireFounder()` check always passes. Consequences:
+       • POST /api/reset → runs `DELETE FROM entities` + `DELETE FROM
+         events` (wipes the ENTIRE production database) with no auth
+         and no rate limit — anyone with the URL can destroy all data.
+       • POST /api/cleanup → unauthenticated D1 deletes.
+       • POST /api/webhooks → registers an arbitrary URL that the Worker
+         then calls (SSRF / free outbound proxy, 40 subrequests/invocation).
+       • POST /api/approvals/* → strangers can APPROVE high-risk actions.
+       • /api/edits, /api/messages/*, /api/versions/* restore, /api/clone,
+         /api/ollama/* → all unauthenticated actions.
+       • No IP allowlist, no Cloudflare Access, no bearer token anywhere
+         (grep ALLOWED_IP / Cf-Access / tokens across src/: nothing).
+    🟡 /api/command IS rate limited, but the production worker.js branch
+       runs FIRST with the DEFAULT 20/min bucket; the stricter
+       checkCommandRateLimit (5/min) only exists on the index.js path,
+       which production never reaches for /api/command. Effective limit
+       = 20/min, not the documented 5/min.
+    🟡 /api/chat has NO rate limit at all and calls Workers AI → the
+       cheapest way for a stranger to burn the 10K neurons/day quota.
+    🟡 /api/state (360 KB) and /api/results (527 KB) are public reads of
+       internal project/task/result data — bandwidth + data exposure.
+    ✅ Positives: rate limiter is memory-safe (bucket cap + cleanup),
+       tools have risk tiers with approval gates, governance approval
+       flow and pipeline-gates.js content checks exist, secrets are
+       delivered only as wrangler secrets (never in the repo).
+    → Recommended fix (small): shared-secret header check (or Cloudflare
+      Access) in front of /api/reset, /api/cleanup, /api/webhooks and
+      /api/approvals/*; rate-limit /api/chat; use checkCommandRateLimit
+      in the production worker.js /api/command path.
+
+  E. LIVE WORKER HEALTH (measured 2026-09-24)
+    ✅ /api/health 200: hydrated:true, persistence:true,
+       durableObjects:true, ai:true, r2:false,
+       d1Quota 0/100,000 writes used today (healthy).
+    ✅ D1 storage 11.64 MB / 500 MB = 2.3%   (93.3% → 54% → 2.3%).
+       4,235 rows total: command_results 300, memory 1,553,
+       executions 1,120, tasks 685, artifacts 237, projects 75,
+       agents 19. The §9 "events ~260 MB" open item is RESOLVED.
+    ✅ agents 19 and stable — duplication fix still holding 5 days later.
+    ✅ Learning: 289 attempts, 96.5% success rate.
+    🟡 Task backlog: 685 total → 367 completed, 111 queued, 28 'running',
+       23 failed — needs the delivery-path review from §9.
+    ✅ Test suite at HEAD: 146/146 pass locally (~125 s).
+
+  F. CONFIG / LIMIT RISKS
+    🟡 Cron changed */5 → `* * * * *` (every minute, commit d2f1c56,
+       2026-09-23): 288 → 1,440 scheduled invocations/day. Each tick is
+       cheap (dedupeAgents early-exits ≤40 agents; pruneEvents/
+       pruneOldResults are cooldown-gated) so D1 reads stay bounded, but
+       CPU time and rows_read should be watched; */5 is the safer
+       default if per-minute scheduling is not required.
+    🟡 NEW surface: Durable Object MauliProjectExecutionCoordinator
+       (SQLite class) in wrangler.jsonc — counts against the free plan's
+       100K DO requests/day.
+    🟡 Workers AI (10K neurons/day) remains the #1 limit risk, and the
+       unrate-limited /api/chat makes it externally reachable.
+    🟢 D1 rows_read bleed, agent duplication, storage pressure: fixed in
+       §9 and still verified good 5 days later.
+
+  G. PRIORITY ACTION LIST
+    1. Guard /api/reset, /api/cleanup, /api/webhooks, /api/approvals/*
+       (shared secret or Cloudflare Access) — CRITICAL.
+    2. Rate-limit /api/chat; enforce the 5/min command limit on the
+       production worker.js path.
+    3. Track a lockfile (npm i --package-lock-only) → reproducible CI
+       and working npm audit.
+    4. git rm -r --cached Result/ (27 tracked run JSONs).
+    5. Close stale PR #31.
+    6. Widen the syntax-check step to all of src/*.js.
+    7. Re-evaluate the every-minute cron; document it if kept.
+
+11. DELIVERY BLOCKED + DAILY LIMITS (2026-09-24) — ROOT CAUSES & FIXES
+───────────────────────────────────────────────────────────────────────
+  SYMPTOMS (user report): commands show "active" but no product is ever
+  delivered, no final result is written, and a Cloudflare limit is
+  exhausted every day.
+
+  MEASURED
+    • Last 50 command results: 49 "failed" ("One or more tasks failed
+      after recovery/retry limits"), 1 stuck "queued" since 2026-09-21.
+    • Failed tasks show attempts: 26 with error "Execution lease expired".
+    • Live state: 51 projects stuck "active", 51 blocked + 16 working +
+      30 queued tasks; only 367/685 tasks completed.
+    • /api/health d1Quota reported 0/100,000 used while real usage was
+      over budget — the quota counters are per-isolate (env var) and
+      reset with every cold isolate, so the dashboard could not see it.
+    • CF API: D1 storage 165 MB (33%) — the events table is regrowing;
+      Worker size 3.00 MB (at the 3 MB free limit alert).
+
+  ROOT CAUSES (each verified against code + Cloudflare docs)
+  a) waitUntil 30 s WALL. Cloudflare: "waitUntil() can extend execution
+     for up to 30 seconds after the response is sent". The whole project
+     chain was drained inside waitUntil after POST /api/command, and code
+     tasks (up to 3 Workers AI generations) exceed 30 s → the invocation
+     is CANCELLED mid-run, leaving the run stuck in 'running'.
+  b) LEASE RECOVERY BURNED REAL ATTEMPTS. Every cancellation became
+     "Execution lease expired" + attempts+1, so after a few platform
+     kills the task was permanently failed — this is why commands ended
+     as "failed after recovery/retry limits".
+  c) ORPHANED TASKS WERE UNRECOVERABLE. RUNNABLE = {queued, assigned} and
+     recoverStaleTasks only scanned runs. A task left in working/
+     assigned/verifying with no live run (cancelled invocation) could
+     never be picked up again → hasRunning stayed true forever →
+     finalizeCommand never wrote a result → project "active" forever.
+  d) WRITE STORM — daily rows_written (100K/day). seedAgents() patched
+     ALL ~19 built-in agents (row + full agent event = ~38 D1 writes)
+     on every isolate start and gate creation. Cold isolates every
+     minute ⇒ >100K rows_written/day by itself.
+  e) READ STORM — daily rows_read (5M/day). Cron changed to every minute
+     (2026-09-23) × full hydration (~2-3K rows) ≈ 4.3M rows/day before
+     any dashboard traffic.
+  f) CPU 10 ms. Free plan allows 10 ms CPU per cron trigger and per HTTP
+     request. Hydration + 40 projects × multiple full task-table scans
+     per tick (scheduler + ensureProjectPipeline + finalize) risked
+     exceededCpu kills — which also produced (a)'s orphaned runs.
+  g) AI OUTPUT ALWAYS TRUNCATED. ai.js clamped max_tokens to 1200 while
+     the executor requested 8000 → every generation produced invalid
+     JSON → 3 wasted AI calls per task (burning neurons) → silent
+     template fallback.
+
+  FIXES (this change set)
+  ✅ src/worker.js — command/approval/chat drains now pass budgetMs
+     20 000: new tasks are only STARTED inside the 20 s waitUntil
+     window; the rest stays queued for cron (which has a 15-min wall
+     limit, budgeted to 8 min per tick).
+  ✅ src/scheduler.js — lease expiry is now an INFRASTRUCTURE recovery:
+     attempts are NOT consumed (separate infraRecoveries, capped at 8).
+     New orphan recovery requeues any working/assigned/verifying task
+     without a live run (15 s grace), so projects can always reach a
+     final result. Single per-tick task index (one scan instead of
+     multiple full-table scans per project) for the 10 ms CPU budget.
+     Cron advances up to 6 runnable tasks per project per tick.
+  ✅ src/pipeline-gates.js — accepts the scheduler's task index; gate
+     creations/conversions are synced back into it (no rescans).
+  ✅ src/agents.js — seedAgents is quiet: heartbeat-only refreshes are
+     throttled to 5 min and emit no event; unchanged agents are skipped
+     entirely. Cuts the ~38-writes-per-isolate storm to near zero.
+  ✅ wrangler.jsonc — cron reverted */5 (288 hydrations/day instead of
+     1 440; founder-command/approval paths still drain instantly).
+  ✅ src/ai.js — max_tokens clamp 1200 → 3000 so generated artifacts can
+     actually be valid JSON; src/functional-code-executor.js — 3 → 2
+     attempts with a 40 s per-attempt timeout → falls back to templates
+     instead of dying with an expired lease.
+  ✅ tests/pipeline-recovery.test.js — 5 regression tests (quiet seeding,
+     orphan requeue, attempt-neutral lease recovery, cancellation cap,
+     live claim left alone). Suite: 151/151 pass; wrangler dry-run OK.
+
+  STILL OPEN AFTER THIS FIX
+    🟡 Quota dashboards (d1Quota / aiQuota) are per-isolate counters and
+       read ~0 while the real account meter is exhausted — they need a
+       D1-backed shared counter to be trustworthy.
+    🟡 D1 storage back to 165 MB (events regrowing); CF Worker size alert
+       at 3.00 MB / 3 MB.
+    🟡 §10-D security items (public /api/reset etc.) remain open.
+    🟡 Workers AI neurons (10K/day) still the tightest quality limit:
+       roughly 2-4 real generations/day on the free tier.
