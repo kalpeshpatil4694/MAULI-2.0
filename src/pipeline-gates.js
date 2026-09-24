@@ -20,15 +20,20 @@ function validFiles(projectId){
 function latestCodeArtifact(projectId){
   return codeArtifacts(projectId).sort((a,b)=>String(b.createdAt??'').localeCompare(String(a.createdAt??'')))[0]??null;
 }
-function gateTasks(projectId){ return store.list('tasks').filter(t => t.projectId === projectId && t.pipelineGate); }
+function gateTasksOf(tasks){ return tasks.filter(t => t.pipelineGate); }
+function syncTask(list, updated){ const index = list.findIndex(t => t.id === updated.id); if(index >= 0) list[index] = updated; else list.push(updated); return updated; }
 function gateAgent(type){ seedAgents(); return selectAgents(CAP[type] ?? ['verification'], null, { requireAllTools:false })[0] ?? null; }
 
-export function ensureProjectPipeline(projectId){
+// tasksArg lets the scheduler hand over its per-project task index: re-scanning the whole
+// task table for every project on every tick was a large slice of the free plan's 10 ms
+// CPU budget per cron trigger. When provided, created/converted tasks are synced back
+// into that index so the caller's view stays authoritative without another full scan.
+export function ensureProjectPipeline(projectId, tasksArg){
   const project = store.get('projects', projectId); if(!project) return null;
-  const tasks = store.list('tasks').filter(t => t.projectId === projectId);
+  const tasks = Array.isArray(tasksArg) ? tasksArg : store.list('tasks').filter(t => t.projectId === projectId);
   const finalQa = tasks.find(t => t.finalProjectVerification);
   if(!finalQa) return null;
-  const existing = new Map(gateTasks(projectId).map(t => [t.gateType, t]));
+  const existing = new Map(gateTasksOf(tasks).map(t => [t.gateType, t]));
   const generation = tasks.filter(t => !t.pipelineGate && !t.finalProjectVerification);
   let previousIds = generation.map(t => t.id);
   const created = [];
@@ -36,17 +41,17 @@ export function ensureProjectPipeline(projectId){
   for(const type of GATES){
     const gateSequence = 900 + GATES.indexOf(type);
     if(type === 'qa'){
-      const qa = store.put('tasks', {
+      const qa = syncTask(tasks, store.put('tasks', {
         ...finalQa, pipelineGate:true, gateType:'qa',
         title:'Final project QA gate', executor:'internal.pipeline-gate',
         requiredCapabilities:CAP.qa, acceptance:[{field:'type',equals:'plan'}],
         dependsOn:[...previousIds], sequence:gateSequence, id:finalQa.id
-      });
+      }));
       existing.set('qa',qa); previousIds=[qa.id]; continue;
     }
     if(existing.has(type)){
       const existingGate = existing.get(type);
-      if(existingGate.sequence !== gateSequence) existing.set(type, store.put('tasks',{...existingGate,sequence:gateSequence,id:existingGate.id}));
+      if(existingGate.sequence !== gateSequence) existing.set(type, syncTask(tasks, store.put('tasks',{...existingGate,sequence:gateSequence,id:existingGate.id})));
       previousIds=[existing.get(type).id]; continue;
     }
     const agent=gateAgent(type);
@@ -59,13 +64,13 @@ export function ensureProjectPipeline(projectId){
       executor:'internal.pipeline-gate', maxAttempts:2, sequence:gateSequence,
       dependsOn:[...previousIds], pipelineGate:true, gateType:type
     });
-    if(task){ created.push(task); previousIds=[task.id]; existing.set(type,task); }
+    if(task){ created.push(task); tasks.push(task); previousIds=[task.id]; existing.set(type,task); }
   }
 
   const qa=existing.get('qa'), integrity=existing.get('integrity');
   if(integrity && qa && !integrity.dependsOn?.includes(qa.id))
-    store.put('tasks',{...integrity,dependsOn:[qa.id],id:integrity.id});
-  return {created,gates:gateTasks(projectId).map(t=>({id:t.id,type:t.gateType,state:t.state,dependsOn:t.dependsOn??[]}))};
+    syncTask(tasks, store.put('tasks',{...integrity,dependsOn:[qa.id],id:integrity.id}));
+  return {created,gates:gateTasksOf(tasks).map(t=>({id:t.id,type:t.gateType,state:t.state,dependsOn:t.dependsOn??[]}))};
 }
 
 function prior(projectId,type){ return store.list('tasks').find(t => t.projectId === projectId && t.pipelineGate && t.gateType === type); }
