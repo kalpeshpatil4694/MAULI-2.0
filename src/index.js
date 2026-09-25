@@ -204,8 +204,31 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='POST'&&url.pathname==='/api/chat'){try{const body=await request.json();const msgValidation=validateString(body.message,'message',{minLength:1,maxLength:5000});if(!msgValidation.ok)return fail(msgValidation.error,400);const result=await processChatMessage({message:msgValidation.value,userId:'founder',env});return ok({result});}catch(e){return ok({result:{reply:'I had trouble processing that. Try again!',error:e.message}})}}
   if(request.method==='GET'&&url.pathname==='/api/chat/history'){const limit=parseInt(url.searchParams.get('limit')||'50');return ok({messages:getChatHistory({limit})});}
   if(request.method==='GET'&&url.pathname==='/api/chat/active'){return ok({conversations:getActiveConversations()});}
-  // File Edit API
-  if(request.method==='POST'&&url.pathname==='/api/edits'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const edit=editFile(body);return ok({edit});}
+  // File Edit API — reads and writes the generated project workspace, while retaining
+  // the edit history used by the dashboard. The previous UI-only audit records did not
+  // update the actual artifact, so Load always 404'd and Save never changed the product.
+  if(request.method==='GET'&&url.pathname==='/api/edits'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const projectId=url.searchParams.get('projectId');const filePath=url.searchParams.get('filePath');
+    if(!projectId)return fail('projectId required',400);
+    const artifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
+    const files=artifacts.flatMap(a=>Array.isArray(a.content?.files)?a.content.files:[]);
+    if(filePath){const file=files.find(f=>f.path===filePath);if(!file)return fail('File not found',404);return ok({file:{projectId,path:file.path,content:file.content},files:files.map(f=>({path:f.path}))});}
+    return ok({files:files.map(f=>({path:f.path})),count:files.length});
+  }
+  if(request.method==='POST'&&url.pathname==='/api/edits'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const body=await json(request);const projectId=String(body.projectId||'').trim();const filePath=String(body.filePath||'').trim();const content=typeof body.content==='string'?body.content:null;
+    if(!projectId||!filePath||content===null)return fail('projectId, filePath and content are required',400);
+    const artifact=store.list('artifacts').find(a=>a.projectId===projectId&&a.type==='code-workspace'&&Array.isArray(a.content?.files));
+    if(!artifact)return fail('Project code workspace not found',404);
+    const files=[...(artifact.content?.files||[])];const index=files.findIndex(f=>f.path===filePath);
+    if(index<0)return fail('File not found',404);
+    const oldContent=files[index].content;if(oldContent===content)return ok({file:{projectId,path:filePath,content},unchanged:true});
+    files[index]={...files[index],content};store.put('artifacts',{...artifact,content:{...artifact.content,files},updatedAt:now()});
+    const edit=editFile({projectId,filePath,operation:body.operation||'update',oldContent,newContent:content,description:body.description||`Update ${filePath}`});
+    return ok({edit,file:{projectId,path:filePath,content}});
+  }
   if(request.method==='GET'&&url.pathname==='/api/edits/recent'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({edits:getRecentEdits()});}
   if(request.method==='GET'&&url.pathname==='/api/edits/history'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');if(!projectId)return fail('projectId required',400);return ok({edits:getEditHistory(projectId)});}
   if(request.method==='POST'&&url.pathname.startsWith('/api/edits/')&&url.pathname.endsWith('/undo')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const editId=parts[parts.length-2];const result=undoEdit(editId);return ok({result});}
