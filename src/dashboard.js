@@ -345,9 +345,9 @@ select.inp{cursor:pointer}
       </div>
       <!-- API EXPLORER -->
       <div class="page" id="pg-apiexp">
-        <div class="card"><div class="card-h"><div class="card-t">🌐 API Explorer</div></div>
-          <div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="apiQ" placeholder="Search APIs..." style="flex:1"><button class="btn btn-p" onclick="searchApi()">🔍</button></div>
-          <div id="apiRes" style="max-height:300px;overflow-y:auto"></div>
+        <div class="card"><div class="card-h"><div class="card-t">🌐 API Explorer</div><button class="btn btn-a btn-s" onclick="loadApiExplorer()">↻</button></div>
+          <div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="apiQ" placeholder="Search weather, maps, email..." style="flex:1" onkeydown="if(event.key==='Enter')searchApiCatalog()"><button class="btn btn-p" onclick="searchApiCatalog()">🔍 Search</button></div>
+          <div id="apiRes" style="max-height:420px;overflow-y:auto"><div style="color:var(--text2);padding:10px">Loading API catalog...</div></div>
         </div>
         <div class="card"><div class="card-h"><div class="card-t">🔌 MCP Servers</div></div><div id="mcpOut" style="max-height:300px;overflow-y:auto"></div></div>
       </div>
@@ -413,6 +413,25 @@ function fmt(d){if(!d)return '—';try{return new Date(d).toLocaleString()}catch
 function toast(m,t='info'){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;$('toastC').appendChild(e);setTimeout(()=>e.remove(),3500)}
 function md(s){if(!s)return'';let t=esc(s);t=t.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');t=t.replace(/\\*(.+?)\\*/g,'<em>$1</em>');t=t.replace(/^### (.+)$/gm,'<b style="color:var(--accent)">$1</b>');t=t.replace(/^## (.+)$/gm,'<b>$1</b>');t=t.replace(/^# (.+)$/gm,'<b style="font-size:14px">$1</b>');t=t.replace(/^• (.+)$/gm,'<div style="padding-left:10px">• $1</div>');t=t.replace(/\\n/g,'<br>');return t}
 function actColor(ev){return ev.type?.includes('error')?'var(--red)':ev.type?.includes('task_result')?'var(--green)':ev.type?.includes('command')?'var(--accent)':'var(--blue)'}
+function renderApiRows(apis){
+  const list=Array.isArray(apis)?apis:[];
+  if(!list.length){$('apiRes').innerHTML='<div style="color:var(--text2);padding:10px">No matching APIs</div>';return;}
+  let h='<div style="font-size:10px;color:var(--text3);padding:4px 0 8px">'+list.length+' API'+(list.length===1?'':'s')+' available</div>';
+  for(const a of list){const category=a.category||'API';const auth=a.auth||a.authentication||'Not specified';const free=a.free===false?'Paid':'Free tier';
+    h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:12px">'+esc(a.name||a.title||'—')+'</b><span class="badge badge-g">'+esc(category)+'</span></div><div style="display:flex;gap:6px;align-items:center;margin-top:5px"><span class="badge badge-a">'+esc(free)+'</span><span style="font-size:10px;color:var(--text2)">Auth: '+esc(auth)+'</span>'+(a.url?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener" style="font-size:10px;margin-left:auto">Open API ↗</a>':'')+'</div></div>';
+  }
+  $('apiRes').innerHTML=h;
+}
+async function loadApiExplorer(){
+  if(!$('apiRes'))return;
+  $('apiRes').innerHTML='<div style="color:var(--text2);padding:10px">Loading API catalog...</div>';
+  try{const r=await api('/api/apis/catalog');const catalog=r.catalog||{};const apis=[];
+    for(const[group,items]of Object.entries(catalog))for(const item of(Array.isArray(items)?items:[]))apis.push({...item,category:item.category||group});
+    renderApiRows(apis);
+  }catch(e){$('apiRes').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}
+  loadMcp();
+}
+async function searchApiCatalog(){const q=$('apiQ').value.trim();if(!q){await loadApiExplorer();return}$('apiRes').innerHTML='<div style="color:var(--text2);padding:10px">Searching...</div>';try{const r=await api('/api/apis/search?q='+encodeURIComponent(q));renderApiRows(r.apis||r.results||[])}catch(e){$('apiRes').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
 
 // ─── API ───
 async function api(path,opts={}){
@@ -432,7 +451,7 @@ async function api(path,opts={}){
 // ─── NAVIGATION ───
 const titles={command:'Command Center',chat:'Chat',overview:'Overview',agents:'Agents',monitor:'Monitor',projects:'Projects',tasks:'Tasks',docs:'Docs',approvals:'Approvals',activity:'Activity',health:'Health',memory:'Memory',integrations:'Integrations',editor:'File Editor',learning:'Learning',builds:'Builds',messaging:'Messaging',apiexp:'API Explorer',downloads:'Downloads',usage:'Limits & Usage'};
 function go(p){curPage=p;closeSb();document.querySelectorAll('.page').forEach(e=>e.classList.remove('on'));const pg=$('pg-'+p);if(pg)pg.classList.add('on');document.querySelectorAll('.nav-i').forEach(e=>e.classList.remove('on'));const nav=document.querySelector('.nav-i[data-p="'+p+'"]');if(nav)nav.classList.add('on');$('pageTitle').textContent=titles[p]||p;renderPage(p)}
-function renderPage(p){const r={overview:renderOverview,agents:renderAgents,projects:renderProjects,tasks:renderTasks,activity:renderActivity,health:renderHealth,memory:renderMemory,monitor:renderMonitor,integrations:renderIntegrations,learning:renderLearning,editor:loadEdits,builds:loadBuilds,messaging:loadMsgs,apiexp:loadMcp,downloads:loadDl,usage:()=>{loadUsage();loadCFData();},chat:loadChat,docs:()=>{},approvals:renderApprovals};if(r[p])r[p]()}
+function renderPage(p){const r={overview:renderOverview,agents:renderAgents,projects:renderProjects,tasks:renderTasks,activity:renderActivity,health:renderHealth,memory:renderMemory,monitor:renderMonitor,integrations:renderIntegrations,learning:renderLearning,editor:loadEdits,builds:loadBuilds,messaging:loadMsgs,apiexp:loadApiExplorer,downloads:loadDl,usage:()=>{loadUsage();loadCFData();},chat:loadChat,docs:()=>{},approvals:renderApprovals};if(r[p])r[p]()}
 document.querySelectorAll('.nav-i[data-p]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();go(el.dataset.p)}));
 function toggleSb(){$('sidebar').classList.toggle('open');$('sbOverlay').classList.toggle('show');document.body.classList.toggle('sb-open')}
 function closeSb(){$('sidebar').classList.remove('open');$('sbOverlay').classList.remove('show');document.body.classList.remove('sb-open')}

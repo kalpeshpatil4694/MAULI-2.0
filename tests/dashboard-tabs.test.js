@@ -37,6 +37,20 @@ test('L1 dashboard Learning tab: GET /api/learning/skill-tree works without an a
   }
 });
 
+test('L1 dashboard API Explorer receives a populated catalog and search results', async () => {
+  const catalogResponse = await get('/api/apis/catalog');
+  assert.equal(catalogResponse.status, 200);
+  const catalogBody = await catalogResponse.json();
+  assert.ok(Array.isArray(catalogBody.data.catalog.weather));
+  assert.ok(catalogBody.data.catalog.weather.length >= 1);
+  assert.ok(catalogBody.data.categories.length >= 10);
+
+  const searchResponse = await get('/api/apis/search?q=weather');
+  assert.equal(searchResponse.status, 200);
+  const searchBody = await searchResponse.json();
+  assert.ok(searchBody.data.apis.length >= 1);
+});
+
 test('L1 dashboard homepage serves static HTML and the worker injects the live bridge', async () => {
   const response = await get('/');
   assert.equal(response.status, 200);
