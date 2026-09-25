@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { store } from '../src/store.js';
 import { seedAgents } from '../src/agents.js';
+import { dedupeAgents } from '../src/maintenance.js';
 import { pruneEvents, pruneOldResults } from '../src/db.js';
 import app from '../src/index.js';
 
@@ -23,6 +24,9 @@ function mockD1({ entities = {}, events = [] } = {}) {
       const row = rowsOf(args[0]).find(r => r.id === args[1]);
       if (!row) return [];
       return [{ data: typeof row.data === 'string' ? row.data : JSON.stringify(row) }];
+    }
+    if (sql.startsWith('SELECT id, data FROM entities WHERE type = ?')) {
+      return rowsOf(args[0]).map(row => ({ id: row.id, data: typeof row.data === 'string' ? row.data : JSON.stringify(row) }));
     }
     if (sql.startsWith('SELECT data FROM entities WHERE type = ?')) {
       const rows = [...rowsOf(args[0])].sort((a, b) => (updated(a) < updated(b) ? 1 : -1));
@@ -60,6 +64,12 @@ function mockD1({ entities = {}, events = [] } = {}) {
       const rows = rowsOf(type).filter(r => updated(r) < cutoff).sort((a, b) => (updated(a) < updated(b) ? -1 : 1)).slice(0, limit);
       for (const row of rows) rowsOf(type).splice(rowsOf(type).indexOf(row), 1);
       return rows.length;
+    }
+    if (sql.startsWith("DELETE FROM entities WHERE type = 'agents' AND id IN")) {
+      const ids = new Set(args);
+      const rows = rowsOf('agents');
+      for (let i = rows.length - 1; i >= 0; i--) if (ids.has(rows[i].id)) rows.splice(i, 1);
+      return ids.size;
     }
     if (sql.startsWith('INSERT INTO entities')) {
       const [type, id, data, createdAt, updatedAt] = args;
@@ -145,6 +155,23 @@ test('seeding an already-hydrated store reuses the existing D1 agent identity', 
 
   assert.equal(store.list('agents').length, 18, 'no new agent rows when every built-in already exists');
   assert.ok(store.list('agents').every(agent => agent.id.startsWith('agent-old-')), 'existing ids are kept');
+});
+
+test('agent dedupe cleans duplicate names even when the table has fewer than 40 rows', async () => {
+  const duplicateName = 'QA Agent';
+  const rich = { id: 'agent-rich', name: duplicateName, state: 'available', metadata: { learning: { testing: { attempts: 3 } } }, updatedAt: '2026-09-25T00:00:00.000Z' };
+  const empty = { id: 'agent-empty', name: duplicateName, state: 'available', metadata: {}, updatedAt: '2026-09-24T00:00:00.000Z' };
+  const db = mockD1({ entities: { agents: [rich, empty] } });
+  const env = { DB: db.DB };
+  resetStore(env);
+  store.hydrated = true;
+  store.data.set('agents', new Map(db.entities.agents.map(agent => [agent.id, agent])));
+
+  const result = await dedupeAgents(env);
+
+  assert.equal(result.deduped, 1);
+  assert.equal(result.kept, 1);
+  assert.deepEqual(db.entities.agents.map(agent => agent.id), ['agent-rich']);
 });
 
 test('pruneEvents deletes in a few set-based statements without scanning the table', async () => {

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dashboardHTML } from '../src/dashboard.js';
 import { DASHBOARD_LIVE_SCRIPT } from '../src/dashboard-live.js';
+import { dedupeAgentList } from '../src/agents.js';
 
 test('dashboard unwraps standard API envelopes', () => {
   const html = dashboardHTML();
@@ -27,4 +28,20 @@ test('API Explorer loads the catalog and supports search instead of opening empt
   assert.match(html, /Loading API catalog/);
   assert.match(html, /onkeydown="if\(event\.key==='Enter'\)searchApiCatalog\(\)"/);
   assert.match(html, /Open API/);
+});
+
+test('agent API records are unique by name and retain the richest copy', () => {
+  const agents = dedupeAgentList([
+    { id: 'agent-empty', name: 'Planning Agent', metadata: {} },
+    { id: 'agent-rich', name: 'Planning Agent', metadata: { learning: { planning: { attempts: 4 } }, skillTree: { planning: { level: 8 } } } },
+    { id: 'agent-qa', name: 'QA Agent', metadata: {} }
+  ]);
+  assert.deepEqual(agents.map(agent => agent.id), ['agent-rich', 'agent-qa']);
+});
+
+test('agent cards expose the unique id and live state uses dashboard deduplication', () => {
+  const html = dashboardHTML();
+  assert.match(html, /ID: '\+esc\(a\.id/);
+  assert.match(html, /__applyDashboardState=applyDashboardState/);
+  assert.match(DASHBOARD_LIVE_SCRIPT, /window\.__applyDashboardState/);
 });
