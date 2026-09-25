@@ -406,6 +406,30 @@ let curPage='command';
 
 // ─── HELPERS ───
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function dedupeDashboardAgents(agents){
+  const byName=new Map();
+  for(const agent of(Array.isArray(agents)?agents:[])){
+    if(!agent||typeof agent!=='object')continue;
+    const key=String(agent.name??'').trim().toLowerCase()||('id:'+String(agent.id??''));
+    const current=byName.get(key);
+    if(!current){byName.set(key,agent);continue;}
+    const score=a=>{const m=a.metadata??{};return Object.keys(m.learning??{}).length*10+Object.keys(m.skillTree??{}).length*2+Number(m.successRate??0)*5+(a.updatedAt?Date.parse(a.updatedAt)||0:0)/1e12;};
+    if(score(agent)>score(current))byName.set(key,agent);
+  }
+  return [...byName.values()].sort((a,b)=>String(a.name??a.id??'').localeCompare(String(b.name??b.id??'')));
+}
+function applyDashboardState(d){
+  const state=d&&typeof d==='object'?d:{};
+  S.projects=Array.isArray(state.projects)?state.projects:[];
+  S.tasks=Array.isArray(state.tasks)?state.tasks:[];
+  S.artifacts=Array.isArray(state.artifacts)?state.artifacts:[];
+  S.agents=dedupeDashboardAgents(state.agents);
+  S.events=Array.isArray(state.events)?state.events:[];
+  S.approvals=Array.isArray(state.approvals)?state.approvals.filter(a=>a.state==='pending'):[];
+  S.tools=Array.isArray(state.tools)?state.tools:[];
+}
+window.__mauliDedupeAgents=dedupeDashboardAgents;
+window.__applyDashboardState=applyDashboardState;
 function badge(s){return s==='completed'?'g':s==='active'?'b':s==='planning'?'a':s==='escalated'?'r':'y'}
 function tBadge(s){return s==='completed'?'g':s==='working'?'a':s==='failed'||s==='blocked'?'r':s==='verifying'?'b':'y'}
 function pct(s){return s==='completed'?'100':s==='working'?'60':s==='failed'?'100':'20'}
@@ -440,7 +464,7 @@ function closeSb(){$('sidebar').classList.remove('open');$('sbOverlay').classLis
 // ─── STATE ───
 async function loadState(){
   try{const r=await api('/api/state');const d=r.data||r;
-    S.projects=d.projects||[];S.tasks=d.tasks||[];S.artifacts=d.artifacts||[];S.agents=d.agents||[];S.events=d.events||[];S.approvals=(d.approvals||[]).filter(a=>a.state==='pending');S.tools=d.tools||[];
+    applyDashboardState(d);
     updateStats();renderPage(curPage);
     if($('hText')){$('hDot').classList.remove('off');$('hText').textContent='System Online';}
   }catch(e){console.warn('State:',e.message)}
@@ -467,7 +491,7 @@ function renderOverview(){
 function renderAgents(){
   let h='';for(const a of S.agents){
     const sk=a.skills||a.capabilities||[];const pct=Math.min(100,((a.tasksCompleted||0)*10+50));
-    h+='<div class="card" style="margin-bottom:0"><div style="display:flex;gap:10px;align-items:flex-start"><div style="width:36px;height:36px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">'+(a.emoji||'🤖')+'</div><div style="flex:1"><div style="font-weight:600;font-size:13px">'+esc(a.name||a.id)+'</div><div style="font-size:10px;color:var(--text2)">'+esc(a.role||a.type||'Agent')+'</div><div style="margin-top:6px"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:10px;color:var(--text3)">Skill</span><span style="font-size:10px;color:var(--accent)">'+pct+'%</span></div><div class="pbar"><div class="pfill" style="width:'+pct+'%"></div></div></div><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:3px">'+sk.map(s=>'<span class="badge badge-a">'+esc(s)+'</span>').join('')+'</div></div></div></div>';
+    h+='<div class="card" style="margin-bottom:0"><div style="display:flex;gap:10px;align-items:flex-start"><div style="width:36px;height:36px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">'+(a.emoji||'🤖')+'</div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px">'+esc(a.name||a.id)+'</div><div style="font-size:10px;color:var(--text2)">'+esc(a.role||a.type||'Agent')+' · ID: '+esc(a.id||'—')+'</div><div style="margin-top:6px"><div style="display:flex;justify-content:space-between;margin-bottom:2px"><span style="font-size:10px;color:var(--text3)">Skill</span><span style="font-size:10px;color:var(--accent)">'+pct+'%</span></div><div class="pbar"><div class="pfill" style="width:'+pct+'%"></div></div></div><div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:3px">'+sk.map(s=>'<span class="badge badge-a">'+esc(s)+'</span>').join('')+'</div></div></div></div>';
   }
   $('agList').innerHTML=h||'<div style="text-align:center;padding:40px;color:var(--text2)">No agents</div>';
 }
