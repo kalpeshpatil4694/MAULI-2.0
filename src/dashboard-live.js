@@ -51,6 +51,10 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       const set=(id,v)=>{const e=get(id);if(e)e.textContent=String(v);};
       set('sProj',projects.length);set('navP',projects.length);
       if(Array.isArray(d.tasks)){set('sTask',d.tasks.length);set('navT',d.tasks.filter(t=>t.state==='working').length||d.tasks.length);}
+      if(Array.isArray(d.agents)){set('sAg',d.agents.length);set('navA',d.agents.length);}
+      if(Array.isArray(d.artifacts))set('sArt',d.artifacts.length);
+      // Refresh every data-backed panel from this response without a second poll.
+      document.dispatchEvent(new CustomEvent('mauli:state',{detail:d}));
     }catch(_){ }
     finally{state.polling=false;}
   }
@@ -97,7 +101,8 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     if(!btn){btn=document.createElement('button');btn.className='proj-detail-btn';btn.style.cssText='margin-top:8px;background:var(--accent);color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600';btn.textContent='📄 View Full Project Details';e.appendChild(btn);}
     btn.onclick=()=>showProjectDetail(pid);
   }
+  document.addEventListener('mauli:state',e=>{const d=e.detail||{};S.projects=Array.isArray(d.projects)?d.projects:[];S.tasks=Array.isArray(d.tasks)?d.tasks:[];S.agents=Array.isArray(d.agents)?d.agents:[];S.artifacts=Array.isArray(d.artifacts)?d.artifacts:[];S.events=Array.isArray(d.events)?d.events:[];S.approvals=Array.isArray(d.approvals)?d.approvals.filter(a=>a.state==='pending'):[];S.tools=Array.isArray(d.tools)?d.tools:[];updateStats();renderPage(curPage)});
   window.setTimeout(poll,500);
-  window.setInterval(poll,15000);
+  window.setInterval(poll,30000);
 })();
 </script>`;

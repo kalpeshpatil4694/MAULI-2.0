@@ -419,7 +419,13 @@ async function api(path,opts={}){
   try{const m=(opts.method||'GET').toUpperCase();const hdrs={...(opts.headers||{})};
     if(m==='POST'||m==='PUT'||m==='PATCH')hdrs['Content-Type']='application/json';
     const r=await fetch(path,{method:m,headers:hdrs,body:opts.body});
-    if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(t||r.status)}return r.json()
+    if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(t||r.status)}
+    const j=await r.json();
+    // Unwrap the {ok, data} envelope so every panel reads its own fields directly
+    // (stats/skillTree/messages/servers/... all live under data). Keep the ok flag
+    // for callers that check it explicitly (e.g. reset).
+    return (j&&j.ok===true&&j.data&&typeof j.data==='object')?{...j.data,ok:true}:j;
+
   }catch(e){throw e}
 }
 
@@ -654,8 +660,8 @@ async function loadCFData(){
 }
 
 function renderIntegrations(){
-  const ints=[{n:'GitHub',i:'🐙',s:'Connected',d:'Source control'},{n:'Cloudflare Workers',i:'☁️',s:'Deployed',d:'Hosting'},{n:'Cloudflare AI',i:'🧠',s:'Active',d:'LLM'},{n:'D1 Database',i:'💾',s:'Connected',d:'SQL'},{n:'MCP Servers',i:'🔌',s:'Integrated',d:'Agent tools'},{n:'Ollama',i:'🤖',s:'Optional',d:'Local LLMs'}];
-  $('intList').innerHTML=ints.map(i=>'<div class="card" style="margin-bottom:0"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px">'+i.i+'</span><div><b style="font-size:13px">'+esc(i.n)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(i.d)+'</div></div><span class="badge badge-g" style="margin-left:auto">'+i.s+'</span></div></div>').join('');
+  const ints=[{n:'GitHub',i:'🐙',s:'Configured',d:'Source control'},{n:'Cloudflare Workers',i:'☁️',s:'Deployed',d:'Hosting'},{n:'Cloudflare AI',i:'🧠',s:'Bound',d:'LLM'},{n:'D1 Database',i:'💾',s:'Connected',d:'SQL'},{n:'MCP Servers',i:'🔌',s:'Catalog',d:'Agent tools'},{n:'Ollama',i:'🤖',s:'Optional',d:'Local LLMs'}];
+  $('intList').innerHTML=ints.map(i=>'<div class="card" style="margin-bottom:0"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px">'+i.i+'</span><div><b style="font-size:13px">'+esc(i.n)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(i.d)+'</div></div><span class="badge badge-a" style="margin-left:auto">'+i.s+'</span></div></div>').join('');
 }
 function renderApprovals(){
   let h='';for(const a of S.approvals)h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(a.action||a.id)+'</b><div style="font-size:10px;color:var(--text2)">Risk: '+esc(a.risk||'unknown')+'</div></div><div style="display:flex;gap:4px"><button class="btn btn-g btn-s" onclick="decideAppr(\\''+a.id+'\\',true)">✅</button><button class="btn btn-r btn-s" onclick="decideAppr(\\''+a.id+'\\',false)">❌</button></div></div>';
