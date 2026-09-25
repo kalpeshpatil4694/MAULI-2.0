@@ -39,15 +39,17 @@ export async function dedupeAgents(env) {
     const rows = await env.DB.prepare('SELECT id, data FROM entities WHERE type = ?').bind('agents').all();
     const agents = (rows.results ?? []).map(r => ({ id: r.id, data: JSON.parse(r.data) }));
     if (!agents.length) { _lastAgentDedupe = now; return { deduped: 0, reason: 'none' }; }
-    // Once collapsed the table holds only the built-ins — nothing left to dedupe, and
-    // skipping avoids re-reading every referenced entity type on each hourly run.
-    if (agents.length <= 40) { _lastAgentDedupe = now; return { deduped: 0, reason: 'clean', total: agents.length }; }
-
     const byName = new Map();
     for (const a of agents) {
       const name = a.data?.name || 'unnamed';
       if (!byName.has(name)) byName.set(name, []);
       byName.get(name).push(a);
+    }
+    // A small table is not necessarily clean: a single duplicate is enough to make the
+    // dashboard count and cards wrong. Only skip reference scans when every name is unique.
+    if ([...byName.values()].every(list => list.length === 1)) {
+      _lastAgentDedupe = now;
+      return { deduped: 0, reason: 'clean', total: agents.length };
     }
 
     const keepIds = new Set();

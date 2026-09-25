@@ -101,7 +101,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     if(!btn){btn=document.createElement('button');btn.className='proj-detail-btn';btn.style.cssText='margin-top:8px;background:var(--accent);color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600';btn.textContent='📄 View Full Project Details';e.appendChild(btn);}
     btn.onclick=()=>showProjectDetail(pid);
   }
-  document.addEventListener('mauli:state',e=>{const d=e.detail||{};S.projects=Array.isArray(d.projects)?d.projects:[];S.tasks=Array.isArray(d.tasks)?d.tasks:[];S.agents=Array.isArray(d.agents)?d.agents:[];S.artifacts=Array.isArray(d.artifacts)?d.artifacts:[];S.events=Array.isArray(d.events)?d.events:[];S.approvals=Array.isArray(d.approvals)?d.approvals.filter(a=>a.state==='pending'):[];S.tools=Array.isArray(d.tools)?d.tools:[];updateStats();renderPage(curPage)});
+  document.addEventListener('mauli:state',e=>{const d=e.detail||{};if(typeof window.__applyDashboardState==='function')window.__applyDashboardState(d);else{S.projects=Array.isArray(d.projects)?d.projects:[];S.tasks=Array.isArray(d.tasks)?d.tasks:[];S.agents=Array.isArray(d.agents)?d.agents:[];S.artifacts=Array.isArray(d.artifacts)?d.artifacts:[];S.events=Array.isArray(d.events)?d.events:[];S.approvals=Array.isArray(d.approvals)?d.approvals.filter(a=>a.state==='pending'):[];S.tools=Array.isArray(d.tools)?d.tools:[];}updateStats();renderPage(curPage)});
   window.setTimeout(poll,500);
   window.setInterval(poll,30000);
 })();

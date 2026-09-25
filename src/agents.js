@@ -9,7 +9,26 @@ export const AGENT_STATES = ['registered','available','assigned','working','veri
 export function builtinAgentId(name){return 'agent-builtin-'+String(name??'agent').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
 export function registerAgent({ name, role, department = 'General', capabilities = [], tools = [], metadata = {}, id: requestedId }) { const agent=store.put('agents',{id:requestedId??id('agent'),name,role,department,capabilities,tools,state:'available',heartbeatAt:now(),metadata}); store.addEvent('agent.registered',agent); return agent; }
 export function updateAgent(idValue, patch) { const current=store.get('agents',idValue); if(!current)return null; const next=store.put('agents',{...current,...patch,id:current.id}); store.addEvent('agent.updated',next); return next; }
-export function listAgents(){return store.list('agents');}
+function agentDedupeScore(agent){
+  const metadata=agent?.metadata??{};
+  let score=Object.keys(metadata.learning??{}).length*10+Object.keys(metadata.skillTree??{}).length*2+Math.max(0,Number(metadata.successRate??0))*5;
+  if(agent?.state==='available')score+=3;
+  if(agent?.currentTaskId)score-=10;
+  const timestamp=Date.parse(agent?.updatedAt??agent?.heartbeatAt??0);
+  return Number.isFinite(timestamp)?score+Math.min(10,timestamp/1e12):score;
+}
+export function dedupeAgentList(agents){
+  const byName=new Map();
+  for(const agent of(Array.isArray(agents)?agents:[])){
+    if(!agent||typeof agent!=='object')continue;
+    const name=String(agent.name??'').trim().toLowerCase();
+    const key=name||`id:${String(agent.id??'')}`;
+    const current=byName.get(key);
+    if(!current||agentDedupeScore(agent)>agentDedupeScore(current))byName.set(key,agent);
+  }
+  return [...byName.values()].sort((a,b)=>String(a.name??a.id??'').localeCompare(String(b.name??b.id??'')));
+}
+export function listAgents(){return dedupeAgentList(store.list('agents'));}
 export function recordAgentOutcome(agentId,outcome={}){const agent=store.get('agents',agentId);if(!agent)return null;const metadata={...(agent.metadata??{})};const total=Math.max(0,Number(metadata.outcomeCount??0));const successes=Math.max(0,Number(metadata.successCount??0));const success=outcome.success===true;const nextTotal=total+1;const nextSuccesses=successes+(success?1:0);metadata.outcomeCount=nextTotal;metadata.successCount=nextSuccesses;metadata.failureCount=Math.max(0,nextTotal-nextSuccesses);metadata.successRate=nextSuccesses/nextTotal;metadata.lastOutcomeAt=now();metadata.lastOutcome=success?'success':'failure';metadata.reliabilityScore=Math.round(metadata.successRate*100);if(!success){metadata.consecutiveFailures=Math.max(0,Number(metadata.consecutiveFailures??0))+1;}else{metadata.consecutiveFailures=0;delete metadata.cooldownUntil;}if(metadata.consecutiveFailures>=3){metadata.cooldownUntil=Date.now()+300000;}return updateAgent(agentId,{metadata});}
 function contextualRate(agent, requiredCapabilities=[]){const key=[...new Set(requiredCapabilities)].sort().join('|')||'general';return learningAdjustedRate(agent.metadata?.learning?.[key]);}
 function workloadPenalty(agent,options={}){const active=Number(agent.metadata?.activeTaskCount??0);const max=Number(agent.metadata?.maxConcurrentTasks??1);if(options.ignoreWorkload)return 0;if(active>=max)return -100;return Math.max(-30,-active*10);}
