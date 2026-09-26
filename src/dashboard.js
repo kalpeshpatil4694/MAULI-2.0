@@ -717,7 +717,7 @@ async function sendCmd(){
   const cmd=$('cmdIn').value.trim();if(!cmd){toast('Enter a command','err');return}
   $('cmdBtn').disabled=true;$('cmdLoad').classList.add('show');$('cmdRes').style.display='none';
   try{const r=await api('/api/command',{method:'POST',body:JSON.stringify({command:cmd})});
-    const queued=r.result||r;
+    const queued=r.result||r;const rawResult=JSON.stringify(r.result||r,null,2);
     const project=queued?.project||queued?.result?.project||null;
     $('cmdRes').style.display='block';
     $('cmdRes').textContent=JSON.stringify({
