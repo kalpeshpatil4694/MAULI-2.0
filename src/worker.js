@@ -18,6 +18,8 @@ import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
 let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 300000; // 5 min cooldown to prevent D1 row exhaustion
 let _d1Failed = false; let _d1FailTime = 0; const D1_FAIL_COOLDOWN = 300000; // 5 min retry after D1 failure
+const _projectKickAt = new Map();
+const PROJECT_KICK_COOLDOWN = 30000;
 async function hydrate(env) {
   if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
   // After a D1 failure (e.g. daily rows_read limit), retry after the cooldown so the
@@ -143,6 +145,20 @@ export default {
     }
 
     const response = await app.fetch(request, env, ctx);
+    // Opening a project detail is also a safe targeted wake-up for that project. This
+    // prevents an active project from waiting for a global cron tick when a queued gate
+    // was left behind by an isolate/lease/trigger interruption. The cooldown avoids turning
+    // dashboard refreshes into repeated scheduler executions.
+    if (request.method === 'GET' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/detail') && response.ok && ctx?.waitUntil) {
+      const pid = url.pathname.split('/')[3];
+      const lastKick = Number(_projectKickAt.get(pid) || 0);
+      if (pid && Date.now() - lastKick >= PROJECT_KICK_COOLDOWN) {
+        _projectKickAt.set(pid, Date.now());
+        ctx.waitUntil(schedulerTick(env, { trigger: 'project-detail', projectId: pid, budgetMs: 20_000 }).catch(error => {
+          store.addEvent('project.detail_scheduler_error', { projectId: pid, error: error?.message || 'Scheduler error', at: now() });
+        }));
+      }
+    }
     // The existing dashboard remains authoritative for data/rendering; this only adds a
     // small live lifecycle layer so Founder Command never looks idle after a successful queue.
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/dashboard')) {
