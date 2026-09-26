@@ -1,4 +1,4 @@
-import { canWriteD1, reserveD1Rows, recordD1Write } from './d1-quota.js';
+import { canWriteD1, reserveD1Rows, recordD1Write, recordD1Read } from './d1-quota.js';
 import { queueQuotaSnapshot } from './queue-quota.js';
 
 export function hasD1(env) { return Boolean(env?.DB && typeof env.DB.prepare === 'function'); }
@@ -33,7 +33,7 @@ export async function d1List(env, type, { existingTasks, limit } = {}) {
   const result = limit
     ? await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC LIMIT ?').bind(type, limit).all()
     : await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC').bind(type).all();
-  const rows = (result.results ?? []).map(row => JSON.parse(row.data));
+  recordD1Read(env, Number(result?.meta?.rows_read) || 0);\n  const rows = (result.results ?? []).map(row => JSON.parse(row.data));
   if (type !== 'projects' || !rows.length) return rows;
   let tasks = existingTasks;
   if (!tasks) {
