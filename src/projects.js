@@ -1,6 +1,7 @@
 import { id, now } from './core.js';
 import { store } from './store.js';
 import { createTask, assignTask } from './tasks.js';
+import { estimateProjectDuration } from './time-tracking.js';
 
 function projectStateFromTasks(project) {
   const tasks = store.list('tasks').filter(t => t?.projectId === project?.id);
@@ -16,15 +17,15 @@ function projectStateFromTasks(project) {
   return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
 }
 
-export function createProject({ name, objective, founderCommand = '', requirements = [], priority = 'normal' }) {
-  const project = store.put('projects', { id: id('project'), name, objective, founderCommand, requirements, priority, state: 'planning', milestones: [], createdAt: now() });
+export function createProject({ name, objective, founderCommand = '', requirements = [], priority = 'normal', commandRunId = null, commandReceivedAt = null }) {
+  const project = store.put('projects', { id: id('project'), name, objective, founderCommand, requirements, priority, state: 'planning', milestones: [], commandRunId, commandReceivedAt:commandReceivedAt||now(), commandStartedAt:commandReceivedAt||now(), createdAt: commandReceivedAt||now() });
   store.addEvent('project.created', project); return project;
 }
 
 export function addTaskToProject(projectId, taskInput) {
   const project = store.get('projects', projectId); if (!project) return null;
   const task = createTask({ ...taskInput, projectId });
-  store.put('projects', { ...project, state: 'active', id: project.id });
+  store.put('projects', { ...project, state: 'active', startedAt:project.startedAt||now(), estimatedDurationMs:estimateProjectDuration(store.list('tasks').filter(t=>t.projectId===project.id)), id: project.id });
   return assignTask(task.id);
 }
 
