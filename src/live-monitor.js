@@ -1,6 +1,7 @@
 import { id, now } from './core.js';
 import { store } from './store.js';
 import { sendMessage, getMessages } from './agent-communication.js';
+import { enrichTaskTiming, enrichProjectTiming } from './time-tracking.js';
 
 /**
  * Live Monitor — provides real-time visibility into agent activity,
@@ -36,7 +37,7 @@ export function getActivityFeed({ limit = 50, projectId = null, agentId = null, 
  * Real project lifecycle progress. This is state-derived; no timer/fake percentage.
  */
 export function getProjectProgress(projectId) {
-  const tasks = store.list('tasks').filter(t => t.projectId === projectId);
+  const tasks = store.list('tasks').filter(t => t.projectId === projectId).map(enrichTaskTiming);
   const activities = store.list('activities').filter(a => a.projectId === projectId);
   const messages = store.list('messages').filter(m => m.projectId === projectId);
   const builds = store.list('builds').filter(b => b.projectId === projectId);
@@ -70,6 +71,7 @@ export function getProjectProgress(projectId) {
   const percentage = total > 0 ? Math.round(completed / total * 100) : 0;
   const nextStage = stageIndex >= 8 ? null : ['Understanding','Planning','Agent Assignment','Development / Execution','Automated Test','Security Check','Artifact / Build','Final QA','Final Delivery'][stageIndex + 1];
   const currentAgent = lastActivity?.agentId || activeAgents[0] || null;
+  const project=store.get('projects',projectId); const timing=enrichProjectTiming(project,tasks);
 
   return {
     projectId,
@@ -85,7 +87,7 @@ export function getProjectProgress(projectId) {
     messages: messages.length,
     latestBuild,
     lastActivity,
-    status: failed > 0 ? 'has_failures' : working > 0 ? 'in_progress' : completed === total && total > 0 ? 'completed' : 'pending'
+    status: failed > 0 ? 'has_failures' : working > 0 ? 'in_progress' : completed === total && total > 0 ? 'completed' : 'pending', timing, commandReceivedAt:project?.commandReceivedAt||project?.createdAt||null, commandStartedAt:project?.commandStartedAt||project?.startedAt||null, commandCompletedAt:project?.commandCompletedAt||project?.completedAt||project?.failedAt||null
   };
 }
 
