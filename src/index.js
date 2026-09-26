@@ -54,7 +54,7 @@ async function initOnce(env, ctx) {
   }
 }
 // Bounded, cached snapshot used only until a cold isolate finishes hydrating.
-const STATE_SNAPSHOT_TTL = 3000;
+// Match the live dashboard cadence while avoiding repeated D1 reads between polls.\nconst STATE_SNAPSHOT_TTL = 5000;
 let _stateSnapshot = null; let _stateSnapshotTime = 0;
 function compactStateItem(item, type) {
   if (!item || typeof item !== 'object') return item;
