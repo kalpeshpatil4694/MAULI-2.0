@@ -10,7 +10,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   function badge(s){const v=String(s||'queued');return '<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(0,212,255,.1);color:var(--accent);font-size:10px;font-weight:600">'+esc(v)+'</span>';}
   function showProject(p,progress){
     if(!p)return;
-    const pr=progress||{};
+    const pr=progress||{}; const timing=pr.timing||{};
     const pct=Number.isFinite(Number(pr.percentage))?Math.max(0,Math.min(100,Number(pr.percentage))):({completed:100,working:60,assigned:35,queued:20,awaiting_approval:10,failed:100}[p.state]??10);
     const stage=pr.stage||p.state||'queued';
     const next=pr.nextStage||'—';
@@ -20,7 +20,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       '<div style="margin-top:9px;height:6px;background:var(--bg3);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s"></div></div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px;font-size:10px">'+
       '<span>Stage: <b>'+esc(stage)+'</b></span><span>Progress: <b>'+pct+'%</b></span>'+
-      '<span>Agent: <b>'+esc(pr.currentAgent?.name||pr.currentAgent?.id||'—')+'</b></span><span>Next: <b>'+esc(next)+'</b></span>'+
+      '<span>Agent: <b>'+esc(pr.currentAgent?.name||pr.currentAgent?.id||'—')+'</b></span><span>Next: <b>'+esc(next)+'</b></span>'+ '<span>Command: <b>'+esc(pr.commandReceivedAt||'—')+'</b></span><span>Elapsed: <b>'+esc(timing.elapsedFormatted||'0s')+'</b></span>'+ '<span>Estimated: <b>'+esc(timing.estimatedDurationFormatted||'—')+'</b></span><span>Remaining: <b>'+esc(timing.remainingFormatted||'—')+'</b></span>'+
       '</div>'+
       (p.state==='completed'?'<div style="margin-top:8px;color:var(--green);font-weight:600">✅ Final delivery completed</div>':'')+
       (p.state==='failed'?'<div style="margin-top:8px;color:var(--red);font-weight:600">❌ Execution failed — recovery required</div>':'')+
@@ -103,6 +103,6 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   }
   document.addEventListener('mauli:state',e=>{const d=e.detail||{};if(typeof window.__applyDashboardState==='function')window.__applyDashboardState(d);else{S.projects=Array.isArray(d.projects)?d.projects:[];S.tasks=Array.isArray(d.tasks)?d.tasks:[];S.agents=Array.isArray(d.agents)?d.agents:[];S.artifacts=Array.isArray(d.artifacts)?d.artifacts:[];S.events=Array.isArray(d.events)?d.events:[];S.approvals=Array.isArray(d.approvals)?d.approvals.filter(a=>a.state==='pending'):[];S.tools=Array.isArray(d.tools)?d.tools:[];}updateStats();renderPage(curPage)});
   window.setTimeout(poll,500);
-  window.setInterval(poll,30000);
+  window.setInterval(poll,5000);
 })();
 </script>`;
