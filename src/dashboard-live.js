@@ -102,7 +102,6 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     btn.onclick=()=>showProjectDetail(pid);
   }
   document.addEventListener('mauli:state',e=>{const d=e.detail||{};if(typeof window.__applyDashboardState==='function')window.__applyDashboardState(d);else{S.projects=Array.isArray(d.projects)?d.projects:[];S.tasks=Array.isArray(d.tasks)?d.tasks:[];S.agents=Array.isArray(d.agents)?d.agents:[];S.artifacts=Array.isArray(d.artifacts)?d.artifacts:[];S.events=Array.isArray(d.events)?d.events:[];S.approvals=Array.isArray(d.approvals)?d.approvals.filter(a=>a.state==='pending'):[];S.tools=Array.isArray(d.tools)?d.tools:[];}updateStats();renderPage(curPage)});
-  window.setTimeout(poll,500);
-  window.setInterval(poll,5000);
+  // Keep active-project timing live at 5s, but reduce idle traffic to 20s.\n  // /api/state and /api/project-progress are read-only; polling does not add D1 rows_written.\n  let pollTimer=null;\n  function schedulePoll(delay){\n    if(pollTimer)clearTimeout(pollTimer);\n    pollTimer=setTimeout(async()=>{\n      await poll();\n      const active=Boolean(state.activeProject&&state.activeProject.state==='active');\n      schedulePoll(active?5000:20000);\n    },delay);\n  }\n  schedulePoll(500);
 })();
 </script>`;
