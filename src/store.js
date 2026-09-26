@@ -12,7 +12,7 @@ function comparable(value) {
 }
 
 export class MemoryStore {
-  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this._hydrating=null; }
+  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this._hydrating=null; }
   // Single-flight hydration: concurrent callers (worker light paths and the HTTP init
   // path) share one in-flight promise instead of each re-reading every D1 table.
   hydrateOnce() {
@@ -31,8 +31,18 @@ export class MemoryStore {
     const item={...value,id:value.id??id(type),updatedAt:now(),createdAt:value.createdAt??now()};
     bucket.set(item.id,item); this.data.set(type,bucket);
     if(hasD1(this.env)) {
+      const critical=CRITICAL_TYPES.has(type);
       let write;
-      write=d1Put(this.env,type,item,{critical:CRITICAL_TYPES.has(type)}).catch(()=>{}).finally(()=>this.pendingWrites.delete(write));
+      write=d1Put(this.env,type,item,{critical}).then(result=>{
+        if(critical&&result?._d1WriteDeferred){
+          const reason=result._d1WriteError|| (result._d1WriteLimit?'write blocked':'unknown error');
+          this.persistenceErrors.push(new Error(`D1 persistence deferred for ${type}/${item.id}: ${reason}`));
+        }
+        return result;
+      }).catch(error=>{
+        if(critical)this.persistenceErrors.push(error instanceof Error?error:new Error(String(error)));
+        return null;
+      }).finally(()=>this.pendingWrites.delete(write));
       this.pendingWrites.add(write);
     }
     return item;
@@ -42,12 +52,21 @@ export class MemoryStore {
     if(hasD1(this.env)) {
       const critical=type.startsWith('command.')||type.startsWith('project.')||type.startsWith('task.')||type.startsWith('verification.')||type.startsWith('artifact.');
       let write;
-      write=d1Event(this.env,event,{critical}).catch(()=>{}).finally(()=>this.pendingWrites.delete(write));
+      write=d1Event(this.env,event,{critical}).then(result=>{
+        if(critical&&result?._d1WriteDeferred){
+          const reason=result._d1WriteError|| (result._d1WriteLimit?'write blocked':'unknown error');
+          this.persistenceErrors.push(new Error(`D1 event persistence deferred: ${reason}`));
+        }
+        return result;
+      }).catch(error=>{
+        if(critical)this.persistenceErrors.push(error instanceof Error?error:new Error(String(error)));
+        return null;
+      }).finally(()=>this.pendingWrites.delete(write));
       this.pendingWrites.add(write);
     }
     return event;
   }
-  async flush() { if(this.pendingWrites.size) await Promise.all([...this.pendingWrites]); return true; }
+  async flush() { if(this.pendingWrites.size) await Promise.all([...this.pendingWrites]); if(this.persistenceErrors.length){const errors=[...this.persistenceErrors];this.persistenceErrors.length=0;throw errors[0];} return true; }
   recentEvents(limit=50) { return this.events.slice(-limit).reverse(); }
   async hydrate(types=['agents','projects','tasks','approvals','tools','artifacts','command_results','memory','runs','verifications','executions','builds']) {
     if(!hasD1(this.env))return false;
