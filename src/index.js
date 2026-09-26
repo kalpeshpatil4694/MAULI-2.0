@@ -84,12 +84,12 @@ function compactStateList(list, type) { return (Array.isArray(list) ? list : [])
 async function stateSnapshot(env) {
   const nowMs = Date.now();
   if (_stateSnapshot && (nowMs - _stateSnapshotTime) < STATE_SNAPSHOT_TTL) return _stateSnapshot;
-  const tasks = await d1List(env, 'tasks', { limit: 300 });
+  // Keep the cold-isolate snapshot deliberately small: 5M D1 rows_read/day is an account limit.\n  // 15s cache + these bounds keep worst-case state reads comfortably below that ceiling.\n  const tasks = await d1List(env, 'tasks', { limit: 250 });
   const [agents, projects, approvals, events] = await Promise.all([
-    d1List(env, 'agents', { limit: 400 }),
-    d1List(env, 'projects', { existingTasks: tasks, limit: 100 }),
-    d1List(env, 'approvals', { limit: 50 }),
-    d1Events(env, 30)
+    d1List(env, 'agents', { limit: 50 }),
+    d1List(env, 'projects', { existingTasks: tasks, limit: 25 }),
+    d1List(env, 'approvals', { limit: 10 }),
+    d1Events(env, 10)
   ]);
   _stateSnapshot = { agents: compactStateList(dedupeAgentList(agents).slice(0,50),'agents'), projects: compactStateList(projects,'projects'), tasks: compactStateList(tasks,'tasks'), approvals: compactStateList(approvals,'approvals'), events: compactStateList(events,'events'), summary: { projects: projects.length, tasks: tasks.length, running: tasks.filter(t => ['working','assigned'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: store.list('artifacts').length } };
   _stateSnapshotTime = Date.now();
