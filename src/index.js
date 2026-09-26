@@ -55,7 +55,7 @@ async function initOnce(env, ctx) {
 }
 // Bounded, cached snapshot used only until a cold isolate finishes hydrating.
 // Match the live dashboard cadence while avoiding repeated D1 reads between polls.
-const STATE_SNAPSHOT_TTL = 15000;
+const STATE_SNAPSHOT_TTL = 5000;
 let _stateSnapshot = null; let _stateSnapshotTime = 0;
 function compactStateItem(item, type) {
   if (!item || typeof item !== 'object') return item;
@@ -84,10 +84,10 @@ function compactStateList(list, type) { return (Array.isArray(list) ? list : [])
 async function stateSnapshot(env) {
   const nowMs = Date.now();
   if (_stateSnapshot && (nowMs - _stateSnapshotTime) < STATE_SNAPSHOT_TTL) return _stateSnapshot;
-  // Keep the cold-isolate snapshot deliberately small: 5M D1 rows_read/day is an account limit.\n  // 15s cache + these bounds keep worst-case state reads comfortably below that ceiling.\n  const tasks = await d1List(env, 'tasks', { limit: 250 });
+  // Keep the cold-isolate snapshot deliberately small: 5M D1 rows_read/day is an account limit.\n  // 15s cache + these bounds keep worst-case state reads comfortably below that ceiling.\n  const tasks = await d1List(env, 'tasks', { limit: 180 });
   const [agents, projects, approvals, events] = await Promise.all([
-    d1List(env, 'agents', { limit: 50 }),
-    d1List(env, 'projects', { existingTasks: tasks, limit: 25 }),
+    d1List(env, 'agents', { limit: 40 }),
+    d1List(env, 'projects', { existingTasks: tasks, limit: 20 }),
     d1List(env, 'approvals', { limit: 10 }),
     d1Events(env, 10)
   ]);
