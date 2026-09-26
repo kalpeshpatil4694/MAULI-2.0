@@ -54,7 +54,7 @@ async function initOnce(env, ctx) {
   }
 }
 // Bounded, cached snapshot used only until a cold isolate finishes hydrating.
-const STATE_SNAPSHOT_TTL = 5 * 60 * 1000;
+const STATE_SNAPSHOT_TTL = 3000;
 let _stateSnapshot = null; let _stateSnapshotTime = 0;
 function compactStateItem(item, type) {
   if (!item || typeof item !== 'object') return item;
