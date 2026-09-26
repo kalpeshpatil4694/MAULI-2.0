@@ -84,7 +84,8 @@ function compactStateList(list, type) { return (Array.isArray(list) ? list : [])
 async function stateSnapshot(env) {
   const nowMs = Date.now();
   if (_stateSnapshot && (nowMs - _stateSnapshotTime) < STATE_SNAPSHOT_TTL) return _stateSnapshot;
-  // Keep the cold-isolate snapshot deliberately small: 5M D1 rows_read/day is an account limit.\n  // 15s cache + these bounds keep worst-case state reads comfortably below that ceiling.\n  const tasks = await d1List(env, 'tasks', { limit: 180 });
+  // Keep the cold-isolate snapshot deliberately small: 5M D1 rows_read/day is an account limit.
+  // 5s cache + these bounds keep worst-case state reads comfortably below that ceiling.\n  const tasks = await d1List(env, 'tasks', { limit: 180 });
   const [agents, projects, approvals, events] = await Promise.all([
     d1List(env, 'agents', { limit: 40 }),
     d1List(env, 'projects', { existingTasks: tasks, limit: 20 }),
