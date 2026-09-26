@@ -44,7 +44,7 @@ export async function queueCommand(command,env={}){seedAgents();const intent=int
 export async function resumeApprovedCommand(approvalId,env={}){const approval=store.get('approvals',approvalId);if(!approval||!isApprovalGranted(approvalId))return{status:'awaiting_approval',approval};const project=store.get('projects',approval.projectId);const tasks=store.list('tasks').filter(t=>t.projectId===approval.projectId);const task=tasks.filter(t=>t.state!=='completed'&&t.state!=='cancelled').sort((a,b)=>(a.sequence??0)-(b.sequence??0))[0];if(!project||!task)return{status:'error',error:'Approved project/task not found'};return executePlannedProject({project,task,selectedAgent:task.assignedAgentId?store.get('agents',task.assignedAgentId):null,env,approved:true,plannedTasks:tasks.map(t=>({task:t,selectedAgent:t.assignedAgentId?store.get('agents',t.assignedAgentId):null}))});}
 function ensureExecutablePlan(command,plan){
   const text=String(command??'').trim();
-  const software=/\\b(website|web app|application|platform|software|app|mobile|android|ios|game|e-commerce|ecommerce|online store|shop|store|messenger|chat|calculator|todo|dashboard|bluetooth|barcode|build|develop|implement|create)\\b/i.test(text);
+  const software=/\b(website|web app|application|platform|software|app|mobile|android|ios|game|e-commerce|ecommerce|online store|shop|store|messenger|chat|calculator|todo|dashboard|bluetooth|barcode|build|develop|implement|create)\b/i.test(text);
   if(!software)return plan;
   const capabilities=new Set(plan?.capabilities??[]);
   for(const cap of ['research','product-planning','frontend','backend','database','security','testing'])capabilities.add(cap);
