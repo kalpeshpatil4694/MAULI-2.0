@@ -717,7 +717,20 @@ async function sendCmd(){
   const cmd=$('cmdIn').value.trim();if(!cmd){toast('Enter a command','err');return}
   $('cmdBtn').disabled=true;$('cmdLoad').classList.add('show');$('cmdRes').style.display='none';
   try{const r=await api('/api/command',{method:'POST',body:JSON.stringify({command:cmd})});
-    $('cmdRes').style.display='block';$('cmdRes').textContent=JSON.stringify(r.result||r,null,2);toast('Done!','ok');$('cmdIn').value='';await loadState()
+    const queued=r.result||r;
+    const project=queued?.project||queued?.result?.project||null;
+    $('cmdRes').style.display='block';
+    $('cmdRes').textContent=JSON.stringify({
+      status:queued?.status||queued?.result?.status||'queued',
+      runId:queued?.runId||queued?.result?.runId||null,
+      project:project?{id:project.id,name:project.name,objective:project.objective,state:project.state,queuedAt:project.queuedAt}:null,
+      tasks:Array.isArray(queued?.tasks)?queued.tasks.map(t=>({id:t.id,title:t.title,state:t.state,executor:t.executor})):[],
+      message:project?'Project created and sent to the execution scheduler.':'Command accepted; waiting for project state.'
+    },null,2);
+    toast(project?'Project created — execution started':'Command accepted','ok');$('cmdIn').value='';await loadState();
+    if(project?.id){
+      setTimeout(async()=>{try{const d=await api('/api/projects/'+encodeURIComponent(project.id)+'/detail');const detail=d.detail||d.data?.detail;if(detail){$('cmdRes').textContent=JSON.stringify({status:detail.project?.state,project:detail.project,summary:detail.summary,tasks:detail.tasks?.map(t=>({id:t.id,title:t.title,state:t.state,executor:t.executor,verificationId:t.verificationId})),artifacts:detail.artifacts?.map(a=>({id:a.id,type:a.type,projectId:a.projectId}))},null,2);await loadState();}}catch(_){ }},1500);
+    }
   }catch(e){$('cmdRes').style.display='block';$('cmdRes').textContent='Error: '+e.message;toast('Failed','err')}
   finally{$('cmdBtn').disabled=false;$('cmdLoad').classList.remove('show')}
 }
