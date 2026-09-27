@@ -229,7 +229,7 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);const cfReport=await import('./cloudflare-api.js').then(m=>m.getFullUsageReport(env)).catch(()=>null);if(cfReport&&cfReport.apiConnected){report.d1.cfTotalMB=cfReport.d1.totalMB;report.d1.cfPercent=cfReport.d1.percent;report.d1.cfAvailable=true;}return ok({usage:report});}
   if(request.method==='POST'&&url.pathname==='/api/cleanup'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const result=await cleanupD1(env,body);return ok({cleanup:result});}
   // ── SYSTEM STATUS: Full health check with all subsystems ──
-  if(request.method==='GET'&&url.pathname==='/api/system-status'){
+  if(request.method==='GET'&&url.pathname==='/api/system-status'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const projects=listProjects();const tasks=listTasks();const agents=listAgents();const tools=listTools();
     const running=tasks.filter(t=>['working','assigned'].includes(t.state)).length;
     const completed=tasks.filter(t=>t.state==='completed').length;
@@ -251,14 +251,14 @@ export default { async fetch(request, env, ctx) { try {
     });
   }
   // ── SYSTEM METRICS: Store health and data integrity ──
-  if(request.method==='GET'&&url.pathname==='/api/system-metrics'){
+  if(request.method==='GET'&&url.pathname==='/api/system-metrics'){const founder=requireFounder(request,env);if(!founder.ok)return fail(founder.error,founder.status);
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const metrics=store.metrics();
     const integrity=store.integrity();
     return ok({metrics,integrity});
   }
   // ── PROJECT ANALYTICS: Detailed insights for a project ──
-  if(request.method==='GET'&&url.pathname==='/api/project-analytics'){
+  if(request.method==='GET'&&url.pathname==='/api/project-analytics'){const founder=requireFounder(request,env);if(!founder.ok)return fail(founder.error,founder.status);
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const projectId=url.searchParams.get('projectId');
     const projects=listProjects();const allTasks=listTasks();const allArtifacts=store.list('artifacts');
@@ -285,8 +285,8 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   if(request.method==='POST'&&url.pathname==='/api/reset'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const keepAgents=body.keepAgents!==false;const before={projects:store.list('projects').length,tasks:store.list('tasks').length,artifacts:store.list('artifacts').length};store.put('projects',[]);store.put('tasks',[]);store.put('artifacts',[]);store.put('builds',[]);store.put('events',[]);store.put('approvals',[]);if(!keepAgents){const agents=store.list('agents');const fresh=agents.filter(a=>a._builtin);store.put('agents',fresh);}await store.flush();if(hasD1(env)){try{await env.DB.prepare('DELETE FROM entities').run();await env.DB.prepare('DELETE FROM events').run();}catch(e){console.warn('D1 reset failed:',e.message);}}store.addEvent('system.reset',{before,keepAgents,time:now()});return ok({reset:true,before,keepAgents});}
   if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});return ok(await statePayload(env, recoveredRuns));}
-  if(request.method==='GET'&&url.pathname==='/api/self-test'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const result=runL1SelfTest();store.addEvent('self_test.completed',{score:result.score,status:result.status});return ok({result});}
-  if(request.method==='GET'&&url.pathname==='/api/result-diagnostic'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});try{const result=await Promise.race([diagnoseResultPersistence(env),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))]);store.addEvent('result_persistence.diagnostic',{ok:result.ok,tokenConfigured:result.tokenConfigured,reason:result.reason||null});return ok({result});}catch(e){return ok({result:{ok:false,tokenConfigured:false,reason:e.message||'Diagnostic failed'}})}}
+  if(request.method==='GET'&&url.pathname==='/api/self-test'){const founder=requireFounder(request,env);if(!founder.ok)return fail(founder.error,founder.status);const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const result=runL1SelfTest();store.addEvent('self_test.completed',{score:result.score,status:result.status});return ok({result});}
+  if(request.method==='GET'&&url.pathname==='/api/result-diagnostic'){const founder=requireFounder(request,env);if(!founder.ok)return fail(founder.error,founder.status);const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});try{const result=await Promise.race([diagnoseResultPersistence(env),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))]);store.addEvent('result_persistence.diagnostic',{ok:result.ok,tokenConfigured:result.tokenConfigured,reason:result.reason||null});return ok({result});}catch(e){return ok({result:{ok:false,tokenConfigured:false,reason:e.message||'Diagnostic failed'}})}}
   // List all command results
   if(request.method==='GET'&&url.pathname==='/api/results'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const results=listCommandResults();return ok({results,count:results.length});}
   // Get specific command result
@@ -320,13 +320,13 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='POST'&&url.pathname.includes('/compare')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(!body.version1||!body.version2)return fail('version1 and version2 required',400);const comparison=compareVersions(body.version1,body.version2);if(!comparison)return fail('Versions not found',404);return ok({comparison})}
   if(request.method==='POST'&&url.pathname.includes('/restore')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(!body.versionId)return fail('versionId required',400);const restored=restoreVersion(body.versionId);if(!restored)return fail('Version not found',404);return ok({project:restored})}
   // Chat API
-  if(request.method==='POST'&&url.pathname==='/api/chat'){try{const body=await request.json();const msgValidation=validateString(body.message,'message',{minLength:1,maxLength:5000});if(!msgValidation.ok)return fail(msgValidation.error,400);const result=await processChatMessage({message:msgValidation.value,userId:'founder',env});return ok({result});}catch(e){return ok({result:{reply:'I had trouble processing that. Try again!',error:e.message}})}}
-  if(request.method==='GET'&&url.pathname==='/api/chat/history'){const limit=parseInt(url.searchParams.get('limit')||'50');return ok({messages:getChatHistory({limit})});}
-  if(request.method==='GET'&&url.pathname==='/api/chat/active'){return ok({conversations:getActiveConversations()});}
+  if(request.method==='POST'&&url.pathname==='/api/chat'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const limit=checkCommandRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});try{const body=await request.json();const msgValidation=validateString(body.message,'message',{minLength:1,maxLength:5000});if(!msgValidation.ok)return fail(msgValidation.error,400);const result=await processChatMessage({message:msgValidation.value,userId:'founder',env});return ok({result});}catch(e){return ok({result:{reply:'I had trouble processing that. Try again!',error:e.message}})}}
+  if(request.method==='GET'&&url.pathname==='/api/chat/history'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const limit=parseInt(url.searchParams.get('limit')||'50');return ok({messages:getChatHistory({limit})});}
+  if(request.method==='GET'&&url.pathname==='/api/chat/active'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({conversations:getActiveConversations()});}
   // File Edit API — reads and writes the generated project workspace, while retaining
   // the edit history used by the dashboard. The previous UI-only audit records did not
   // update the actual artifact, so Load always 404'd and Save never changed the product.
-  if(request.method==='GET'&&url.pathname==='/api/edits'){
+  if(request.method==='GET'&&url.pathname==='/api/edits'){const founder=requireFounder(request,env);if(!founder.ok)return fail(founder.error,founder.status);
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const projectId=url.searchParams.get('projectId');const filePath=url.searchParams.get('filePath');
     if(!projectId)return fail('projectId required',400);
@@ -678,7 +678,7 @@ export default { async fetch(request, env, ctx) { try {
     const fileName=url.searchParams.get('name')||'mauli-build.zip';
     return new Response(artResp.body,{status:200,headers:{'content-type':'application/zip','content-disposition':'attachment; filename="'+fileName+'"','cache-control':'no-store'}});
   }
-  if(request.method==='GET'&&url.pathname==='/api/app-files'){
+  if(request.method==='GET'&&url.pathname==='/api/app-files'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const projectId=url.searchParams.get('projectId');
     if(!projectId)return fail('projectId required',400);
     const artifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
@@ -693,7 +693,7 @@ export default { async fetch(request, env, ctx) { try {
     if(files.length===0)return fail('No files found',404);
     return ok({files,projectId,count:files.length});
   }
-  if(request.method==='GET'&&url.pathname==='/api/preview-app'){
+  if(request.method==='GET'&&url.pathname==='/api/preview-app'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const projectId=url.searchParams.get('projectId');
     if(!projectId)return fail('projectId required',400);
     const artifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
@@ -708,7 +708,7 @@ export default { async fetch(request, env, ctx) { try {
   }
   
     // ── CLOUDFLARE API: Debug endpoint ──
-  if(request.method==='GET'&&url.pathname==='/api/cf/debug'){
+  if(request.method==='GET'&&url.pathname==='/api/cf/debug'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const token = (env?.CLOUDFLARE_API_TOKEN || process.env?.CLOUDFLARE_API_TOKEN || '').trim();
     let apiTest = null;
     if (token) {

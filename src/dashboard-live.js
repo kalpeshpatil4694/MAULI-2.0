@@ -35,7 +35,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     if(state.polling)return;state.polling=true;
     try{
       state.retrySoon=false;
-      const r=await fetch('/api/state',{cache:'no-store'});if(!r.ok)return;
+      const r=await fetch('/api/state',{cache:'no-store',headers:(window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{})});if(!r.ok)return;
       const j=await r.json();const d=j.data||j;const projects=Array.isArray(d.projects)?d.projects:[];
       const candidates=projects.filter(p=>p&&p.founderCommand&&p.queuedAt);
       candidates.sort((a,b)=>Date.parse(b.queuedAt||b.createdAt||0)-Date.parse(a.queuedAt||a.createdAt||0));
@@ -48,7 +48,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
         const fresh=projects.find(p=>p.id===state.activeProject.id)||state.activeProject;
         state.activeProject=fresh;
         let progress=null;
-        try{const q=await fetch('/api/project-progress/'+encodeURIComponent(fresh.id),{cache:'no-store'});if(q.ok){const x=await q.json();progress=(x.data||x).progress||null;}}catch(_){ }
+        try{const q=await fetch('/api/project-progress/'+encodeURIComponent(fresh.id),{cache:'no-store',headers:(window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{})});if(q.ok){const x=await q.json();progress=(x.data||x).progress||null;}}catch(_){ }
         showProject(fresh,progress);
       }
       // Keep the visible counters synchronized even if the legacy dashboard render is unchanged.
@@ -72,7 +72,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   async function showProjectDetail(pid){
     if(!pid)return;
     try{
-      const r=await fetch('/api/projects/'+encodeURIComponent(pid)+'/detail');
+      const r=await fetch('/api/projects/'+encodeURIComponent(pid)+'/detail',{headers:(window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{})});
       const d=await r.json();
       if(!r.ok||!d.ok){const err=d.error||d.message||'API error';alert('Error: '+err);return;}
       const det=d.detail||d.data?.detail;

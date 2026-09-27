@@ -15,7 +15,10 @@ test('founder command response keeps dashboard-compatible top-level result', () 
 
 test('founder command dashboard refreshes state through the adaptive live bridge after queue acknowledgement', () => {
   assert.match(liveBridge, /async function poll\(\)/);
-  assert.match(liveBridge, /fetch\('\/api\/state',\{cache:'no-store'\}\)/);
+  // The bridge now attaches the founder key header, so the fetch keeps the same
+  // no-store polling but carries credentials.
+  assert.match(liveBridge, /fetch\('\/api\/state',\{cache:'no-store',headers:/);
+  assert.match(liveBridge, /__mauliFounderHeaders/);
   assert.match(liveBridge, /schedulePoll\(500\)/);
   assert.match(liveBridge, /schedulePoll\(state\.retrySoon\?2000:\(active\?5000:20000\)\)/);
   assert.doesNotMatch(liveBridge, /window\.setInterval\(poll,5000\)/);

@@ -76,10 +76,102 @@ export function getRateLimitStats() {
   };
 }
 
-// Founder API-key authentication has been retired.
-// Governance/approval checks remain the authorization boundary for high-risk actions.
-export function requireFounder() {
-  return { ok: true, mode: 'keyless-founder' };
+// ── Founder authentication ────────────────────────────────────────────────
+// requireFounder() used to return { ok: true } unconditionally, so every route that
+// "protected" itself was actually open to anyone who could reach the workers.dev
+// hostname. It now performs a real, constant-time API-key check.
+//
+// Key resolution order (first non-empty wins):
+//   env: MAULI_FOUNDER_KEY → FOUNDER_KEY → MAULI_API_KEY
+//   request: x-mauli-founder | x-founder-key | Authorization: Bearer <key> | x-api-key
+//
+// Mode selection keeps local development and the test suite working without a key:
+//   * key configured                → strict: every protected route needs that key
+//   * no key + non-production env   → keyless (local dev / CI / node --test)
+//   * no key + ENVIRONMENT=production → 503 fail-closed (never silently open)
+//   * MAULI_ALLOW_KEYLESS=true      → explicit opt-out, also honoured in production
+const FOUNDER_KEY_ENV_VARS = ['MAULI_FOUNDER_KEY', 'FOUNDER_KEY', 'MAULI_API_KEY'];
+const FOUNDER_HEADERS = ['x-mauli-founder', 'x-founder-key', 'x-api-key'];
+
+function isEnabledFlag(value) {
+  return value === true || value === 'true' || value === '1' || value === 1;
+}
+
+export function readFounderKey(env) {
+  for (const name of FOUNDER_KEY_ENV_VARS) {
+    const value = env?.[name];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/** True when this deployment intentionally runs without a founder key. */
+export function keylessAllowed(env) {
+  if (isEnabledFlag(env?.MAULI_ALLOW_KEYLESS)) return true;
+  if (isEnabledFlag(env?.MAULI_TEST_MODE) || isEnabledFlag(env?.SKIP_RESULT_PERSISTENCE)) return true;
+  const environment = String(env?.ENVIRONMENT ?? '').trim().toLowerCase();
+  return environment !== 'production' && environment !== 'prod';
+}
+
+/** Length-independent, value-independent string comparison (no early exit). */
+export function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const left = new TextEncoder().encode(a);
+  const right = new TextEncoder().encode(b);
+  let diff = left.length ^ right.length;
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    diff |= (left[i] ?? 0) ^ (right[i] ?? 0);
+  }
+  return diff === 0;
+}
+
+function presentedFounderKey(request) {
+  const headers = request?.headers;
+  if (!headers || typeof headers.get !== 'function') return null;
+  for (const name of FOUNDER_HEADERS) {
+    const value = headers.get(name);
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  const authorization = headers.get('authorization');
+  if (typeof authorization === 'string') {
+    const bearer = /^Bearer\s+(.+)$/i.exec(authorization.trim());
+    if (bearer && bearer[1].trim()) return bearer[1].trim();
+  }
+  return null;
+}
+
+export function founderAuthStatus(env) {
+  const key = readFounderKey(env);
+  const keyless = keylessAllowed(env);
+  return {
+    keyConfigured: Boolean(key),
+    keyless,
+    enforced: Boolean(key) && !keyless,
+    environment: String(env?.ENVIRONMENT ?? '') || null,
+  };
+}
+
+/**
+ * Authorize a founder request. Returns { ok:true, mode } or { ok:false, status, error }.
+ * `mode` is one of: 'founder-key' (verified), 'keyless-founder' (no key required here),
+ * 'unconfigured' (production without a key — fail closed).
+ */
+export function requireFounder(request, env) {
+  const status = founderAuthStatus(env);
+  if (status.keyless) return { ok: true, mode: 'keyless-founder', enforced: false, keyConfigured: status.keyConfigured };
+  if (!status.keyConfigured) {
+    return {
+      ok: false,
+      status: 503,
+      error: 'Founder key is not configured. Set MAULI_FOUNDER_KEY (wrangler secret put MAULI_FOUNDER_KEY) or MAULI_ALLOW_KEYLESS=true.',
+      mode: 'unconfigured',
+    };
+  }
+  const presented = presentedFounderKey(request);
+  if (!presented || !timingSafeEqual(presented, readFounderKey(env))) {
+    return { ok: false, status: 401, error: 'Founder key required or invalid', mode: 'denied' };
+  }
+  return { ok: true, mode: 'founder-key', enforced: true, keyConfigured: true };
 }
 
 export function protectedPath(pathname) {
