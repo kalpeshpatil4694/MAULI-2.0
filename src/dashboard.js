@@ -431,6 +431,7 @@ function applyDashboardState(d){
   S.events=Array.isArray(state.events)?state.events:[];
   S.approvals=Array.isArray(state.approvals)?state.approvals.filter(a=>a.state==='pending'):[];
   S.tools=Array.isArray(state.tools)?state.tools:[];
+  if(state.summary&&typeof state.summary==='object')S.summary=state.summary;
   return true;
 }
 window.__mauliDedupeAgents=dedupeDashboardAgents;
@@ -494,7 +495,10 @@ async function loadState(){
   }catch(e){console.warn('State:',e.message)}
 }
 function updateStats(){
-  $('sProj').textContent=S.projects.length;$('sTask').textContent=S.tasks.length;$('sAg').textContent=S.agents.length;$('sArt').textContent=S.artifacts.length;
+  // /api/state ships the true store-wide totals (the visible lists are deliberately
+  // capped at 100/300/100, so counting rows made Tasks/Artifacts look frozen at 300/100).
+  const totals=(S.summary&&S.summary.totals)||{};
+  $('sProj').textContent=totals.projects??S.projects.length;$('sTask').textContent=totals.tasks??S.tasks.length;$('sAg').textContent=S.agents.length;$('sArt').textContent=totals.artifacts??S.artifacts.length;
   if($('navA'))$('navA').textContent=S.agents.length;if($('navP'))$('navP').textContent=S.projects.length;
   if($('navT'))$('navT').textContent=S.tasks.filter(t=>t.state==='working').length||S.tasks.length;
   if($('navAp'))$('navAp').textContent=S.approvals.length;

@@ -5,7 +5,7 @@ export { MauliProjectExecutionCoordinator } from './execution-coordinator.js';
 
 import app from './index.js';
 import { ensureSchema, pruneEvents, pruneOldResults } from './db.js';
-import { dedupeAgents } from './maintenance.js';
+import { dedupeAgents, runMaintenance } from './maintenance.js';
 import { store } from './store.js';
 import { ensureBuiltinTools } from './tools.js';
 import { seedAgents } from './agents.js';
@@ -172,9 +172,9 @@ export default {
       // Collapse duplicate agents (old cold-start registration created ~60 copies per
       // name) and re-point task/run references before the tick so stuck tasks unstick.
       await dedupeAgents(env).catch(() => null);
-      // Cron Triggers are limited to 15 minutes of wall time per invocation on the free
-      // plan: stop starting new tasks after 8 minutes so an in-flight task can finish.
-      await schedulerTick(env, { trigger: 'cloudflare-scheduled', scheduledTime: event?.scheduledTime ?? Date.now(), budgetMs: 8 * 60_000 });
+      // The scheduler owns project finalization (finalizeCommand): routing the cron tick
+      // through runMaintenance keeps cron and tests on one code path.
+      await runMaintenance(env, { scheduledTime: event?.scheduledTime ?? Date.now() });
       // Self-throttling storage pruning (DB was at 93% of the 500MB free tier):
       // events shrink the audit table, results reclaim the 20KB-per-row command results.
       await pruneEvents(env).catch(() => null);

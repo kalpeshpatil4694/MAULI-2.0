@@ -4,6 +4,7 @@
 
 import { hasD1 } from './db.js';
 import { store } from './store.js';
+import { schedulerTick } from './scheduler.js';
 
 let _lastAgentDedupe = 0;
 const AGENT_DEDUPE_INTERVAL = 60 * 60 * 1000; // at most once per hour
@@ -108,4 +109,20 @@ export async function dedupeAgents(env) {
   } catch (error) {
     return { deduped: 0, error: error?.message ?? String(error) };
   }
+}
+
+/**
+ * One code path owns project finalization: run the persistent scheduler, then prune.
+ * Exported so the cron handler and tests exercise exactly what production runs.
+ */
+export async function runMaintenance(env, context = {}) {
+  const scheduler = await schedulerTick(env, {
+    trigger: 'cloudflare-scheduled',
+    scheduledTime: context?.scheduledTime ?? Date.now(),
+    budgetMs: 8 * 60_000,
+  }).catch(error => {
+    store.addEvent('scheduler.tick_error', { error: error?.message ?? String(error), at: new Date().toISOString() });
+    return null;
+  });
+  return { scheduler };
 }

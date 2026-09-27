@@ -86,12 +86,47 @@ export function recoverStaleTasks(){
   }
   return recovered;
 }
-export async function runTask(taskId,env={},context={}){const claimed=claimNextTask(taskId);if(!claimed)return{status:'not-runnable',taskId};const task=store.get('tasks',taskId),run=await executeTask(task,{...context,env,agentId:task.agentId}),check=verifyResult(task,run);if(run.state==='completed'&&check?.passed){markVerifying(task.id,check);completeTask(task.id,run.result??check.result??null);return{status:'completed',task:store.get('tasks',task.id),run,verification:check};}const attempt=Number(task.attempts??1),decision=retryDecision(task,check,attempt);if(decision?.action==='retry'&&attempt<Number(task.maxAttempts??DEFAULT_MAX_ATTEMPTS)){releaseAgent(task);const retryTask=store.put('tasks',{...task,state:'queued',assignedAgentId:null,agentId:null,updatedAt:now(),id:task.id});store.addEvent('scheduler.task_retry',{taskId:task.id,attempt,reason:run.error??check?.error??'verification failed'});return{status:'retry-queued',task:retryTask,run,verification:check};}failTask(task.id,run.error??check?.error??'Task execution/verification failed');releaseAgent(task);store.addEvent('scheduler.task_failed',{taskId:task.id,at:now()});return{status:'failed',task:store.get('tasks',task.id),run,verification:check};}
-async function finalizeCommand(projectId,env={},indexedTasks=null){const project=store.get('projects',projectId),runId=project?.commandRunId||project?.id;if(!project||project.state==='awaiting_approval')return null;const tasks=(Array.isArray(indexedTasks)?indexedTasks:store.list('tasks').filter(t=>t.projectId===projectId));if(!tasks.length)return null;const hasRunning=tasks.some(t=>['working','assigned'].includes(t.state)),hasQueued=tasks.some(t=>RUNNABLE.has(t.state)&&dependenciesReady(t)),hasFailed=tasks.some(t=>t.state==='failed'),qaTasks=tasks.filter(t=>t.finalProjectVerification),integrity=tasks.find(t=>t.pipelineGate&&t.gateType==='integrity'),qaPassed=qaTasks.length>0&&qaTasks.every(t=>t.state==='completed'&&t.verificationId),integrityPassed=Boolean(integrity&&integrity.state==='completed'&&integrity.verificationId),allCompleted=tasks.every(t=>t.state==='completed');if(hasRunning||hasQueued)return null;if(allCompleted&&qaPassed&&integrityPassed){const finalDelivery=project.finalDeliveryId?store.get('artifacts',project.finalDeliveryId):buildFinalDelivery(project,{enforceGates:true}),finalProject=store.put('projects',{...project,state:'completed',finalDeliveryId:finalDelivery?.id??project.finalDeliveryId??null,completedAt:project.completedAt??now(),id:project.id}),result={status:'completed',runId,command:project.founderCommand,project:finalProject,tasks,finalDelivery};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.completed',{runId,projectId,status:'completed',at:now()});return result;}if(hasFailed&&!hasQueued&&!hasRunning){const failedProject=store.put('projects',{...project,state:'failed',failedAt:project.failedAt??now(),id:project.id}),result={status:'failed',runId,command:project.founderCommand,project:failedProject,tasks,error:'One or more tasks failed after recovery/retry limits.'};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.failed',{runId,projectId,status:'failed',at:now()});return result;}return null;}
+export async function runTask(taskId,env={},context={}){const claimed=claimNextTask(taskId);if(!claimed)return{status:'not-runnable',taskId};const task=store.get('tasks',taskId),run=await executeTask(task,{...context,env,agentId:task.agentId}),check=verifyResult(task,run);if(run.state==='completed'&&check?.passed){markVerifying(task.id,check);completeTask(task.id,run.result??check.result??null);const done=store.get('tasks',task.id);const withCheck=store.put('tasks',{...done,verificationId:check.id,id:task.id});return{status:'completed',task:withCheck,run,verification:check};}const attempt=Number(task.attempts??1),decision=retryDecision(task,check,attempt);if(decision?.action==='retry'&&attempt<Number(task.maxAttempts??DEFAULT_MAX_ATTEMPTS)){releaseAgent(task);const retryTask=store.put('tasks',{...task,state:'queued',assignedAgentId:null,agentId:null,updatedAt:now(),id:task.id});store.addEvent('scheduler.task_retry',{taskId:task.id,attempt,reason:run.error??check?.error??'verification failed'});return{status:'retry-queued',task:retryTask,run,verification:check};}const failedTask=failTask(task.id,run.error??check?.error??'Task execution/verification failed');if(check?.id&&failedTask)store.put('tasks',{...failedTask,verificationId:check.id,id:task.id});releaseAgent(task);store.addEvent('scheduler.task_failed',{taskId:task.id,at:now()});return{status:'failed',task:store.get('tasks',task.id),run,verification:check};}
+// Tasks completed before runTask persisted verificationId (every scheduler-completed task
+// ever made) can never satisfy finalizeCommand's qaPassed/integrityPassed checks or
+// buildFinalDelivery's security evidence check. The verification itself exists in the
+// store — only the pointer on the task row is missing — so repair it at finalize time.
+function repairMissingVerificationIds(tasks){
+  const needing=tasks.filter(t=>t.state==='completed'&&!t.verificationId);
+  if(!needing.length)return 0;
+  const byTask=new Map();
+  for(const v of store.list('verifications')){
+    if(!v?.taskId||!v?.id)continue;
+    const list=byTask.get(v.taskId)??[];list.push(v);byTask.set(v.taskId,list);
+  }
+  let repaired=0;
+  for(const task of needing){
+    const candidates=(byTask.get(task.id)??[]).slice().sort((a,b)=>String(b.verifiedAt??'').localeCompare(String(a.verifiedAt??'')));
+    const best=candidates.find(v=>v.passed)||candidates[0];
+    if(!best)continue;
+    store.put('tasks',{...task,verificationId:best.id,id:task.id});repaired++;
+  }
+  return repaired;
+}
+async function finalizeCommand(projectId,env={},indexedTasks=null){const project=store.get('projects',projectId),runId=project?.commandRunId||project?.id;if(!project||project.state==='awaiting_approval')return null;let tasks=(Array.isArray(indexedTasks)?indexedTasks:store.list('tasks').filter(t=>t.projectId===projectId));if(!tasks.length)return null;
+  // The repair writes the store, but the caller's array still holds the pre-repair row
+  // objects — re-read so this same tick can already see the repaired verificationId.
+  if(repairMissingVerificationIds(tasks))tasks=store.list('tasks').filter(t=>t.projectId===projectId);const hasRunning=tasks.some(t=>['working','assigned'].includes(t.state)),hasQueued=tasks.some(t=>RUNNABLE.has(t.state)&&dependenciesReady(t)),hasFailed=tasks.some(t=>t.state==='failed'),qaTasks=tasks.filter(t=>t.finalProjectVerification),integrity=tasks.find(t=>t.pipelineGate&&t.gateType==='integrity'),qaPassed=qaTasks.length>0&&qaTasks.every(t=>t.state==='completed'&&t.verificationId),integrityPassed=Boolean(integrity&&integrity.state==='completed'&&integrity.verificationId),allCompleted=tasks.every(t=>t.state==='completed');if(hasRunning||hasQueued)return null;if(allCompleted&&qaPassed&&integrityPassed){const finalDelivery=project.finalDeliveryId?store.get('artifacts',project.finalDeliveryId):buildFinalDelivery(project,{enforceGates:true}),finalProject=store.put('projects',{...project,state:'completed',finalDeliveryId:finalDelivery?.id??project.finalDeliveryId??null,completedAt:project.completedAt??now(),id:project.id}),result={status:'completed',runId,command:project.founderCommand,project:finalProject,tasks,finalDelivery};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.completed',{runId,projectId,status:'completed',at:now()});return result;}if(hasFailed&&!hasQueued&&!hasRunning){const failedProject=store.put('projects',{...project,state:'failed',failedAt:project.failedAt??now(),id:project.id}),result={status:'failed',runId,command:project.founderCommand,project:failedProject,tasks,error:'One or more tasks failed after recovery/retry limits.'};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.failed',{runId,projectId,status:'failed',at:now()});return result;}return null;}
 function indexTasksByProject(){const byProject=new Map();for(const task of store.list('tasks')){const key=task.projectId??'';let list=byProject.get(key);if(!list)byProject.set(key,list=[]);list.push(task);}return byProject;}
 export async function schedulerTick(env={},context={}){
   const recovered=recoverStaleTasks();
   const startedAt=Date.now(),budgetMs=Number(context?.budgetMs??0);
+  // Projects whose tasks are all completed but that never got a final delivery (completed
+  // before finalizeCommand could run, or by a path that skipped delivery) get one more
+  // finalize attempt here instead of sitting "completed" with nothing to download.
+  for(const project of store.list('projects')){
+    if(project?.state!=='completed'||project.finalDeliveryId)continue;
+    const projectTasks=store.list('tasks').filter(t=>t.projectId===project.id);
+    if(!projectTasks.length)continue;
+    if(projectTasks.some(t=>['queued','assigned','working','verifying','blocked'].includes(t.state)))continue;
+    const final=await finalizeCommand(project.id,env,projectTasks).catch(()=>null);
+    if(final)recovered.push(project.id);
+  }
   const byProject=indexTasksByProject();
   const ordered=[...byProject.keys()].filter(Boolean);
   const results=[];
