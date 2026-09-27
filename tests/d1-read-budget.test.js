@@ -230,6 +230,9 @@ test('GET /api/state on a cold isolate reads a bounded, cached window instead of
   assert.ok(body.data.agents.length <= 200, 'agent list is capped');
   assert.ok(body.data.tasks.length <= 600, 'task list is capped');
 
+  // initOnce() hydrates in the background. Let that single-flight hydration settle
+  // before measuring whether a second dashboard poll performs another state read.
+  await Promise.all(hydrationPromises);
   const afterFirst = db.rowsRead();
   await app.fetch(new Request('https://mauli.test/api/state'), env, ctx);
   assert.equal(db.rowsRead(), afterFirst, 'a repeat poll inside the cache window reads no extra rows');
