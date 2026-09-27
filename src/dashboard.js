@@ -464,10 +464,21 @@ async function loadApiExplorer(){
 async function searchApiCatalog(){const q=$('apiQ').value.trim();if(!q){await loadApiExplorer();return}$('apiRes').innerHTML='<div style="color:var(--text2);padding:10px">Searching...</div>';try{const r=await api('/api/apis/search?q='+encodeURIComponent(q));renderApiRows(r.apis||r.results||[])}catch(e){$('apiRes').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
 
 // ─── API ───
-async function api(path,opts={}){
+// ─── FOUNDER KEY ───
+// Founder-protected endpoints require the MAULI_FOUNDER_KEY. It is kept in
+// sessionStorage (never localStorage/cookie) and attached to every API call.
+const FOUNDER_KEY_STORAGE='mauli_founder_key';
+function founderKey(){try{return sessionStorage.getItem(FOUNDER_KEY_STORAGE)||''}catch(_){return ''}}
+function setFounderKey(k){try{if(k)sessionStorage.setItem(FOUNDER_KEY_STORAGE,k);else sessionStorage.removeItem(FOUNDER_KEY_STORAGE)}catch(_){}}
+function founderHeaders(h){const k=founderKey();return k?{...h,'x-mauli-founder':k}:h}
+function founderAuthNeeded(r){return r&&(r.status===401||r.status===503)}
+function requestFounderKey(){try{const k=window.prompt('MAULI founder key required. Paste MAULI_FOUNDER_KEY:');if(k&&k.trim()){setFounderKey(k.trim());return true}}catch(_){}return false}
+window.__mauliFounderKey=founderKey;window.__mauliSetFounderKey=setFounderKey;window.__mauliFounderHeaders=founderHeaders;
+async function api(path,opts={},retried=false){
   try{const m=(opts.method||'GET').toUpperCase();const hdrs={...(opts.headers||{})};
     if(m==='POST'||m==='PUT'||m==='PATCH')hdrs['Content-Type']='application/json';
-    const r=await fetch(path,{method:m,headers:hdrs,body:opts.body});
+    const r=await fetch(path,{method:m,headers:founderHeaders(hdrs),body:opts.body});
+    if(founderAuthNeeded(r)&&!retried&&requestFounderKey())return api(path,opts,true);
     if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(t||r.status)}
     const j=await r.json();
     // Unwrap the {ok, data} envelope so every panel reads its own fields directly
@@ -865,7 +876,7 @@ function loadDl(){let h='';for(const p of S.projects){const hasCode=S.artifacts.
   else h+='<span style="font-size:10px;color:var(--text3)">No code</span>';
   h+='</div>'}
   $('dlList').innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No projects</div>'}
-async function downloadZip(pid){try{toast('Loading...','info');const r=await fetch('/api/app-files?projectId='+encodeURIComponent(pid));if(!r.ok){toast('No files','err');return}const d=await r.json();const files=d.files||[];if(!files.length){toast('No files','err');return}
+async function downloadZip(pid){try{toast('Loading...','info');const r=await fetch('/api/app-files?projectId='+encodeURIComponent(pid),{headers:window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{}});if(!r.ok){toast('No files','err');return}const d=await r.json();const files=d.files||[];if(!files.length){toast('No files','err');return}
   if(files.length===1){const f=files[0];const b=new Blob([f.content],{type:'text/plain'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=f.path.split('/').pop()||'index.html';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),3000);toast('Done','ok');return}
   for(const f of files){const b=new Blob([f.content],{type:'text/plain'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=f.path.split('/').pop()||'file.txt';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000)}toast('Downloaded '+files.length+' files','ok')
   }catch(e){toast(e.message,'err')}}
