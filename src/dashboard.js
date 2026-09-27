@@ -587,6 +587,12 @@ function renderHealth(){
     const statusLabel=status==='limit_reached'?'Protection':status==='critical'?'Critical':status==='high'?'High':status==='watch'?'Watch':'Healthy';
     let h=row('Service',d.service||'—')+row('Status','<span style="color:var(--green)">'+esc(d.status||'?')+'</span>')+row('D1',d.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory</span>')+row('AI',d.ai?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--yellow)">No</span>')+row('Time',fmt(d.time));
     h += '<div style="margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">D1 Daily Usage</div>'+row('Used',used.toLocaleString()+' / '+limit.toLocaleString())+row('Remaining',remaining.toLocaleString())+row('Usage',pct.toFixed(2)+'%')+row('Status','<span>'+esc(statusLabel)+'</span>')+row('UTC Day',esc(q.date||'—'))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">MAULI tracked writes; Cloudflare account meter may differ.</div></div>';
+    // State reads used to fail silently, which is how the counters could blank to zero with
+    // no explanation. Report the real cause here whenever a read did fail on this isolate.
+    const sr=d.stateReads||{};
+    if(Number(sr.degradedCount||0)>0){
+      h += '<div style="margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">State Reads</div>'+row('Failures',String(sr.degradedCount))+row('Last reason','<span style="color:var(--yellow)">'+esc(sr.lastReason||'—')+'</span>')+row('Last seen',fmt(sr.lastAt))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">A failed read is served from the last good snapshot; the dashboard keeps showing its current rows.</div></div>';
+    }
     $('hlthDet').innerHTML=h}).catch(e=>{$('hlthDet').innerHTML='<div style="color:var(--red);padding:10px">Health unavailable</div>'});
   // The Tools card had no renderer at all (toolsOut stayed empty) and the Diagnostics card
   // only appeared after a manual click, so both are now filled on page render.

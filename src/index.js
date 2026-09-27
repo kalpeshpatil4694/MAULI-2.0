@@ -85,10 +85,34 @@ function compactStateList(list, type) { return (Array.isArray(list) ? list : [])
 // race the background hydration, and an all-or-nothing snapshot used to throw and fall
 // back to the (empty) in-memory state — which is what made the dashboard counters
 // randomly read 0 projects / 0 tasks / 0 artifacts. Read each collection defensively.
+// D1 read failures used to be swallowed, which is why the dashboard could blank to zeros
+// with nothing in the logs to explain it. Keep a small, permanent record of the last
+// failure per collection and surface it on /api/health so the cause is always visible.
+const _stateReadFailures = new Map();
+const _stateDegradedCount = { count: 0, lastReason: null, lastAt: null };
+function noteStateReadFailure(type, error) {
+  const reason = (error?.message ?? String(error ?? 'unknown')).slice(0, 200);
+  _stateReadFailures.set(type, { reason, at: new Date().toISOString() });
+  _stateDegradedCount.count++;
+  _stateDegradedCount.lastReason = `${type}: ${reason}`;
+  _stateDegradedCount.lastAt = new Date().toISOString();
+  console.warn(`state read failed (${type}):`, reason);
+}
+function stateDiagnostics() {
+  return {
+    degradedCount: _stateDegradedCount.count,
+    lastReason: _stateDegradedCount.lastReason,
+    lastAt: _stateDegradedCount.lastAt,
+    readFailures: Object.fromEntries(_stateReadFailures),
+  };
+}
 async function safeD1List(env, type, opts) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try { return await d1List(env, type, opts); }
-    catch (error) { if (attempt === 0) await new Promise(r => setTimeout(r, 120)); }
+    catch (error) {
+      if (attempt === 0) { await new Promise(r => setTimeout(r, 120)); continue; }
+      noteStateReadFailure(type, error);
+    }
   }
   return null;
 }
@@ -105,7 +129,7 @@ async function stateSnapshot(env) {
     safeD1List(env, 'projects', { existingTasks: tasks, limit: 100 }),
     safeD1List(env, 'approvals', { limit: 50 }),
     safeD1List(env, 'artifacts', { limit: 100 }),
-    d1Events(env, 30).catch(() => [])
+    d1Events(env, 30).catch((error) => { noteStateReadFailure('events', error); return []; })
   ]);
   // A collection that failed to read falls back to the last good copy so a transient D1
   // error can never present the dashboard with less data than we already know about.
@@ -126,6 +150,13 @@ async function stateSnapshot(env) {
     // True when at least one collection could not be read this time; the client keeps
     // its existing rows instead of blanking the screen.
     degraded: agents === null || projects === null || artifacts === null || !Array.isArray(tasks),
+    // Which collection failed, so a blanked dashboard is explainable without log access.
+    degradedReason: [
+      agents === null ? 'agents' : null,
+      projects === null ? 'projects' : null,
+      artifacts === null ? 'artifacts' : null,
+      !Array.isArray(tasks) ? 'tasks' : null,
+    ].filter(Boolean).join(',') || null,
     summary: { projects: projectList.length, tasks: taskList.length, running: taskList.filter(t => ['working','assigned'].includes(t.state)).length, failed: taskList.filter(t => t.state === 'failed').length, artifacts: artifactList.length }
   };
   // Only promote a snapshot that actually read something into the "last good" slot.
@@ -154,12 +185,14 @@ async function statePayload(env, recoveredRuns) {
       if (snap && (snap.projects.length || snap.tasks.length || snap.agents.length)) {
         return { ...snap, tools:listTools().slice(0,50), recoveredRuns, snapshot:true };
       }
-    } catch(_) {}
+    } catch (error) { noteStateReadFailure('snapshot', error); }
   }
   // Nothing readable from D1 yet. Returning the bare in-memory state here is what made
   // the counters read 0 — flag it so the client keeps whatever it already rendered.
   const fallback = memoryState();
-  return { ...fallback, degraded: true, coldIsolate: true };
+  _stateDegradedCount.count++;
+  _stateDegradedCount.lastAt = new Date().toISOString();
+  return { ...fallback, degraded: true, coldIsolate: true, degradedReason: 'no-readable-state' };
 }
 function ensureTools() {
   if (_toolsReady) return;
@@ -229,7 +262,7 @@ export default { async fetch(request, env, ctx) { try {
     const avgRunDuration=completedRuns.filter(r=>r.completedAt&&r.startedAt).map(r=>Date.parse(r.completedAt)-Date.parse(r.startedAt)).reduce((a,b)=>a+b,0)/(completedRuns.length||1);
     return ok({analytics:{projects:projects.length,tasks:allTasks.length,artifacts:allArtifacts.length,runs:allRuns.length,byState,byAgent,avgRunDurationMs:Math.round(avgRunDuration),completionRate:allTasks.length?Math.round(allTasks.filter(t=>t.state==='completed').length/allTasks.length*100):0}});
   }
-  if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),r2:Boolean(env?.ARTIFACTS),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),time:now()});
+  if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),r2:Boolean(env?.ARTIFACTS),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),stateReads:stateDiagnostics(),time:now()});
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   if(request.method==='POST'&&url.pathname==='/api/reset'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const keepAgents=body.keepAgents!==false;const before={projects:store.list('projects').length,tasks:store.list('tasks').length,artifacts:store.list('artifacts').length};store.put('projects',[]);store.put('tasks',[]);store.put('artifacts',[]);store.put('builds',[]);store.put('events',[]);store.put('approvals',[]);if(!keepAgents){const agents=store.list('agents');const fresh=agents.filter(a=>a._builtin);store.put('agents',fresh);}await store.flush();if(hasD1(env)){try{await env.DB.prepare('DELETE FROM entities').run();await env.DB.prepare('DELETE FROM events').run();}catch(e){console.warn('D1 reset failed:',e.message);}}store.addEvent('system.reset',{before,keepAgents,time:now()});return ok({reset:true,before,keepAgents});}
   if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});return ok(await statePayload(env, recoveredRuns));}
