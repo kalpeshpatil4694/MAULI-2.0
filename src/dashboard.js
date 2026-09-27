@@ -299,7 +299,7 @@ select.inp{cursor:pointer}
           <div class="card"><div class="card-h"><div class="card-t">💚 System Health</div><button class="btn btn-g btn-s" onclick="runTest()">▶ Test</button></div><div id="hlthDet"></div><div id="testRes" style="margin-top:10px"></div></div>
           <div class="card"><div class="card-h"><div class="card-t">🔧 Tools</div></div><div id="toolsOut"></div></div>
         </div>
-        <div class="card"><div class="card-h"><div class="card-t">🔍 Diagnostics</div><button class="btn btn-a btn-s" onclick="runDiag()">▶ Run</button></div><div id="diagOut"></div></div>
+        <div class="card"><div class="card-h"><div class="card-t">🔍 Diagnostics</div><button class="btn btn-a btn-s" onclick="renderDiagnostics()">▶ Run</button></div><div id="diagOut"></div></div>
       </div>
       <!-- MEMORY -->
       <div class="page" id="pg-memory"><div class="card"><div class="card-h"><div class="card-t">🧠 Memory</div></div><div id="memList" style="max-height:500px;overflow-y:auto"></div></div></div>
@@ -541,6 +541,38 @@ function renderActivity(){
   }
   $('actList').innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No activity</div>';
 }
+function renderHealthTools(){
+  const list=Array.isArray(S.tools)?S.tools:[];if(!$('toolsOut'))return;
+  if(!list.length){$('toolsOut').innerHTML='<div style="text-align:center;padding:20px;color:var(--text2)">No tools registered</div>';return;}
+  let h='<div style="font-size:10px;color:var(--text3);padding:2px 0 8px">'+list.length+' tool'+(list.length===1?'':'s')+' registered</div>';
+  for(const t of list){
+    const risk=t.risk||'read';const riskColor=risk==='critical'||risk==='high'?'var(--yellow)':'var(--text2)';
+    h+='<div style="padding:7px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:12px">'+esc(t.name||t.id||'—')+'</b><span class="badge badge-'+(t.enabled===false?'y':'g')+'">'+(t.enabled===false?'Disabled':'Enabled')+'</span></div><div style="font-size:10px;color:var(--text2);margin-top:3px">'+esc(t.description||'')+'</div><div style="font-size:9px;color:var(--text3);margin-top:3px">Scope: '+esc(t.scope||'internal')+' · Risk: <span style="color:'+riskColor+'">'+esc(risk)+'</span></div></div>';
+  }
+  $('toolsOut').innerHTML=h;
+}
+// The old card asked for a GitHub "Token" and painted a red "Issue" whenever it was unset.
+// Results are persisted in D1, so a missing optional GitHub token is not a system fault —
+// the card now reports real result-storage health instead.
+async function renderDiagnostics(){
+  if(!$('diagOut'))return;
+  $('diagOut').innerHTML='<div style="color:var(--text2);padding:6px 0">Running diagnostic...</div>';
+  try{
+    const r=await api('/api/result-diagnostic');const d=r.result||r;
+    const row=(l,v)=>'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px;color:var(--text2)">'+l+'</span><span style="font-size:11px">'+v+'</span></div>';
+    const ok='color:var(--green)',bad='color:var(--red)',warn='color:var(--yellow)';
+    const flushState=String(d.flushState||'flushed');
+    const flushLabel=flushState==='flushed'?'Flushed':flushState==='flush-timeout'?'Pending (slow D1)':'Deferred';
+    const flushColor=flushState==='flushed'?ok:flushState==='flush-timeout'?warn:bad;
+    let h=row('Result storage',d.d1Connected?'<span style="'+ok+'">D1 (connected)</span>':'<span style="'+bad+'">Memory only</span>');
+    h+=row('Stored results',Number(d.storedResults||0).toLocaleString());
+    h+=row('Pending flush','<span style="'+flushColor+'">'+esc(flushLabel)+'</span>');
+    h+=row('GitHub token (optional)',d.tokenConfigured?'<span style="'+ok+'">Set</span>':'<span style="'+warn+'">Not set</span>');
+    h+=row('Status',d.ok?'<span style="'+ok+'">OK</span>':'<span style="'+bad+'">Issue</span>');
+    h+='<div style="font-size:9px;color:var(--text3);margin-top:6px">'+esc(d.reason||'')+'</div>';
+    $('diagOut').innerHTML=h;
+  }catch(e){$('diagOut').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}
+}
 function renderHealth(){
   api('/api/health').then(r=>{const d=r.data||r;const row=(l,v)=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px;color:var(--text2)">'+l+'</span><span style="font-size:11px">'+v+'</span></div>';
     const q=d.d1Quota||{};
@@ -551,6 +583,10 @@ function renderHealth(){
     let h=row('Service',d.service||'—')+row('Status','<span style="color:var(--green)">'+esc(d.status||'?')+'</span>')+row('D1',d.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory</span>')+row('AI',d.ai?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--yellow)">No</span>')+row('Time',fmt(d.time));
     h += '<div style="margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">D1 Daily Usage</div>'+row('Used',used.toLocaleString()+' / '+limit.toLocaleString())+row('Remaining',remaining.toLocaleString())+row('Usage',pct.toFixed(2)+'%')+row('Status','<span>'+esc(statusLabel)+'</span>')+row('UTC Day',esc(q.date||'—'))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">MAULI tracked writes; Cloudflare account meter may differ.</div></div>';
     $('hlthDet').innerHTML=h}).catch(e=>{$('hlthDet').innerHTML='<div style="color:var(--red);padding:10px">Health unavailable</div>'});
+  // The Tools card had no renderer at all (toolsOut stayed empty) and the Diagnostics card
+  // only appeared after a manual click, so both are now filled on page render.
+  renderHealthTools();
+  if(!renderHealth._diagStarted){renderHealth._diagStarted=true;renderDiagnostics();}
 }
 function renderMemory(){
   const evts=S.events.filter(e=>e.type&&(e.type.includes('task_result')||e.type.includes('solution')||e.type.includes('error')||e.type.includes('command'))).slice(-25).reverse();
@@ -758,9 +794,6 @@ function rmTyping(){const e=$('typing');if(e)e.remove()}
 async function runTest(){try{const r=await api('/api/self-test');const d=r.result||r;let h='<span class="badge badge-'+(d.status==='ready'?'g':d.status==='degraded'?'y':'r')+'">'+d.status.toUpperCase()+' — '+d.score+'%</span>';
   for(const c of(d.checks||[]))h+='<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="color:'+(c.passed?'var(--green)':'var(--red)')+'">'+(c.passed?'✅':'❌')+'</span><span style="font-size:12px">'+esc(c.name)+'</span><span style="font-size:10px;color:var(--text3);margin-left:auto">'+esc(c.details||'')+'</span></div>';
   $('testRes').innerHTML=h;toast('Test: '+d.status,d.status==='ready'?'ok':'info')}catch(e){$('testRes').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
-async function runDiag(){try{const r=await api('/api/result-diagnostic');const d=r.result||r;const row=(l,v)=>'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px;color:var(--text2)">'+l+'</span><span style="font-size:11px">'+v+'</span></div>';
-  let h=row('Token',d.tokenConfigured?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--red)">No</span>');h+=row('Status',d.ok?'<span style="color:var(--green)">OK</span>':'<span style="color:var(--red)">Issue</span>');
-  $('diagOut').innerHTML=h;toast('Done','ok')}catch(e){$('diagOut').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
 
 // ─── DOCS ───
 async function genDocs(){toast('Generating...','info');const proj=S.projects[S.projects.length-1];if(!proj){$('docsOut').innerHTML='<div style="color:var(--text2)">No projects yet</div>';return}try{const r=await api('/api/docs/'+encodeURIComponent(proj.id));$('docsOut').innerHTML='<pre style="font-size:11px;white-space:pre-wrap;font-family:monospace;background:var(--bg1);padding:12px;border-radius:8px;max-height:500px;overflow:auto">'+esc(JSON.stringify(r.docs||r,null,2))+'</pre>';toast('Done','ok')}catch(e){$('docsOut').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}

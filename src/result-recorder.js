@@ -1,4 +1,5 @@
 import { store } from './store.js';
+import { hasD1 } from './db.js';
 
 function normalizeResult(result) {
   if(!result||typeof result!=='object') return result;
@@ -20,15 +21,34 @@ function runId(result) {
 
 function recordId(runIdValue){ return `command-result:${runIdValue}`; }
 
-export async function diagnoseResultPersistence(env={}) {
-  await store?.flush?.();
+export async function diagnoseResultPersistence(env={}, options={}) {
+  // Flushing every pending D1 write used to be awaited unbounded. On a cold isolate the
+  // queue also holds agent/tool seeding writes, so the flush regularly exceeded the caller's
+  // 8s budget and the dashboard reported a red "Issue" for a perfectly healthy system.
+  // Flushing is now best-effort and time-boxed, and the verdict only depends on real state.
+  const flushBudgetMs=Number(options.flushBudgetMs??1500);
+  let flushState='flushed';
+  try{
+    await Promise.race([
+      Promise.resolve(store?.flush?.()).catch(()=>{flushState='flush-failed';}),
+      new Promise(resolve=>setTimeout(()=>{flushState='flush-timeout';resolve();},flushBudgetMs))
+    ]);
+  }catch(_){flushState='flush-failed';}
+  const d1Connected=hasD1(env);
   return {
-    ok:true,
+    ok:d1Connected,
+    // GitHub is optional: results live in D1. Kept for the integrations panel only.
     tokenConfigured:Boolean(env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT||env?.RESULT_GITHUB_TOKEN),
-    storage:'D1',
+    tokenRequired:false,
+    storage:d1Connected?'D1':'memory',
     mode:'d1-only',
+    d1Connected,
+    flushState,
+    storedResults:store?.list?store.list('command_results').length:0,
     githubSync:false,
-    reason:'Runtime command results are persisted in D1; GitHub is not used as the runtime result database.'
+    reason:d1Connected
+      ? 'Runtime command results are persisted in D1; GitHub is not used as the runtime result database.'
+      : 'D1 binding is unavailable; results are held in memory until the database recovers.'
   };
 }
 
