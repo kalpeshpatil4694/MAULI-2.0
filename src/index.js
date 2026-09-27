@@ -21,6 +21,7 @@ import { getAgentSkillTree, getAgentCollaborationStats, getSystemLearningStats, 
 import { processChatMessage, getChatHistory, getActiveConversations, cloneProject } from './chat-engine.js';
 import { editFile, getEditHistory, getRecentEdits, undoEdit, getFileChangeSummary, parseEditCommand } from './file-editor.js';
 import { recordActivity, getActivityFeed, getProjectProgress, getLiveStatus, createSubAgent, getSubAgents, requestHelp, getAgentConversation } from './live-monitor.js';
+import { enrichProjectTiming } from './time-tracking.js';
 import { generateProjectDocs } from './docs-generator.js';
 import { searchAPIs, recommendAPIs, getAPICatalog, getAPICategories } from './public-apis.js';
 import { getMCPForAgent, getMCPByCapability, getAllMCPServers, getMCPCategories, suggestMCPForProject } from './mcp-integration.js';
@@ -373,7 +374,9 @@ export default { async fetch(request, env, ctx) { try {
     const completedCount=tasks.filter(t=>t.state==='completed').length;
     const failedCount=tasks.filter(t=>t.state==='failed').length;
     const runningCount=tasks.filter(t=>['working','assigned'].includes(t.state)).length;
-    const started=project.commandStartedAt||project.startedAt||project.commandReceivedAt||project.createdAt; const end=project.commandCompletedAt||project.completedAt||project.failedAt; const totalTimeMs=started?Math.max(0,Date.parse(end||now())-Date.parse(started)):0; const estimatedDurationMs=Number(project.estimatedDurationMs)||tasks.reduce((s,t)=>s+(Number(t.estimatedDurationMs)||0),0); const remainingDurationMs=tasks.filter(t=>!['completed','failed','cancelled'].includes(t.state)).reduce((s,t)=>s+(Number(t.estimatedDurationMs)||0),0); const fmt=ms=>{const sec=Math.round(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;return h?h+'h '+m+'m '+s+'s':m?m+'m '+s+'s':s+'s';};
+    const started=project.commandStartedAt||project.startedAt||project.commandReceivedAt||project.createdAt; const end=project.commandCompletedAt||project.completedAt||project.failedAt; const totalTimeMs=started?Math.max(0,Date.parse(end||now())-Date.parse(started)):0; // One source of truth for estimates: enrichProjectTiming clamps them, so this cannot
+    // disagree with /api/project-progress or resurrect a poisoned stored estimate.
+    const timingSummary=enrichProjectTiming(project,tasks); const estimatedDurationMs=timingSummary.estimatedDurationMs; const remainingDurationMs=timingSummary.remainingMs; const fmt=ms=>{const sec=Math.round(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;return h?h+'h '+m+'m '+s+'s':m?m+'m '+s+'s':s+'s';};
     const detail={project,tasks:enrichedTasks,artifacts,events,approvals,summary:{totalTasks:tasks.length,completedTasks:completedCount,failedTasks:failedCount,runningTasks:runningCount,pendingTasks:tasks.length-completedCount-failedCount-runningCount,progressPct:tasks.length>0?Math.round((completedCount/tasks.length)*100):0,totalTimeMs,totalTimeFormatted:totalTimeMs>0?fmt(totalTimeMs):'In progress',estimatedDurationMs,estimatedDurationFormatted:fmt(estimatedDurationMs),remainingDurationMs,remainingDurationFormatted:fmt(remainingDurationMs),commandReceivedAt:project.commandReceivedAt||project.createdAt,commandStartedAt:started,commandCompletedAt:end,createdAt:project.createdAt,completedAt:project.completedAt||null,failedAt:project.failedAt||null,state:project.state,errors:tasks.filter(t=>t.error).map(t=>({task:t.title,error:t.error,at:t.updatedAt})),fixes:tasks.filter(t=>t.attempts>1).map(t=>({task:t.title,attempts:t.attempts,at:t.updatedAt}))}};
     return ok({detail});
   }

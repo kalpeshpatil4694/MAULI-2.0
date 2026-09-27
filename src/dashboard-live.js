@@ -5,6 +5,9 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
 (function(){
   const state={known:new Set(),activeProject:null,polling:false,retrySoon:false};
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // The command stamp was printed raw ("2026-09-26T13:13:00.664Z") in a live card.
+  // Format it locally so the card reads like a clock, not like an API payload.
+  const stamp=v=>{if(!v)return '—';const d=new Date(v);if(!Number.isFinite(d.getTime()))return String(v);return d.toLocaleString();};
   const get=(id)=>document.getElementById(id);
   function message(html){const e=get('cmdRes');if(!e)return;e.style.display='block';e.innerHTML=html;}
   function badge(s){const v=String(s||'queued');return '<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(0,212,255,.1);color:var(--accent);font-size:10px;font-weight:600">'+esc(v)+'</span>';}
@@ -20,7 +23,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       '<div style="margin-top:9px;height:6px;background:var(--bg3);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s"></div></div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px;font-size:10px">'+
       '<span>Stage: <b>'+esc(stage)+'</b></span><span>Progress: <b>'+pct+'%</b></span>'+
-      '<span>Agent: <b>'+esc(pr.currentAgent?.name||pr.currentAgent?.id||'—')+'</b></span><span>Next: <b>'+esc(next)+'</b></span>'+ '<span>Command: <b>'+esc(pr.commandReceivedAt||'—')+'</b></span><span>Elapsed: <b>'+esc(timing.elapsedFormatted||'0s')+'</b></span>'+ '<span>Estimated: <b>'+esc(timing.estimatedDurationFormatted||'—')+'</b></span><span>Remaining: <b>'+esc(timing.remainingFormatted||'—')+'</b></span>'+
+      '<span>Agent: <b>'+esc(pr.currentAgent?.name||pr.currentAgent?.id||'—')+'</b></span><span>Next: <b>'+esc(next)+'</b></span>'+ '<span>Command: <b>'+esc(stamp(pr.commandReceivedAt))+'</b></span><span>Elapsed: <b>'+esc(timing.elapsedFormatted||'0s')+'</b></span>'+ '<span>Estimated: <b>'+esc(timing.estimatedDurationFormatted||'—')+'</b></span><span>Remaining: <b>'+esc(timing.remainingFormatted||'—')+'</b></span>'+
       '</div>'+
       (p.state==='completed'?'<div style="margin-top:8px;color:var(--green);font-weight:600">✅ Final delivery completed</div>':'')+
       (p.state==='failed'?'<div style="margin-top:8px;color:var(--red);font-weight:600">❌ Execution failed — recovery required</div>':'')+

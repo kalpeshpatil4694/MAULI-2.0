@@ -6,9 +6,12 @@ import { listProjectArtifacts } from './artifacts.js';
 import { now } from './core.js';
 
 export const GATES = ['build','test','requirements','security','qa','integrity'];
-const CAP = {
+export const CAP = {
   build:['testing','verification'], test:['testing','verification'], requirements:['verification'],
-  security:['security','verification'], qa:['testing','verification'], integrity:['verification']
+  // Security used to require ['security','verification']. No single agent holds both —
+  // the Security Agent has security, the QA Agent has verification — so the security gate
+  // was unassignable by design, and qa + integrity (which chain behind it) blocked too.
+  security:['security'], qa:['testing','verification'], integrity:['verification']
 };
 
 function artifacts(projectId){ return listProjectArtifacts(projectId).filter(a => a.type === 'code-workspace' || a.type === 'final-delivery'); }

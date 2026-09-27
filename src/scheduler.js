@@ -7,7 +7,7 @@ import { store } from './store.js';
 import { selectAgents, updateAgent } from './agents.js';
 import { executeTask } from './execution.js';
 import { verifyResult, retryDecision } from './verification.js';
-import { completeTask, failTask, markVerifying } from './tasks.js';
+import { completeTask, failTask, markVerifying, assignTask } from './tasks.js';
 import { buildFinalDelivery } from './delivery.js';
 import { saveCommandResult } from './result-recorder.js';
 import { ensureProjectPipeline } from './pipeline-gates.js';
@@ -29,7 +29,7 @@ function dependenciesReady(task){return(task?.dependsOn??[]).every(id=>store.get
 function activeRun(taskId){return store.list('runs').find(r=>r.taskId===taskId&&r.state==='running')??null;}
 function stale(run){const stamp=Date.parse(run?.heartbeatAt??run?.startedAt??'');return !Number.isFinite(stamp)||Date.now()-stamp>LEASE_MS;}
 function releaseAgent(task){if(!task?.agentId&&!task?.assignedAgentId)return;const agent=store.get('agents',task.agentId??task.assignedAgentId);if(agent)updateAgent(agent.id,{state:'available',currentTaskId:null,heartbeatAt:now()});}
-function chooseAgent(task){const tools=task.requiredTools??task.toolNames??[];return selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true})[0]??selectAgents(task.requiredCapabilities??[],null,{requireAllTools:false})[0]??null;}
+function chooseAgent(task){const tools=task.requiredTools??task.toolNames??[];return selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true})[0]??selectAgents(task.requiredCapabilities??[],null,{requireAllTools:false})[0]??selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true,allowPartialCapabilities:true})[0]??null;}
 export function claimNextTask(taskId){const task=store.get('tasks',taskId);if(!task||!RUNNABLE.has(task.state)||!dependenciesReady(task))return null;const project=task.projectId?store.get('projects',task.projectId):null;if(project?.state==='awaiting_approval')return null;const existing=activeRun(task.id);if(existing&&!stale(existing))return null;// The pre-assigned agent may be a stale duplicate that is busy/offline/cooldown
   // (agent table had ~60 copies per name from old cold-start registration). Fall back
   // to the best available agent instead of leaving the task stuck in 'assigned' forever.
@@ -72,6 +72,17 @@ export function recoverStaleTasks(){
     if(task.state==='assigned'){const lease=Date.parse(task.leaseUntil??'');if(Number.isFinite(lease)&&lease>Date.now())continue;}
     requeueAfterInfraFailure(task,`Orphaned ${task.state} task with no live execution`,now());
     recovered.push(task.id);
+  }
+  // Blocked is not self-healing: it was only ever reconsidered when one of the task's own
+  // dependencies completed. A task that blocked because no agent was capable at that
+  // moment therefore blocked permanently, and so did everything chained below it — a
+  // project sat 21h behind a single security gate. Re-attempt assignment every tick.
+  // assignTask is a no-op (no D1 write) when nothing has actually changed.
+  for(const task of store.list('tasks')){
+    if(task.state!=='blocked')continue;
+    if(!dependenciesReady(task))continue;
+    const retry=assignTask(task.id);
+    if(retry&&retry.state!=='blocked')recovered.push(task.id);
   }
   return recovered;
 }
