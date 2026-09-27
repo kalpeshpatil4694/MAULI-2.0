@@ -222,7 +222,8 @@ test('GET /api/state on a cold isolate reads a bounded, cached window instead of
   const env = { DB: db.DB };
   resetStore(env);
 
-  const hydrationPromises = [];\n  const ctx = { waitUntil(promise) { hydrationPromises.push(promise); } };
+  const hydrationPromises = [];
+  const ctx = { waitUntil(promise) { hydrationPromises.push(promise); } };
   const first = await app.fetch(new Request('https://mauli.test/api/state'), env, ctx);
   const body = await first.json();
   assert.equal(first.status, 200);
