@@ -78,7 +78,10 @@ export class MemoryStore {
     const taskRows=[];
     // command_results are ~19KB each (74MB total in D1) — cap so the Results tab
     // stays usable without blowing the 128MB worker memory limit.
-    const limits={command_results:50,agents:400,tasks:1500,artifacts:300,runs:300,verifications:300,executions:300,memory:500,builds:200,approvals:500,tools:200};
+    // artifacts is raised to 600: the warm /api/state totals come from these store
+    // counts, and at 300 the cap sat below the real D1 row count, so the Artifacts
+    // counter started every isolate at a false ceiling and looked frozen again.
+    const limits={command_results:50,agents:400,tasks:1500,artifacts:600,runs:300,verifications:300,executions:300,memory:500,builds:200,approvals:500,tools:200};
     // One failed table used to abort the whole sweep, and hydrateOnce() swallowed the
     // error — leaving the isolate permanently unhydrated, so every dashboard poll fell
     // back to the bounded snapshot (and, before that, to an empty state). Read each
