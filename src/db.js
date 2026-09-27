@@ -62,6 +62,7 @@ export async function d1Put(env, type, value, { critical = false } = {}) {
 export async function d1Events(env, limit = 50) {
   const safeLimit = Math.min(50, Math.max(1, Number(limit) || 50));
   const result = await env.DB.prepare('SELECT id,type,payload,created_at FROM events ORDER BY created_at DESC LIMIT ?').bind(safeLimit).all();
+  recordD1Read(env, Number(result?.meta?.rows_read) || 0);
   return (result.results ?? []).map(r => ({ id:r.id, type:r.type, payload:JSON.parse(r.payload), at:r.created_at }));
 }
 
