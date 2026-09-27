@@ -147,7 +147,25 @@ test('/api/state marks a cold-isolate fallback as degraded and never serves an e
   // The D1 snapshot is preferred; the bare in-memory state is only used, and flagged,
   // when nothing at all could be read.
   assert.match(index, /if \(snap && \(snap\.projects\.length \|\| snap\.tasks\.length \|\| snap\.agents\.length\)\)/);
-  assert.match(index, /return \{ \.\.\.fallback, degraded: true, coldIsolate: true \};/);
+  assert.match(index, /degraded: true, coldIsolate: true, degradedReason: 'no-readable-state' \};/);
+  assert.doesNotMatch(index, /catch\(_\)\{\}/, 'no state read may be swallowed without a record');
   assert.match(index, /return ok\(await statePayload\(env, recoveredRuns\)\);/);
   assert.doesNotMatch(index, /catch\(_\)\{\}\}return ok\(memoryState\(\)\);/, 'the silent empty fallback must be gone');
+});
+
+test('failed state reads are recorded and surfaced on /api/health', () => {
+  const index = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+
+  // A swallowed read failure is exactly what let the dashboard blank with no explanation.
+  assert.match(index, /function noteStateReadFailure\(type, error\)/);
+  assert.match(index, /noteStateReadFailure\(type, error\);\s*\}\s*\}\s*return null;/);
+  assert.match(index, /catch \(error\) \{ noteStateReadFailure\('snapshot', error\); \}/);
+  assert.match(index, /d1Events\(env, 30\)\.catch\(\(error\) => \{ noteStateReadFailure\('events', error\); return \[\]; \}\)/);
+  assert.match(index, /degradedReason: \[/);
+  assert.match(index, /stateReads:stateDiagnostics\(\)/, '/api/health must expose the read diagnostics');
+
+  // The Health page must show the failure so it is visible without log access.
+  assert.match(dashboardHTML(), /const sr=d\.stateReads\|\|\{\};/);
+  assert.match(dashboardHTML(), />State Reads<\/div>/);
+  assert.match(dashboardHTML(), /sr\.lastReason/);
 });
