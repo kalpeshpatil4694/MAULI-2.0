@@ -21,6 +21,10 @@ export function assignTask(taskId,agentId=null) {
   const requiredTools=Array.isArray(task.requiredTools)&&task.requiredTools.length?task.requiredTools:(Array.isArray(task.toolNames)?task.toolNames:[]);
   let agent=agentId?store.get('agents',agentId):(task.assignedAgentId?store.get('agents',task.assignedAgentId):selectAgents(task.requiredCapabilities,null,{requiredTools,requireAllTools:true})[0]);
   if(!agent)agent=selectAgents(task.requiredCapabilities,null,{requiredTools,requireAllTools:true,allowCooldownFallback:true})[0];
+  // Last resort: keep the task moving with the best partial match instead of parking it
+  // forever. Tools stay mandatory; only the capability overlap may degrade. Without this a
+  // gate demanding capabilities no single agent holds blocked the whole dependency chain.
+  if(!agent)agent=selectAgents(task.requiredCapabilities,null,{requiredTools,requireAllTools:true,allowPartialCapabilities:true})[0];
   if(!agent)return store.put('tasks',{...task,state:'blocked',blockedReason:'No capable available agent',id:task.id});
   const assigned=store.put('tasks',{...task,state:'assigned',agentId:agent.id,assignedAgentId:agent.id,assignedAt:now(),blockedReason:null,id:task.id});
   updateAgent(agent.id,{state:'assigned',currentTaskId:task.id}); store.addEvent('task.assigned',assigned); return assigned;
