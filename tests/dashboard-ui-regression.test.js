@@ -7,12 +7,14 @@ import { dedupeAgentList } from '../src/agents.js';
 test('dashboard unwraps standard API envelopes', () => {
   const html = dashboardHTML();
   assert.match(html, /j\.data&&typeof j\.data==='object'/);
-  assert.match(html, /\{...j\.data,ok:true\}/);
+  assert.match(html, /\{\.\.\.j\.data,ok:true\}/);
 });
 
-test('live lifecycle polling is bounded and serialized', () => {
+test('live lifecycle polling is bounded, serialized, and adaptive', () => {
   assert.match(DASHBOARD_LIVE_SCRIPT, /if\(state\.polling\)return/);
-  assert.match(DASHBOARD_LIVE_SCRIPT, /setInterval\(poll,5000\)/);
+  assert.match(DASHBOARD_LIVE_SCRIPT, /schedulePoll\(active\?5000:20000\)/);
+  assert.match(DASHBOARD_LIVE_SCRIPT, /window\.setTimeout\(poll,500\)/);
+  assert.doesNotMatch(DASHBOARD_LIVE_SCRIPT, /setInterval\(poll,5000\)/);
   assert.doesNotMatch(DASHBOARD_LIVE_SCRIPT, /setInterval\(poll,15000\)/);
 });
 
