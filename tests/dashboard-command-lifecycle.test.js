@@ -10,7 +10,7 @@ test('dashboard live bridge is injected by the production worker', () => {
   assert.match(worker,/url\.pathname === '\/' \|\| url\.pathname === '\/dashboard'/);
   assert.match(bridge,/\/api\/state/);
   assert.match(bridge,/\/api\/project-progress\//);
-  assert.match(bridge,/schedulePoll\(active\?5000:20000\)/);
+  assert.match(bridge,/schedulePoll\(state\.retrySoon\?2000:\(active\?5000:20000\)\)/);
   assert.match(bridge,/Final delivery completed/);
 });
 

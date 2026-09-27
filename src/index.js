@@ -56,7 +56,7 @@ async function initOnce(env, ctx) {
 // Bounded, cached snapshot used only until a cold isolate finishes hydrating.
 // Match the live dashboard cadence while avoiding repeated D1 reads between polls.
 const STATE_SNAPSHOT_TTL = 5000;
-let _stateSnapshot = null; let _stateSnapshotTime = 0;
+let _stateSnapshot = null; let _stateSnapshotTime = 0; let _lastGoodSnapshot = null;
 function compactStateItem(item, type) {
   if (!item || typeof item !== 'object') return item;
   const copy = { ...item };
@@ -81,20 +81,80 @@ function compactStateItem(item, type) {
 }
 function compactStateList(list, type) { return (Array.isArray(list) ? list : []).map(item => compactStateItem(item, type)); }
 
+// A single failed D1 read must not discard the whole snapshot. Cold isolates routinely
+// race the background hydration, and an all-or-nothing snapshot used to throw and fall
+// back to the (empty) in-memory state — which is what made the dashboard counters
+// randomly read 0 projects / 0 tasks / 0 artifacts. Read each collection defensively.
+async function safeD1List(env, type, opts) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { return await d1List(env, type, opts); }
+    catch (error) { if (attempt === 0) await new Promise(r => setTimeout(r, 120)); }
+  }
+  return null;
+}
 async function stateSnapshot(env) {
   const nowMs = Date.now();
   if (_stateSnapshot && (nowMs - _stateSnapshotTime) < STATE_SNAPSHOT_TTL) return _stateSnapshot;
   // Keep the cold-isolate snapshot deliberately small: 5M D1 rows_read/day is an account limit.
-  // 5s cache + these bounds keep worst-case state reads comfortably below that ceiling.\n  const tasks = await d1List(env, 'tasks', { limit: 180 });
+  // 5s cache + these bounds keep worst-case state reads comfortably below that ceiling.
+  const tasks = (await safeD1List(env, 'tasks', { limit: 180 })) ?? _lastGoodSnapshot?.tasks ?? [];
   const [agents, projects, approvals, events] = await Promise.all([
-    d1List(env, 'agents', { limit: 40 }),
-    d1List(env, 'projects', { existingTasks: tasks, limit: 20 }),
-    d1List(env, 'approvals', { limit: 10 }),
-    d1Events(env, 10)
+    safeD1List(env, 'agents', { limit: 40 }),
+    safeD1List(env, 'projects', { existingTasks: tasks, limit: 20 }),
+    safeD1List(env, 'approvals', { limit: 10 }),
+    d1Events(env, 10).catch(() => [])
   ]);
-  _stateSnapshot = { agents: compactStateList(dedupeAgentList(agents).slice(0,50),'agents'), projects: compactStateList(projects,'projects'), tasks: compactStateList(tasks,'tasks'), approvals: compactStateList(approvals,'approvals'), events: compactStateList(events,'events'), summary: { projects: projects.length, tasks: tasks.length, running: tasks.filter(t => ['working','assigned'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: store.list('artifacts').length } };
+  // A collection that failed to read falls back to the last good copy so a transient D1
+  // error can never present the dashboard with less data than we already know about.
+  const keep = (fresh, key) => Array.isArray(fresh) ? fresh : (_lastGoodSnapshot?.[key] ?? []);
+  const agentList = keep(agents, 'agents');
+  const projectList = keep(projects, 'projects');
+  const taskList = Array.isArray(tasks) ? tasks : keep(null, 'tasks');
+  const approvalList = keep(approvals, 'approvals');
+  const eventList = Array.isArray(events) ? events : keep(null, 'events');
+  const snapshot = {
+    agents: compactStateList(dedupeAgentList(agentList).slice(0,50),'agents'),
+    projects: compactStateList(projectList,'projects'),
+    tasks: compactStateList(taskList,'tasks'),
+    approvals: compactStateList(approvalList,'approvals'),
+    events: compactStateList(eventList,'events'),
+    // True when at least one collection could not be read this time; the client keeps
+    // its existing rows instead of blanking the screen.
+    degraded: agents === null || projects === null || !Array.isArray(tasks),
+    summary: { projects: projectList.length, tasks: taskList.length, running: taskList.filter(t => ['working','assigned'].includes(t.state)).length, failed: taskList.filter(t => t.state === 'failed').length, artifacts: store.list('artifacts').length }
+  };
+  // Only promote a snapshot that actually read something into the "last good" slot.
+  if (!snapshot.degraded || agentList.length) _lastGoodSnapshot = snapshot;
+  _stateSnapshot = snapshot;
   _stateSnapshotTime = Date.now();
-  return _stateSnapshot;
+  return snapshot;
+}
+// Assembles the /api/state payload. A cold isolate prefers the D1 snapshot over the
+// in-memory store; if D1 reads fail we still serve the last good snapshot and flag the
+// response as degraded instead of blanking the dashboard to zeros.
+async function statePayload(env, recoveredRuns) {
+  const memoryState = () => {
+    const projects = compactStateList(listProjects().slice(-100),'projects');
+    const tasks = compactStateList(listTasks().slice(-300),'tasks');
+    const artifacts = compactStateList(store.list('artifacts').slice(-100),'artifacts');
+    const agents = compactStateList(listAgents().slice(0,50),'agents');
+    const approvals = compactStateList(listApprovals().slice(-50),'approvals');
+    const events = compactStateList(store.recentEvents(30),'events');
+    return { agents, projects, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: projects.length, tasks: tasks.length, running: tasks.filter(t => ['working','assigned'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: artifacts.length } };
+  };
+  if (store.hydrated) return memoryState();
+  if (hasD1(env)) {
+    try {
+      const snap = await stateSnapshot(env);
+      if (snap && (snap.projects.length || snap.tasks.length || snap.agents.length)) {
+        return { ...snap, tools:listTools().slice(0,50), artifacts:compactStateList(store.list('artifacts').slice(-100),'artifacts'), recoveredRuns, snapshot:true };
+      }
+    } catch(_) {}
+  }
+  // Nothing readable from D1 yet. Returning the bare in-memory state here is what made
+  // the counters read 0 — flag it so the client keeps whatever it already rendered.
+  const fallback = memoryState();
+  return { ...fallback, degraded: true, coldIsolate: true };
 }
 function ensureTools() {
   if (_toolsReady) return;
@@ -167,7 +227,7 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),r2:Boolean(env?.ARTIFACTS),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),time:now()});
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   if(request.method==='POST'&&url.pathname==='/api/reset'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const keepAgents=body.keepAgents!==false;const before={projects:store.list('projects').length,tasks:store.list('tasks').length,artifacts:store.list('artifacts').length};store.put('projects',[]);store.put('tasks',[]);store.put('artifacts',[]);store.put('builds',[]);store.put('events',[]);store.put('approvals',[]);if(!keepAgents){const agents=store.list('agents');const fresh=agents.filter(a=>a._builtin);store.put('agents',fresh);}await store.flush();if(hasD1(env)){try{await env.DB.prepare('DELETE FROM entities').run();await env.DB.prepare('DELETE FROM events').run();}catch(e){console.warn('D1 reset failed:',e.message);}}store.addEvent('system.reset',{before,keepAgents,time:now()});return ok({reset:true,before,keepAgents});}
-  if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const memoryState=()=>{const projects=compactStateList(listProjects().slice(-100),'projects');const tasks=compactStateList(listTasks().slice(-300),'tasks');const artifacts=compactStateList(store.list('artifacts').slice(-100),'artifacts');const agents=compactStateList(listAgents().slice(0,50),'agents');const approvals=compactStateList(listApprovals().slice(-50),'approvals');const events=compactStateList(store.recentEvents(30),'events');return{agents,projects,tasks,approvals,tools:listTools().slice(0,50),artifacts,events,recoveredRuns,summary:{projects:projects.length,tasks:tasks.length,running:tasks.filter(t=>['working','assigned'].includes(t.state)).length,failed:tasks.filter(t=>t.state==='failed').length,artifacts:artifacts.length}}};if(store.hydrated)return ok(memoryState());if(hasD1(env)){try{const snap=await stateSnapshot(env);return ok({...snap,tools:listTools().slice(0,50),artifacts:compactStateList(store.list('artifacts').slice(-100),'artifacts'),recoveredRuns,snapshot:true});}catch(_){}}return ok(memoryState());}
+  if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});return ok(await statePayload(env, recoveredRuns));}
   if(request.method==='GET'&&url.pathname==='/api/self-test'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const result=runL1SelfTest();store.addEvent('self_test.completed',{score:result.score,status:result.status});return ok({result});}
   if(request.method==='GET'&&url.pathname==='/api/result-diagnostic'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});try{const result=await Promise.race([diagnoseResultPersistence(env),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))]);store.addEvent('result_persistence.diagnostic',{ok:result.ok,tokenConfigured:result.tokenConfigured,reason:result.reason||null});return ok({result});}catch(e){return ok({result:{ok:false,tokenConfigured:false,reason:e.message||'Diagnostic failed'}})}}
   // List all command results
