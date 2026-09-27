@@ -2,6 +2,9 @@ import { id, now } from './core.js';
 import { hasD1, d1List, d1Put, d1Event, d1Events } from './db.js';
 
 const CRITICAL_TYPES = new Set(['projects','tasks','runs','command_results','verifications','artifacts','build_locks','approvals']);
+// Tables the dashboard counters are built from. If one of these fails to load the isolate
+// must not advertise itself as hydrated, or the counters would render an empty store.
+const HYDRATION_CRITICAL = new Set(['projects','tasks','artifacts','agents']);
 
 function comparable(value) {
   if (!value || typeof value !== 'object') return value;
@@ -12,13 +15,13 @@ function comparable(value) {
 }
 
 export class MemoryStore {
-  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this._hydrating=null; }
+  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this.hydrateErrors=[]; this.hydrateFailures=[]; this._hydrating=null; }
   // Single-flight hydration: concurrent callers (worker light paths and the HTTP init
   // path) share one in-flight promise instead of each re-reading every D1 table.
   hydrateOnce() {
     if (this.hydrated) return Promise.resolve(true);
     if (this._hydrating) return this._hydrating;
-    this._hydrating = this.hydrate().catch(()=>false).finally(()=>{ this._hydrating=null; });
+    this._hydrating = this.hydrate().catch((error)=>{ this.noteHydrateFailure('hydrate',error); return false; }).finally(()=>{ this._hydrating=null; });
     return this._hydrating;
   }
   configure(env) { this.env=env??null; }
@@ -76,15 +79,43 @@ export class MemoryStore {
     // command_results are ~19KB each (74MB total in D1) — cap so the Results tab
     // stays usable without blowing the 128MB worker memory limit.
     const limits={command_results:50,agents:400,tasks:1500,artifacts:300,runs:300,verifications:300,executions:300,memory:500,builds:200,approvals:500,tools:200};
+    // One failed table used to abort the whole sweep, and hydrateOnce() swallowed the
+    // error — leaving the isolate permanently unhydrated, so every dashboard poll fell
+    // back to the bounded snapshot (and, before that, to an empty state). Read each
+    // table defensively and only claim hydration once the counter-driving tables loaded.
+    const failed=new Set();
     for(const type of ordered){
       const isProject=type==='projects';
-      const rows=await d1List(this.env,type,{existingTasks:isProject?taskRows:undefined,limit:limits[type]});
+      let rows=null; let transientError=null;
+      for(let attempt=0;attempt<2;attempt++){
+        try{rows=await d1List(this.env,type,{existingTasks:isProject?taskRows:undefined,limit:limits[type]});break;}
+        catch(error){
+          if(attempt===0){transientError=error;await new Promise(r=>setTimeout(r,80));continue;}
+          this.noteHydrateFailure(type,error);
+        }
+      }
+      // A read that only succeeded on the retry is still a real D1 problem worth seeing.
+      if(rows!==null&&transientError)this.noteHydrateFailure(type,transientError,true);
+      if(rows===null){failed.add(type);continue;}
       const existing=this.data.get(type)??new Map();
       for(const item of rows)if(item?.id)existing.set(item.id,item);
       if(existing.size)this.data.set(type,existing);
       if(type==='tasks')taskRows.push(...rows);
     }
-    this.events=await d1Events(this.env);this.hydrated=true;return true;
+    try{this.events=await d1Events(this.env);}
+    catch(error){this.noteHydrateFailure('events',error);failed.add('events');}
+    this.hydrateFailures=[...failed];
+    // Reporting hydrated with a missing counter table is what showed 0 projects / 0 tasks.
+    // Stay unhydrated in that case so /api/state keeps serving the D1 snapshot instead.
+    this.hydrated=[...failed].every(type=>!HYDRATION_CRITICAL.has(type));
+    return this.hydrated;
+  }
+  noteHydrateFailure(type,error,recovered=false){
+    const reason=(error?.message??String(error??'unknown')).slice(0,200);
+    const entry={type,reason,recovered,at:new Date().toISOString()};
+    this.hydrateErrors.push(entry);
+    if(this.hydrateErrors.length>50)this.hydrateErrors.splice(0,this.hydrateErrors.length-50);
+    console.warn(`hydrate failed (${type}):`,reason,recovered?'(recovered on retry)':'');
   }
   async hydrateLearning() { return this.hydrate(['agents','memory']); }
   metrics() {

@@ -101,12 +101,19 @@ function noteStateReadFailure(type, error, recovered = false) {
   console.warn(`state read failed (${type}):`, reason, recovered ? '(recovered on retry)' : '(unrecovered)');
 }
 function stateDiagnostics() {
+  const hydration = Array.isArray(store.hydrateErrors) ? store.hydrateErrors.slice(-5) : [];
+  // Hydration failures are the ones that used to vanish: hydrateOnce() swallowed them,
+  // so an isolate could stay unhydrated forever with nothing on /api/health to say why.
+  const hydrateFailures = Array.isArray(store.hydrateFailures) ? store.hydrateFailures : [];
   return {
     degradedCount: _stateDegradedCount.count,
     recoveredCount: _stateDegradedCount.recovered ?? 0,
     lastReason: _stateDegradedCount.lastReason,
     lastAt: _stateDegradedCount.lastAt,
     readFailures: Object.fromEntries(_stateReadFailures),
+    hydrateFailures,
+    hydrateErrors: hydration,
+    unhydratedSinceHydrateError: hydrateFailures.length > 0,
   };
 }
 async function safeD1List(env, type, opts) {
