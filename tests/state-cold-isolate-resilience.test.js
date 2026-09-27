@@ -135,8 +135,11 @@ test('/api/state marks a cold-isolate fallback as degraded and never serves an e
   // Reads must be individually guarded: one failing D1 query used to throw away the
   // whole snapshot and fall back to the empty in-memory state.
   assert.match(index, /async function safeD1List\(env, type, opts\)/);
-  assert.match(index, /const tasks = \(await safeD1List\(env, 'tasks', \{ limit: 180 \}\)\)/);
-  assert.match(index, /safeD1List\(env, 'projects', \{ existingTasks: tasks, limit: 20 \}\)/);
+  assert.match(index, /const tasks = \(await safeD1List\(env, 'tasks', \{ limit: 300 \}\)\)/);
+  assert.match(index, /safeD1List\(env, 'projects', \{ existingTasks: tasks, limit: 100 \}\)/);
+  // Artifacts used to be missing from the cold snapshot entirely, so the counter read 0
+  // until the isolate hydrated.
+  assert.match(index, /safeD1List\(env, 'artifacts', \{ limit: 100 \}\)/);
 
   // A failed read falls back to the last good copy instead of an empty array.
   assert.match(index, /_lastGoodSnapshot\?\.\[key\] \?\? \[\]/);

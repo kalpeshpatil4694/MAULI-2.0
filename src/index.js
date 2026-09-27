@@ -96,13 +96,16 @@ async function stateSnapshot(env) {
   const nowMs = Date.now();
   if (_stateSnapshot && (nowMs - _stateSnapshotTime) < STATE_SNAPSHOT_TTL) return _stateSnapshot;
   // Keep the cold-isolate snapshot deliberately small: 5M D1 rows_read/day is an account limit.
-  // 5s cache + these bounds keep worst-case state reads comfortably below that ceiling.
-  const tasks = (await safeD1List(env, 'tasks', { limit: 180 })) ?? _lastGoodSnapshot?.tasks ?? [];
-  const [agents, projects, approvals, events] = await Promise.all([
-    safeD1List(env, 'agents', { limit: 40 }),
-    safeD1List(env, 'projects', { existingTasks: tasks, limit: 20 }),
-    safeD1List(env, 'approvals', { limit: 10 }),
-    d1Events(env, 10).catch(() => [])
+  // The limits mirror the warm in-memory caps (100/300/100) so the counters read the same
+  // before and after hydration instead of visibly jumping. The 5s cache keeps the cost
+  // bounded, and once the isolate is hydrated this path is never taken again.
+  const tasks = (await safeD1List(env, 'tasks', { limit: 300 })) ?? _lastGoodSnapshot?.tasks ?? [];
+  const [agents, projects, approvals, artifacts, events] = await Promise.all([
+    safeD1List(env, 'agents', { limit: 50 }),
+    safeD1List(env, 'projects', { existingTasks: tasks, limit: 100 }),
+    safeD1List(env, 'approvals', { limit: 50 }),
+    safeD1List(env, 'artifacts', { limit: 100 }),
+    d1Events(env, 30).catch(() => [])
   ]);
   // A collection that failed to read falls back to the last good copy so a transient D1
   // error can never present the dashboard with less data than we already know about.
@@ -111,17 +114,19 @@ async function stateSnapshot(env) {
   const projectList = keep(projects, 'projects');
   const taskList = Array.isArray(tasks) ? tasks : keep(null, 'tasks');
   const approvalList = keep(approvals, 'approvals');
+  const artifactList = keep(artifacts, 'artifacts');
   const eventList = Array.isArray(events) ? events : keep(null, 'events');
   const snapshot = {
     agents: compactStateList(dedupeAgentList(agentList).slice(0,50),'agents'),
     projects: compactStateList(projectList,'projects'),
     tasks: compactStateList(taskList,'tasks'),
     approvals: compactStateList(approvalList,'approvals'),
+    artifacts: compactStateList(artifactList,'artifacts'),
     events: compactStateList(eventList,'events'),
     // True when at least one collection could not be read this time; the client keeps
     // its existing rows instead of blanking the screen.
-    degraded: agents === null || projects === null || !Array.isArray(tasks),
-    summary: { projects: projectList.length, tasks: taskList.length, running: taskList.filter(t => ['working','assigned'].includes(t.state)).length, failed: taskList.filter(t => t.state === 'failed').length, artifacts: store.list('artifacts').length }
+    degraded: agents === null || projects === null || artifacts === null || !Array.isArray(tasks),
+    summary: { projects: projectList.length, tasks: taskList.length, running: taskList.filter(t => ['working','assigned'].includes(t.state)).length, failed: taskList.filter(t => t.state === 'failed').length, artifacts: artifactList.length }
   };
   // Only promote a snapshot that actually read something into the "last good" slot.
   if (!snapshot.degraded || agentList.length) _lastGoodSnapshot = snapshot;
@@ -147,7 +152,7 @@ async function statePayload(env, recoveredRuns) {
     try {
       const snap = await stateSnapshot(env);
       if (snap && (snap.projects.length || snap.tasks.length || snap.agents.length)) {
-        return { ...snap, tools:listTools().slice(0,50), artifacts:compactStateList(store.list('artifacts').slice(-100),'artifacts'), recoveredRuns, snapshot:true };
+        return { ...snap, tools:listTools().slice(0,50), recoveredRuns, snapshot:true };
       }
     } catch(_) {}
   }
