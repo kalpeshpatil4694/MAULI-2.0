@@ -13,9 +13,10 @@ test('founder command response keeps dashboard-compatible top-level result', () 
   assert.match(dashboard, /JSON\.stringify\(r\.result\|\|r/);
 });
 
-test('founder command dashboard refreshes state through the live bridge after queue acknowledgement', () => {
+test('founder command dashboard refreshes state through the adaptive live bridge after queue acknowledgement', () => {
   assert.match(liveBridge, /async function poll\(\)/);
   assert.match(liveBridge, /fetch\('\/api\/state',\{cache:'no-store'\}\)/);
   assert.match(liveBridge, /window\.setTimeout\(poll,500\)/);
-  assert.match(liveBridge, /window\.setInterval\(poll,5000\)/);
+  assert.match(liveBridge, /schedulePoll\(active\?5000:20000\)/);
+  assert.doesNotMatch(liveBridge, /window\.setInterval\(poll,5000\)/);
 });
