@@ -194,3 +194,51 @@ test('the detail pipeline creates gates the roster can actually staff', () => {
   assert.ok(states.every((s) => s === 'completed'),
     `the whole gate chain should advance when every gate has staff: ${states.join(', ')}`);
 });
+
+test('the project detail payload carries bounded per-task estimates', async () => {
+  // completeTask persists enrichTaskTiming into the row, so the Project Details dump kept
+  // showing "est: 679h 40m 35s" for tasks completed before the estimator was bounded.
+  const { default: app } = await import('../src/index.js');
+  const suffix = TAIL();
+  const pid = `p-detail-${suffix}`;
+  store.put('projects', { id: pid, name: 'Call recorder', objective: 'Call recording application', state: 'active', requirements: ['x'], createdAt: new Date().toISOString() });
+  store.put('tasks', {
+    id: `poisoned-${suffix}`, projectId: pid, title: 'Pipeline gate: test', state: 'completed',
+    estimatedDurationMs: 2446835243, estimatedDurationFormatted: '679h 40m 35s',
+    completedAt: new Date().toISOString(), requiredCapabilities: ['testing', 'verification'],
+  });
+
+  const res = await app.fetch(new Request(`https://mauli.test/api/projects/${encodeURIComponent(pid)}/detail`), {}, { waitUntil() {} });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  const detail = body.detail ?? body.data.detail;
+  const poisoned = detail.tasks.find((t) => t.id === `poisoned-${suffix}`);
+  assert.ok(poisoned, 'the task must be present');
+  assert.ok(poisoned.estimatedDurationMs <= MAX_TASK_ESTIMATE_MS,
+    `detail task estimate must be clamped, got ${poisoned.estimatedDurationMs}`);
+  assert.notEqual(poisoned.estimatedDurationFormatted, '679h 40m 35s',
+    'the persisted stale label must be recomputed, not echoed back');
+  assert.ok(detail.summary.estimatedDurationMs <= MAX_PROJECT_ESTIMATE_MS);
+});
+
+test('the state payload does not ship poisoned task estimates', async () => {
+  const { default: app } = await import('../src/index.js');
+  const suffix = TAIL();
+  const pid = `p-state-${suffix}`;
+  store.put('projects', { id: pid, name: 'P', objective: 'Build', state: 'active', requirements: ['x'], createdAt: new Date().toISOString() });
+  store.put('tasks', {
+    id: `poisoned-${suffix}`, projectId: pid, title: 'Pipeline gate: security', state: 'completed',
+    estimatedDurationMs: 2446835243, estimatedDurationFormatted: '679h 40m 35s',
+    completedAt: new Date().toISOString(), requiredCapabilities: ['security'],
+  });
+
+  const res = await app.fetch(new Request('https://mauli.test/api/state'), {}, { waitUntil() {} });
+  assert.equal(res.status, 200);
+  const data = (await res.json()).data;
+  const shipped = (data.tasks ?? []).find((t) => t.id === `poisoned-${suffix}`);
+  assert.ok(shipped, 'the task must be present in the state payload');
+  assert.ok(shipped.estimatedDurationMs === undefined || shipped.estimatedDurationMs <= MAX_TASK_ESTIMATE_MS,
+    `state payload must not ship ${shipped.estimatedDurationMs}`);
+  assert.equal(shipped.estimatedDurationFormatted, undefined,
+    'the stale formatted estimate must not be echoed to clients');
+});

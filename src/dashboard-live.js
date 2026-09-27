@@ -56,10 +56,13 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       // lists into the counters is what made them flip back to 0 at random. Skip it.
       if(d.degraded){state.retrySoon=true;return;}
       const set=(id,v)=>{const e=get(id);if(e)e.textContent=String(v);};
-      set('sProj',projects.length);set('navP',projects.length);
-      if(Array.isArray(d.tasks)){set('sTask',d.tasks.length);set('navT',d.tasks.filter(t=>t.state==='working').length||d.tasks.length);}
+      // True store-wide totals: the shipped lists are capped (100/300/100), so counting
+      // rows froze Tasks at 300 and Artifacts at 100 forever.
+      const totals=(d.summary&&typeof d.summary==='object'&&d.summary.totals)||{};
+      set('sProj',Number.isFinite(Number(totals.projects))?Number(totals.projects):projects.length);set('navP',projects.length);
+      if(Array.isArray(d.tasks)){set('sTask',Number.isFinite(Number(totals.tasks))?Number(totals.tasks):d.tasks.length);set('navT',d.tasks.filter(t=>t.state==='working').length||d.tasks.length);}
       if(Array.isArray(d.agents)){set('sAg',d.agents.length);set('navA',d.agents.length);}
-      if(Array.isArray(d.artifacts))set('sArt',d.artifacts.length);
+      if(Array.isArray(d.artifacts))set('sArt',Number.isFinite(Number(totals.artifacts))?Number(totals.artifacts):d.artifacts.length);
       // Refresh every data-backed panel from this response without a second poll.
       document.dispatchEvent(new CustomEvent('mauli:state',{detail:d}));
     }catch(_){ }

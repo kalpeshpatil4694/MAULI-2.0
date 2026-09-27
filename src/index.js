@@ -21,7 +21,7 @@ import { getAgentSkillTree, getAgentCollaborationStats, getSystemLearningStats, 
 import { processChatMessage, getChatHistory, getActiveConversations, cloneProject } from './chat-engine.js';
 import { editFile, getEditHistory, getRecentEdits, undoEdit, getFileChangeSummary, parseEditCommand } from './file-editor.js';
 import { recordActivity, getActivityFeed, getProjectProgress, getLiveStatus, createSubAgent, getSubAgents, requestHelp, getAgentConversation } from './live-monitor.js';
-import { enrichProjectTiming } from './time-tracking.js';
+import { enrichProjectTiming, enrichTaskTiming, sanitizeTaskEstimate } from './time-tracking.js';
 import { generateProjectDocs } from './docs-generator.js';
 import { searchAPIs, recommendAPIs, getAPICatalog, getAPICategories } from './public-apis.js';
 import { getMCPForAgent, getMCPByCapability, getAllMCPServers, getMCPCategories, suggestMCPForProject } from './mcp-integration.js';
@@ -67,6 +67,12 @@ function compactStateItem(item, type) {
   }
   if (type === 'tasks') {
     delete copy.result; delete copy.output; delete copy.execution; delete copy.context; delete copy.largeResult;
+    // completeTask persists enrichTaskTiming into the row, so a poisoned estimate and its
+    // "679h 40m 35s" label ride along on every /api/state payload forever. Ship a sane
+    // number and drop the stale label; readers that need it re-derive it via enrichTaskTiming.
+    const sane = sanitizeTaskEstimate(copy.estimatedDurationMs);
+    if (sane === null) delete copy.estimatedDurationMs; else copy.estimatedDurationMs = sane;
+    delete copy.estimatedDurationFormatted;
   }
   if (type === 'events') {
     if (copy.payload && typeof copy.payload === 'object') {
@@ -189,7 +195,7 @@ async function statePayload(env, recoveredRuns) {
     const agents = compactStateList(listAgents().slice(0,50),'agents');
     const approvals = compactStateList(listApprovals().slice(-50),'approvals');
     const events = compactStateList(store.recentEvents(30),'events');
-    return { agents, projects, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: projects.length, tasks: tasks.length, running: tasks.filter(t => ['working','assigned'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: artifacts.length } };
+    return { agents, projects, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: projects.length, tasks: tasks.length, running: tasks.filter(t => ['working','assigned'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: artifacts.length, totals: { projects: listProjects().length, tasks: listTasks().length, artifacts: store.list('artifacts').length } } };
   };
   if (store.hydrated) return memoryState();
   if (hasD1(env)) {
@@ -370,7 +376,10 @@ export default { async fetch(request, env, ctx) { try {
     const events=store.recentEvents().filter(e=>e.payload?.projectId===pid);
     const approvals=store.list('approvals').filter(a=>a.projectId===pid);
     const agents=store.list('agents');
-    const enrichedTasks=tasks.map(t=>{const agent=t.assignedAgentId?agents.find(a=>a.id===t.assignedAgentId):null;return{...t,agentName:agent?.name||null,agentRole:agent?.role||null};});
+    // Tasks carry estimatedDurationFormatted as a *persisted* field (completeTask spreads
+    // enrichTaskTiming into the store), so a poisoned estimate stayed visible verbatim in
+    // the Project Details dump even after the estimator was bounded. Re-enrich on read.
+    const enrichedTasks=tasks.map(t=>{const agent=t.assignedAgentId?agents.find(a=>a.id===t.assignedAgentId):null;return{...enrichTaskTiming(t),agentName:agent?.name||null,agentRole:agent?.role||null};});
     const completedCount=tasks.filter(t=>t.state==='completed').length;
     const failedCount=tasks.filter(t=>t.state==='failed').length;
     const runningCount=tasks.filter(t=>['working','assigned'].includes(t.state)).length;

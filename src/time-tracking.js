@@ -11,8 +11,9 @@ export const MAX_TASK_ESTIMATE_MS=60*60*1000;
 export const MAX_PROJECT_ESTIMATE_MS=24*60*60*1000;
 function clampTaskEstimate(ms){const n=Number(ms);if(!Number.isFinite(n)||n<=0)return MIN_TASK_ESTIMATE_MS;return Math.min(MAX_TASK_ESTIMATE_MS,Math.max(MIN_TASK_ESTIMATE_MS,Math.round(n)));}
 // A stored estimate only counts when it is plausible; anything larger (a poisoned value
-// already written to D1) is discarded and recomputed.
-function plausibleTaskEstimate(ms){const n=Number(ms);return Number.isFinite(n)&&n>0&&n<=MAX_TASK_ESTIMATE_MS?n:null;}
+// already written to D1) is discarded and recomputed. Exported so bulk serializers can
+// strip the poisoned number from a payload instead of shipping it to clients.
+export function sanitizeTaskEstimate(ms){const n=Number(ms);return Number.isFinite(n)&&n>0&&n<=MAX_TASK_ESTIMATE_MS?n:null;}
 function clampProjectEstimate(ms){const n=Number(ms);if(!Number.isFinite(n)||n<=0)return 0;return Math.min(MAX_PROJECT_ESTIMATE_MS,Math.max(0,Math.round(n)));}
 function key(t){if(t?.key&&DEFAULT_ESTIMATES_MS[t.key])return t.key;const c=Array.isArray(t?.requiredCapabilities)?t.requiredCapabilities:[];for(const k of ['research','product-planning','backend','database','frontend','native','pdf','security','testing'])if(c.includes(k))return k;return t?.executor||'internal.plan';}
 export function estimateTaskDurationMs(task){
@@ -26,14 +27,14 @@ export function estimateTaskDurationMs(task){
 export function formatDuration(ms){const n=Math.max(0,Number(ms)||0),x=Math.round(n/1000),h=Math.floor(x/3600),m=Math.floor(x%3600/60),s=x%60;return h?h+'h '+m+'m '+s+'s':m?m+'m '+s+'s':s+'s';}
 export function enrichTaskTiming(t){
   if(!t)return t;
-  const estimatedDurationMs=plausibleTaskEstimate(t.estimatedDurationMs)??estimateTaskDurationMs(t);
+  const estimatedDurationMs=sanitizeTaskEstimate(t.estimatedDurationMs)??estimateTaskDurationMs(t);
   const end=t.completedAt||t.failedAt||null;
   const actualDurationMs=t.startedAt?Math.max(0,Date.parse(end||now())-Date.parse(t.startedAt)):Number(t.actualDurationMs)||0;
   const remainingMs=['completed','failed','cancelled'].includes(t.state)?0:Math.max(0,estimatedDurationMs-actualDurationMs);
   return {...t,estimatedDurationMs,estimatedDurationFormatted:formatDuration(estimatedDurationMs),actualDurationMs,actualDurationFormatted:formatDuration(actualDurationMs),elapsedMs:actualDurationMs,elapsedFormatted:formatDuration(actualDurationMs),remainingMs,remainingFormatted:formatDuration(remainingMs)};
 }
 export function estimateProjectDuration(tasks){
-  const sum=(Array.isArray(tasks)?tasks:[]).reduce((s,t)=>s+(plausibleTaskEstimate(t?.estimatedDurationMs)??estimateTaskDurationMs(t)),0);
+  const sum=(Array.isArray(tasks)?tasks:[]).reduce((s,t)=>s+(sanitizeTaskEstimate(t?.estimatedDurationMs)??estimateTaskDurationMs(t)),0);
   return clampProjectEstimate(sum);
 }
 export function enrichProjectTiming(project,tasks){
