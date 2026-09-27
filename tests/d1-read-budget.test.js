@@ -6,6 +6,7 @@ import { dedupeAgents } from '../src/maintenance.js';
 import { pruneEvents, pruneOldResults } from '../src/db.js';
 import app from '../src/index.js';
 
+// CI guard: cold-state hydration is awaited before cache reuse is asserted.
 // Minimal stateful D1 double. It enforces the real D1 rules that broke production:
 //  - a statement may not bind more than 100 parameters
 //  - the free tier allows only ~50 queries per invocation
