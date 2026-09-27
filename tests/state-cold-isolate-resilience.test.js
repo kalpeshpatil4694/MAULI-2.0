@@ -157,8 +157,10 @@ test('failed state reads are recorded and surfaced on /api/health', () => {
   const index = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
 
   // A swallowed read failure is exactly what let the dashboard blank with no explanation.
-  assert.match(index, /function noteStateReadFailure\(type, error\)/);
-  assert.match(index, /noteStateReadFailure\(type, error\);\s*\}\s*\}\s*return null;/);
+  assert.match(index, /function noteStateReadFailure\(type, error, recovered = false\)/);
+  assert.match(index, /noteStateReadFailure\(type, error, attempt === 0\);/,
+    'a read that only succeeds on the retry must still be recorded');
+  assert.match(index, /recoveredCount: _stateDegradedCount\.recovered \?\? 0,/);
   assert.match(index, /catch \(error\) \{ noteStateReadFailure\('snapshot', error\); \}/);
   assert.match(index, /d1Events\(env, 30\)\.catch\(\(error\) => \{ noteStateReadFailure\('events', error\); return \[\]; \}\)/);
   assert.match(index, /degradedReason: \[/);
@@ -167,5 +169,6 @@ test('failed state reads are recorded and surfaced on /api/health', () => {
   // The Health page must show the failure so it is visible without log access.
   assert.match(dashboardHTML(), /const sr=d\.stateReads\|\|\{\};/);
   assert.match(dashboardHTML(), />State Reads<\/div>/);
+  assert.match(dashboardHTML(), /Recovered on retry/);
   assert.match(dashboardHTML(), /sr\.lastReason/);
 });

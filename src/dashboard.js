@@ -590,8 +590,8 @@ function renderHealth(){
     // State reads used to fail silently, which is how the counters could blank to zero with
     // no explanation. Report the real cause here whenever a read did fail on this isolate.
     const sr=d.stateReads||{};
-    if(Number(sr.degradedCount||0)>0){
-      h += '<div style="margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">State Reads</div>'+row('Failures',String(sr.degradedCount))+row('Last reason','<span style="color:var(--yellow)">'+esc(sr.lastReason||'—')+'</span>')+row('Last seen',fmt(sr.lastAt))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">A failed read is served from the last good snapshot; the dashboard keeps showing its current rows.</div></div>';
+    if(Number(sr.degradedCount||0)>0||Number(sr.recoveredCount||0)>0){
+      h += '<div style="margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">State Reads</div>'+row('Unrecovered',String(sr.degradedCount||0))+row('Recovered on retry',String(sr.recoveredCount||0))+row('Last reason','<span style="color:var(--yellow)">'+esc(sr.lastReason||'—')+'</span>')+row('Last seen',fmt(sr.lastAt))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">A failed read is served from the last good snapshot; the dashboard keeps showing its current rows.</div></div>';
     }
     $('hlthDet').innerHTML=h}).catch(e=>{$('hlthDet').innerHTML='<div style="color:var(--red);padding:10px">Health unavailable</div>'});
   // The Tools card had no renderer at all (toolsOut stayed empty) and the Diagnostics card

@@ -90,17 +90,20 @@ function compactStateList(list, type) { return (Array.isArray(list) ? list : [])
 // failure per collection and surface it on /api/health so the cause is always visible.
 const _stateReadFailures = new Map();
 const _stateDegradedCount = { count: 0, lastReason: null, lastAt: null };
-function noteStateReadFailure(type, error) {
+function noteStateReadFailure(type, error, recovered = false) {
   const reason = (error?.message ?? String(error ?? 'unknown')).slice(0, 200);
-  _stateReadFailures.set(type, { reason, at: new Date().toISOString() });
-  _stateDegradedCount.count++;
-  _stateDegradedCount.lastReason = `${type}: ${reason}`;
-  _stateDegradedCount.lastAt = new Date().toISOString();
-  console.warn(`state read failed (${type}):`, reason);
+  const at = new Date().toISOString();
+  _stateReadFailures.set(type, { reason, at, recovered });
+  if (recovered) _stateDegradedCount.recovered = ( _stateDegradedCount.recovered ?? 0 ) + 1;
+  else _stateDegradedCount.count++;
+  _stateDegradedCount.lastReason = `${type}: ${reason}${recovered ? ' (recovered on retry)' : ''}`;
+  _stateDegradedCount.lastAt = at;
+  console.warn(`state read failed (${type}):`, reason, recovered ? '(recovered on retry)' : '(unrecovered)');
 }
 function stateDiagnostics() {
   return {
     degradedCount: _stateDegradedCount.count,
+    recoveredCount: _stateDegradedCount.recovered ?? 0,
     lastReason: _stateDegradedCount.lastReason,
     lastAt: _stateDegradedCount.lastAt,
     readFailures: Object.fromEntries(_stateReadFailures),
@@ -110,8 +113,10 @@ async function safeD1List(env, type, opts) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try { return await d1List(env, type, opts); }
     catch (error) {
-      if (attempt === 0) { await new Promise(r => setTimeout(r, 120)); continue; }
-      noteStateReadFailure(type, error);
+      // Record every failure, including one the retry recovers from. A read that only
+      // succeeds on the second attempt is still a real D1 problem worth seeing.
+      noteStateReadFailure(type, error, attempt === 0);
+      if (attempt === 0) { await new Promise(r => setTimeout(r, 120)); }
     }
   }
   return null;
