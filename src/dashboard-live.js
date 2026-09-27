@@ -3,7 +3,7 @@
 // visibly synchronized with durable project/task state without duplicating the dashboard UI.
 export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
 (function(){
-  const state={known:new Set(),activeProject:null,polling:false};
+  const state={known:new Set(),activeProject:null,polling:false,retrySoon:false};
   const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const get=(id)=>document.getElementById(id);
   function message(html){const e=get('cmdRes');if(!e)return;e.style.display='block';e.innerHTML=html;}
@@ -31,6 +31,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   async function poll(){
     if(state.polling)return;state.polling=true;
     try{
+      state.retrySoon=false;
       const r=await fetch('/api/state',{cache:'no-store'});if(!r.ok)return;
       const j=await r.json();const d=j.data||j;const projects=Array.isArray(d.projects)?d.projects:[];
       const candidates=projects.filter(p=>p&&p.founderCommand&&p.queuedAt);
@@ -48,6 +49,9 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
         showProject(fresh,progress);
       }
       // Keep the visible counters synchronized even if the legacy dashboard render is unchanged.
+      // A degraded payload means a cold isolate could not read D1 yet — writing its empty
+      // lists into the counters is what made them flip back to 0 at random. Skip it.
+      if(d.degraded){state.retrySoon=true;return;}
       const set=(id,v)=>{const e=get(id);if(e)e.textContent=String(v);};
       set('sProj',projects.length);set('navP',projects.length);
       if(Array.isArray(d.tasks)){set('sTask',d.tasks.length);set('navT',d.tasks.filter(t=>t.state==='working').length||d.tasks.length);}
@@ -114,7 +118,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     pollTimer=setTimeout(async()=>{
       await poll();
       const active=Boolean(state.activeProject&&state.activeProject.state==='active');
-      schedulePoll(active?5000:20000);
+      schedulePoll(state.retrySoon?2000:(active?5000:20000));
     },delay);
   }
   schedulePoll(500);

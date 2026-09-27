@@ -12,7 +12,7 @@ test('dashboard unwraps standard API envelopes', () => {
 
 test('live lifecycle polling is bounded, serialized, and adaptive', () => {
   assert.match(DASHBOARD_LIVE_SCRIPT, /if\(state\.polling\)return/);
-  assert.match(DASHBOARD_LIVE_SCRIPT, /schedulePoll\(active\?5000:20000\)/);
+  assert.match(DASHBOARD_LIVE_SCRIPT, /schedulePoll\(state\.retrySoon\?2000:\(active\?5000:20000\)\)/);
   assert.match(DASHBOARD_LIVE_SCRIPT, /schedulePoll\(500\)/);
   assert.doesNotMatch(DASHBOARD_LIVE_SCRIPT, /setInterval\(poll,5000\)/);
   assert.doesNotMatch(DASHBOARD_LIVE_SCRIPT, /setInterval\(poll,15000\)/);

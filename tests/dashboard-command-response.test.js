@@ -17,6 +17,6 @@ test('founder command dashboard refreshes state through the adaptive live bridge
   assert.match(liveBridge, /async function poll\(\)/);
   assert.match(liveBridge, /fetch\('\/api\/state',\{cache:'no-store'\}\)/);
   assert.match(liveBridge, /schedulePoll\(500\)/);
-  assert.match(liveBridge, /schedulePoll\(active\?5000:20000\)/);
+  assert.match(liveBridge, /schedulePoll\(state\.retrySoon\?2000:\(active\?5000:20000\)\)/);
   assert.doesNotMatch(liveBridge, /window\.setInterval\(poll,5000\)/);
 });
