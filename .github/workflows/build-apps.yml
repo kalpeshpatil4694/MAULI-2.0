@@ -45,7 +45,11 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Install Capacitor
-        run: npm install @capacitor/core @capacitor/cli @capacitor/android --no-audit --no-fund
+        # Capacitor is pinned to 6: Capacitor 7 compiles with `javac` source
+        # release 21 and fails on this job's Java 17 with
+        # "error: invalid source release: 21". Pinning keeps the build
+        # reproducible instead of tracking whatever is latest on npm.
+        run: npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 --no-audit --no-fund
       - name: Add Android platform
         run: npx cap init mauli-app com.mauli.app --web-dir www
         continue-on-error: true
