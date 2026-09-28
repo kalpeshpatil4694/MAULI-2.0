@@ -193,6 +193,22 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     }catch(e){toast((e&&e.message)||'Download failed','err');}
   };
   window.__mauliDownloadProject=window.downloadZip;
+  // The Builds page had the same capped-artifact gate as the Downloads page: it printed
+  // "No code" for projects whose code-workspace artifact was outside /api/state's newest
+  // 100, so the APK/EXE buttons disappeared for most finished projects. Prefer the
+  // server's hasCode flag, which is derived from every artifact it holds.
+  window.loadBuilds=function(){
+    let h='';
+    for(const p of S.projects){
+      const hasCode=('hasCode' in p)?!!p.hasCode:S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
+      h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(p.name||p.objective||p.id)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(p.state)+'</div></div><div style="display:flex;gap:4px">';
+      if(hasCode)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android">📱 APK</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop">🖥️ EXE</button>';
+      else h+='<span class="badge badge-y">No code</span>';
+      h+='</div></div>';
+    }
+    const el=$('buildOut');
+    if(el)el.innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No projects</div>';
+  };
   schedulePoll(500);
 })();
 </script>`;
