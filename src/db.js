@@ -52,7 +52,7 @@ export async function d1Put(env, type, value, { critical = false } = {}) {
   const item = { ...value, createdAt: value.createdAt ?? now, updatedAt: now };
   try {
     const result = await env.DB.prepare(`INSERT INTO entities(type,id,data,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at`).bind(type, item.id, JSON.stringify(item), item.createdAt, now).run();
-    recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1));
+    recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1), 'entity:'+type);
     return item;
   } catch (error) {
     return { ...item, _d1WriteDeferred: true, _d1WriteError: error?.message ?? String(error) };
@@ -70,7 +70,7 @@ export async function d1Event(env, event, { critical = false } = {}) {
   if (!(await reserveD1Rows(env, 1, critical))) return { ...event, _d1WriteDeferred: true, _d1WriteLimit: true };
   try {
     const result = await env.DB.prepare('INSERT INTO events(id,type,payload,created_at) VALUES(?,?,?,?)').bind(event.id,event.type,JSON.stringify(event.payload),event.at).run();
-    recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1));
+    recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1), 'event:'+String(event?.type||'unknown'));
     return event;
   } catch (error) {
     return { ...event, _d1WriteDeferred: true, _d1WriteError: error?.message ?? String(error) };
@@ -155,8 +155,12 @@ async function saveMaintenanceState(env,data){
 // D1 free tier allows ~50 queries per invocation, so each prune run issues a few
 // set-based DELETEs with the row cap inside the statement, instead of hundreds of 90-id
 // chunks (which also blew the daily rows_written budget).
+// Pruning DELETEs count against rows_written too: the old caps (50K events + 30K results
+// per day) let maintenance alone burn 80% of the 100K/day free budget. With the telemetry
+// events that fed the tables now kept out of D1, 12K/day comfortably covers normal growth
+// while leaving the write budget for real pipeline work.
 let _lastEventPrune=0;
-export async function pruneEvents(env,{keep=3000,batchLimit=8000,maxStatements=2,minIntervalMs=2*60*60*1000,dailyCap=50000}={}){
+export async function pruneEvents(env,{keep=3000,batchLimit=6000,maxStatements=2,minIntervalMs=2*60*60*1000,dailyCap=12000}={}){
   if(!hasD1(env))return{pruned:0,reason:'no-d1'};
   const now=Date.now();
   const data=await maintenanceState(env);
@@ -179,7 +183,7 @@ export async function pruneEvents(env,{keep=3000,batchLimit=8000,maxStatements=2
       const result=await env.DB.prepare('DELETE FROM events WHERE id IN (SELECT id FROM events WHERE created_at < ? ORDER BY created_at ASC LIMIT ?)').bind(cutoff,take).run();
       const written=Number(result?.meta?.rows_written)||0;
       if(!written)break;
-      recordD1Write(env,written);pruned+=written;remaining-=written;
+      recordD1Write(env,written,'prune:events');pruned+=written;remaining-=written;
       if(written<take)break;
     }
     data.eventsAt=now;data.eventsDay=today;data.eventsDeleted=deletedToday+pruned;
@@ -190,7 +194,7 @@ export async function pruneEvents(env,{keep=3000,batchLimit=8000,maxStatements=2
 }
 // Prunes the 20KB-per-row command results, plus stale runs/verifications/builds — the
 // command_results table was the single largest storage consumer (8,592 rows / 175MB).
-export async function pruneOldResults(env,{keep={command_results:300,runs:400,verifications:400,builds:50},batchLimit=4000,maxStatements=1,minIntervalMs=2*60*60*1000,dailyCap=30000}={}){
+export async function pruneOldResults(env,{keep={command_results:300,runs:400,verifications:400,builds:50},batchLimit=4000,maxStatements=1,minIntervalMs=2*60*60*1000,dailyCap=8000}={}){
   if(!hasD1(env))return{pruned:0,reason:'no-d1'};
   const now=Date.now();
   const data=await maintenanceState(env);
@@ -212,7 +216,7 @@ export async function pruneOldResults(env,{keep={command_results:300,runs:400,ve
         const result=await env.DB.prepare('DELETE FROM entities WHERE type=? AND id IN (SELECT id FROM entities WHERE type=? AND updated_at < ? ORDER BY updated_at ASC LIMIT ?)').bind(type,type,cutoffRow.updated_at,take).run();
         const written=Number(result?.meta?.rows_written)||0;
         if(!written)break;
-        recordD1Write(env,written);pruned+=written;remaining-=written;total+=written;
+        recordD1Write(env,written,'prune:results');pruned+=written;remaining-=written;total+=written;
         if(written<take)break;
       }
       out[type]=pruned;
@@ -265,7 +269,7 @@ export async function cleanupD1(env, options = {}) {
       }
       const written=Number(result?.meta?.rows_written)||0;
       if(!written)break;
-      recordD1Write(env,written);deleted+=written;
+      recordD1Write(env,written,'prune:cleanup');deleted+=written;
       if(written<take)break;
     }
     return deleted;

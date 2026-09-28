@@ -8,10 +8,11 @@ const HIGH_LIMIT = 85000;
 function dayKey(date = new Date()) { return date.toISOString().slice(0, 10); }
 
 function state(env) {
-  if (!env.__MAULI_D1_QUOTA) env.__MAULI_D1_QUOTA = { day: dayKey(), reads: 0, writes: 0, reserved: 0 };
+  if (!env.__MAULI_D1_QUOTA) env.__MAULI_D1_QUOTA = { day: dayKey(), reads: 0, writes: 0, reserved: 0, bySource: {} };
   const s = env.__MAULI_D1_QUOTA;
+  if (!s.bySource) s.bySource = {};
   const day = dayKey();
-  if (s.day !== day) { s.day = day; s.reads = 0; s.writes = 0; s.reserved = 0; }
+  if (s.day !== day) { s.day = day; s.reads = 0; s.writes = 0; s.reserved = 0; s.bySource = {}; }
   return s;
 }
 
@@ -59,10 +60,24 @@ export function canWriteD1(env, critical = false, estimatedRows = 1) {
   return true;
 }
 
-export function recordD1Write(env, rows = 1) {
+export function recordD1Write(env, rows = 1, source = 'other') {
   const s = state(env);
-  s.writes = Math.min(DAILY_ROW_WRITE_LIMIT, Math.max(0, s.writes) + Math.max(1, Number(rows) || 1));
+  const n = Math.max(1, Number(rows) || 1);
+  s.writes = Math.min(DAILY_ROW_WRITE_LIMIT, Math.max(0, s.writes) + n);
+  // Per-source attribution (this isolate only) so /api/health shows WHERE rows_written
+  // goes: entity:tasks, event:task.completed, prune:events, ... Costs nothing extra.
+  const key = String(source || 'other');
+  s.bySource[key] = (Number(s.bySource[key]) || 0) + n;
   return d1QuotaSnapshot(env);
+}
+
+export function d1WriteSourcesSnapshot(env) {
+  const s = state(env);
+  const top = Object.entries(s.bySource)
+    .map(([source, rows]) => ({ source, rows }))
+    .sort((a, b) => b.rows - a.rows)
+    .slice(0, 25);
+  return { date: s.day, isolateWrites: s.writes, top, source: 'MAULI tracked writes by source (this isolate, not Cloudflare account meter)' };
 }
 
 export { DAILY_ROW_READ_LIMIT, DAILY_ROW_WRITE_LIMIT, SAFETY_LIMIT, WARN_LIMIT, HIGH_LIMIT };

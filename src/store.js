@@ -2,6 +2,18 @@ import { id, now } from './core.js';
 import { hasD1, d1List, d1Put, d1Event, d1Events } from './db.js';
 
 const CRITICAL_TYPES = new Set(['projects','tasks','runs','command_results','verifications','artifacts','build_locks','approvals']);
+// Events whose payload's entity already has its own row (agents, runs, executions,
+// memory, chat messages, activities, tool runs). Persisting them to D1 costs one
+// rows_written per event on insert AND another on prune-delete, on top of the entity
+// upsert that already recorded the same fact. They stay in the in-memory feed for the
+// live dashboard; only the D1 copy is skipped. This cuts roughly two thirds of the
+// per-task event writes that pushed the account to 95% of the 100K/day free budget.
+const MEMORY_ONLY_EVENTS = new Set([
+  'agent.updated', 'agent.activity', 'agent.sub_agent_created',
+  'execution.started', 'execution.completed', 'execution.failed', 'execution.duplicate_prevented',
+  'memory.created', 'tool.executed',
+  'chat.user_message', 'chat.assistant_response',
+]);
 // Tables the dashboard counters are built from. If one of these fails to load the isolate
 // must not advertise itself as hydrated, or the counters would render an empty store.
 const HYDRATION_CRITICAL = new Set(['projects','tasks','artifacts','agents']);
@@ -52,7 +64,7 @@ export class MemoryStore {
   }
   addEvent(type,payload) {
     const event={id:id('evt'),type,payload,at:now()}; this.events.push(event); if(this.events.length>1000)this.events.shift();
-    if(hasD1(this.env)) {
+    if(hasD1(this.env) && !MEMORY_ONLY_EVENTS.has(type)) {
       const critical=type.startsWith('command.')||type.startsWith('project.')||type.startsWith('task.')||type.startsWith('verification.')||type.startsWith('artifact.');
       let write;
       write=d1Event(this.env,event,{critical}).then(result=>{

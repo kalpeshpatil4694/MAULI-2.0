@@ -13,7 +13,7 @@ import './functional-code-executor.js';
 export { registerExecutor, listExecutors, grantExecutor } from './executor-registry.js';
 
 const EXECUTION_LEASE_MS = 90_000;
-const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_INTERVAL_MS = 60_000;
 const MAX_RECOVERY_ATTEMPTS = 3;
 
 function persistExecution(record) { store.put('executions', { ...record, status:record.state, executionId:record.id }); return record; }
