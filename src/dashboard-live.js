@@ -99,8 +99,17 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       modal.textContent=txt;
       const closeBtn=document.createElement('button');closeBtn.textContent='Close';closeBtn.style.cssText='position:sticky;top:0;float:right;background:var(--accent);color:#000;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:600';
       closeBtn.onclick=()=>overlay.remove();
+      // The details view was the only place a user landed after a project finished,
+      // and it had no way to get the files out. det.artifacts is this project's real
+      // artifact list — unlike /api/state, which only ships the newest 100 of 429,
+      // so it correctly decides whether /api/app-files will have anything.
+      const dlBtn=document.createElement('button');
+      const hasFiles=Array.isArray(det.artifacts)&&det.artifacts.some(a=>a&&a.type==='code-workspace');
+      dlBtn.textContent=hasFiles?'📥 Download deliverable':'No code files';
+      dlBtn.style.cssText='position:sticky;top:0;float:right;background:var(--accent2);color:#fff;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-weight:600;margin-right:8px'+(hasFiles?'':';opacity:.6;cursor:default');
+      dlBtn.onclick=()=>{if(!hasFiles)return;const dl=window.__mauliDownloadProject||window.downloadZip;if(dl)dl(p.id);else alert('Download is unavailable in this dashboard build.');};
       overlay.onclick=(e)=>{if(e.target===overlay)overlay.remove()};
-      modal.prepend(closeBtn);
+      modal.prepend(dlBtn);modal.prepend(closeBtn);
       overlay.appendChild(modal);document.body.appendChild(overlay);
     }catch(e){alert('Error loading project: '+e.message)}
   }
@@ -127,6 +136,63 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       schedulePoll(state.retrySoon?2000:(active?5000:20000));
     },delay);
   }
+  // ── Download fixes (2026-09-28) ──────────────────────────────────────────
+  // loadDl() only rendered a Download button when the project's code-workspace
+  // artifact happened to be in /api/state, which returns just the newest 100 of
+  // 429 artifacts — so finished projects showed "No code" and produced no way to
+  // download. downloadZip() then collapsed every failure into a bare "No files",
+  // which hid both "401 founder key missing" and "404 this project has no code".
+  // Both are function declarations, so renderPage() and the delegated click
+  // handler resolve them at call time and these replacements take effect.
+  async function fetchProjectFiles(pid,retried){
+    const r=await fetch('/api/app-files?projectId='+encodeURIComponent(pid),{headers:window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{}});
+    if(r.status===401||r.status===503){
+      if(!retried&&window.__mauliRequestFounderKey&&window.__mauliRequestFounderKey())return fetchProjectFiles(pid,true);
+      throw new Error('Founder key needed — paste it to download');
+    }
+    if(!r.ok){
+      let body={};try{body=await r.json();}catch(_){ }
+      const m=String(body.error||body.message||'');
+      if(/No code artifacts/i.test(m))throw new Error('This project has no code files to download');
+      if(/No files found/i.test(m))throw new Error('This project has no downloadable files');
+      throw new Error(m||('Download failed ('+r.status+')'));
+    }
+    const d=await r.json();
+    return Array.isArray(d.files)?d.files:[];
+  }
+  function saveProjectFiles(files){
+    for(let i=0;i<files.length;i++){
+      const f=files[i];
+      const url=URL.createObjectURL(new Blob([f.content],{type:'text/plain'}));
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=String(f.path||('file-'+i)).split('/').pop()||('file-'+i+'.txt');
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+    }
+  }
+  window.loadDl=function(){
+    let h='';
+    for(const p of S.projects){
+      // State class is inlined because this layer's own badge() helper returns a
+      // full <span> (the dashboard's badge() only returns the g/b/a/r/y suffix) and
+      // is shadowed inside this closure — using it here produced a nested span.
+      const cls=p.state==='completed'?'g':p.state==='active'?'b':p.state==='planning'?'a':p.state==='escalated'?'r':'y';
+      h+='<div style="padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;align-items:center;justify-content:space-between"><div style="flex:1"><b style="font-size:13px">'+esc(p.name||p.objective||p.id)+'</b><div style="font-size:10px;color:var(--text2);margin-top:2px"><span class="badge badge-'+cls+'">'+esc(p.state)+'</span>'+(p.taskCount?' '+p.taskCount+' tasks':'')+'</div></div><button class="btn btn-g btn-s dl-btn" data-pid="'+esc(p.id)+'">📥 Download</button></div>';
+    }
+    const list=$('dlList');
+    if(list)list.innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No projects</div>';
+  };
+  window.downloadZip=async function(pid){
+    toast('Loading...','info');
+    try{
+      const files=await fetchProjectFiles(pid,false);
+      if(!files.length){toast('This project has no downloadable files','err');return;}
+      saveProjectFiles(files);
+      toast(files.length===1?'Downloaded 1 file':('Downloaded '+files.length+' files'),'ok');
+    }catch(e){toast((e&&e.message)||'Download failed','err');}
+  };
+  window.__mauliDownloadProject=window.downloadZip;
   schedulePoll(500);
 })();
 </script>`;

@@ -474,6 +474,9 @@ function founderHeaders(h){const k=founderKey();return k?{...h,'x-mauli-founder'
 function founderAuthNeeded(r){return r&&(r.status===401||r.status===503)}
 function requestFounderKey(){try{const k=window.prompt('MAULI founder key required. Paste MAULI_FOUNDER_KEY:');if(k&&k.trim()){setFounderKey(k.trim());return true}}catch(_){}return false}
 window.__mauliFounderKey=founderKey;window.__mauliSetFounderKey=setFounderKey;window.__mauliFounderHeaders=founderHeaders;
+// downloadZip lives in this script; the injected live layer calls it for the
+// project-details modal's Download button (function declarations are hoisted).
+window.__mauliDownloadProject=downloadZip;window.__mauliRequestFounderKey=requestFounderKey;
 async function api(path,opts={},retried=false){
   try{const m=(opts.method||'GET').toUpperCase();const hdrs={...(opts.headers||{})};
     if(m==='POST'||m==='PUT'||m==='PATCH')hdrs['Content-Type']='application/json';
