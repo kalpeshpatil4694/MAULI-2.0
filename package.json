@@ -1,14 +1,17 @@
 {
-  "name": "mauli2.0",
-  "version": "2.0.0",
-  "private": true,
-  "type": "module",
+  "name": "note-taking-app",
+  "version": "1.0.0",
+  "description": "A small note taking web app",
+  "main": "server.js",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "test": "node --test"
+    "start": "node server.js"
   },
-  "devDependencies": {
-    "wrangler": "^4.0.0"
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.17.1",
+    "mongoose": "^6.2.10"
   }
 }
