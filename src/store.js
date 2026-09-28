@@ -1,7 +1,12 @@
 import { id, now } from './core.js';
 import { hasD1, d1List, d1Put, d1Event, d1Events } from './db.js';
 
-const CRITICAL_TYPES = new Set(['projects','tasks','runs','command_results','verifications','artifacts','build_locks','approvals']);
+// 'builds' belongs here: /api/build-app writes the record from one isolate and
+// /api/build-status reads it from whichever isolate answers the dashboard poll.
+// As a non-critical write it was dropped whenever the write budget was tight, so
+// the build existed on GitHub and in one isolate's memory but was simply not in
+// D1 for the next request — a permanent 404 on a build that was running.
+const CRITICAL_TYPES = new Set(['projects','tasks','runs','command_results','verifications','artifacts','builds','build_locks','approvals']);
 // Events whose payload's entity already has its own row (agents, runs, executions,
 // memory, chat messages, activities, tool runs). Persisting them to D1 costs one
 // rows_written per event on insert AND another on prune-delete, on top of the entity

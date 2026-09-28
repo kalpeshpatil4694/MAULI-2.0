@@ -19,6 +19,12 @@ test('the repository ships a push-triggered workflow for the build branches', ()
   assert.match(buildWorkflow, /actions\/upload-artifact@v4/);
   // Every project file is pushed separately, so only the last run should finish.
   assert.match(buildWorkflow, /cancel-in-progress:\s*true/);
+  // Capacitor 7 needs `javac` source release 21 and this job runs Java 17, so an
+  // unpinned install fails with "error: invalid source release: 21".
+  assert.match(buildWorkflow, /@capacitor\/core@6/);
+  assert.match(buildWorkflow, /@capacitor\/cli@6/);
+  assert.match(buildWorkflow, /@capacitor\/android@6/);
+  assert.match(buildWorkflow, /java-version:\s*17/);
 });
 
 test('the HTTP path hydrates before serving instead of racing background hydration', () => {
@@ -55,6 +61,17 @@ test('build-app refuses to start a build that Capacitor cannot package', () => {
 test('build-status falls back to D1 when the capped in-memory list lacks the build', () => {
   assert.match(index, /async function findBuild\(buildId, env\)/);
   assert.match(index, /d1Get\(env, 'builds', buildId\)/);
+});
+
+test('the build record is written as a critical row so it survives the write budget', () => {
+  // /api/build-app writes the record on one isolate and /api/build-status reads it
+  // from whichever isolate answers the next dashboard poll. Written non-critically
+  // it was dropped whenever the write budget was tight, so a build that really was
+  // running on GitHub answered 404 forever.
+  const store = readFileSync(new URL('../src/store.js', import.meta.url), 'utf8');
+  const critical = /const CRITICAL_TYPES = new Set\(\[([^\]]*)\]\)/.exec(store)?.[1] ?? '';
+  assert.match(critical, /'builds'/, 'builds must be a critical write');
+  assert.match(critical, /'build_locks'/);
 });
 
 test('collectProjectFiles can be given the authoritative artifact list', () => {
