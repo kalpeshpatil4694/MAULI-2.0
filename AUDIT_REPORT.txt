@@ -578,3 +578,84 @@ account number.
        the worker; /api/health → d1WriteSources is isolate-scoped and the
        Cloudflare dashboard holds the authoritative per-table numbers.
     🟡 Workers AI neurons (10K/day) remains the tightest quality limit.
+
+════════════════════════════════════════════════════════════════════
+SECTION 15 — DASHBOARD UI + DELIVERABLE DOWNLOAD AUDIT (2026-09-28)
+Reported symptom: after a command finished, the project could not be
+downloaded from the dashboard, and the Download button was missing from
+the project card and from the report drawer.
+
+  ROOT CAUSE
+  /api/state caps the artifact list it ships to the browser at the newest
+  100 rows, but 430 artifacts exist in D1. The dashboard decided whether a
+  project had shipped code with
+
+    S.artifacts.some(a => a.projectId === p.id && a.type === 'code-workspace')
+
+  over that capped sample. For the reported project
+  (project_ce306647-d3d6-46e2-ad6f-c59b04047347) the check evaluated to
+  0, so loadDl() / renderProjects() / loadBuilds() all printed "No code"
+  and rendered no download, preview, APK or EXE button at all. The drawer
+  then compounded it: downloadZip() collapsed every failure — missing
+  founder key, no artifacts, no files — into one bare "No files" toast.
+  The same cap made the Overview and Monitor grids read "300 tasks /
+  100 artifacts" while the header correctly showed 738 / 430.
+
+  FIXES (PR #65, PR #66 — deployed)
+  ✅ src/index.js — codeProjectIds() derives a `hasCode` boolean per
+     project from every artifact the server holds and ships it in the
+     state payload; safeTypeCounts() returns true store-wide
+     projects/tasks/artifacts counts under summary.totals via one
+     index-backed GROUP BY (cold isolates only, once per 5 s snapshot
+     cache, omitted when D1 is unavailable).
+  ✅ src/dashboard.js — Projects rows, Overview and Monitor prefer the
+     server values and keep the capped payload only as a fallback.
+  ✅ src/dashboard-live.js — the injected loadDl / downloadZip /
+     loadBuilds overrides (they are plain function declarations, so
+     renderPage() and the delegated click handler resolve them at call
+     time) use hasCode and report the real reason: 401/503 retries once
+     through requestFounderKey() and then says the founder key is
+     needed, 404 "No code artifacts" says the project has no code files,
+     and an empty list says there is nothing to download.
+  ✅ The base loadDl/loadBuilds in dashboard.js still read the capped
+     sample, but both are overridden by the live layer that
+     src/worker.js injects into "/" via HTMLRewriter, so the served page
+     never uses them.
+  ✅ tests/project-download.test.js (4) + tests/state-code-flag.test.js
+     (2) lock in the server flag, the renderer preference and the
+     distinct error messages.
+
+  VERIFIED LIVE (after the CI deploy of PR #66)
+    GET /                      200, 100,532 bytes, contains
+                               window.loadDl / window.downloadZip /
+                               window.loadBuilds / "Download deliverable"
+    GET /api/state (key)       projects 79, tasks 300, artifacts 100
+                               summary.totals = 79 / 738 / 430
+                               target project hasCode = true
+    GET /api/app-files (key)   200 — server.js, package.json, README.md
+    GET /api/app-files (no key) 401
+    GET /api/usage (no key)    401
+    tests                      221/221 pass
+    wrangler deploy --dry-run  clean
+
+  HOW TO DOWNLOAD FROM THE DASHBOARD
+    Founder key is required. Enter MAULI_FOUNDER_KEY once — the
+    dashboard stores it in sessionStorage and attaches
+    `x-mauli-founder` to every request. The key is never written to
+    localStorage or a cookie.
+    UI:  Projects → 📥 on the row, or the Downloads page → 📥 Download,
+         or 📄 Details → 📥 Download deliverable in the report drawer.
+    CLI: curl -H 'x-mauli-founder: $MAULI_FOUNDER_KEY' \
+           'https://mauli-2-0.kalpeshpatil4694.workers.dev/api/app-files?projectId=<projectId>'
+
+  STILL OPEN
+    🟡 MAULI_FOUNDER_KEY is a short, human-memorable string and is the
+       only barrier on /api/reset, /api/cleanup, /api/webhooks and
+       /api/approvals/*. Rotate it with
+       `npx wrangler secret put MAULI_FOUNDER_KEY` and prefer a random
+       64-hex value. keep_vars:true means the rotation survives deploys.
+    🟡 /api/state and /api/results are still public reads of internal
+       project/task data, and /api/chat is still unrate-limited while
+       calling Workers AI.
+    🟡 Account-level rows_written per table is still not queryable from
+       inside the worker; /api/health → d1WriteSources is isolate-scoped.
