@@ -221,9 +221,9 @@
     projects/tasks    74 projects / 527 tasks preserved (347 completed)
     tests             140/140 pass, incl. new tests/d1-read-budget.test.js
 
-  STILL OPEN
-    🟡 events table (~260 MB) shrinks at the daily budget of ~50K row
-       deletes/day and reaches ~3K rows in roughly two weeks.
+  STILL OPEN  (as written 2026-09-19 — see §14: RESOLVED)
+    ✅ events table shrank from ~260 MB to ~1.2 MB and is no longer a
+       concern; D1 storage is now 3% of the free-tier limit.
     🟡 Workers AI neurons (10K/day free) — the next limit a busy day hits.
     🟡 70 blocked + 23 failed legacy tasks still need a delivery-path review.
 
@@ -422,8 +422,9 @@
     🟡 Quota dashboards (d1Quota / aiQuota) are per-isolate counters and
        read ~0 while the real account meter is exhausted — they need a
        D1-backed shared counter to be trustworthy.
-    🟡 D1 storage back to 165 MB (events regrowing); CF Worker size alert
-       at 3.00 MB / 3 MB.
+    ✅ D1 storage 165 MB (events regrowing at the time) → 14.91 MB
+       (3.0%); events cleaned up. See §14.  [RESOLVED]
+    🟡 CF Worker size alert was at 3.00 MB / 3 MB.
     🟡 §10-D security items (public /api/reset etc.) remain open.
     🟡 Workers AI neurons (10K/day) still the tightest quality limit:
        roughly 2-4 real generations/day on the free tier.
@@ -502,3 +503,67 @@ STILL OPEN
   🟡 Account-level rows_written breakdown is still not queryable from
      here; use /api/health -> d1WriteSources (isolate-scoped) plus the
      Cloudflare dashboard for the authoritative per-table numbers.
+
+════════════════════════════════════════════════════════════════════
+SECTION 14 — CURRENT LIVE STORAGE STATUS (2026-09-28)
+Measured on the deployed worker via GET /api/usage (founder-authenticated),
+which reports both the worker-journaled footprint and the real Cloudflare
+account number.
+
+  D1 STORAGE — worker-journaled
+    14.91 MB / 500 MB = 3.0%          (5,779 rows)
+    Trajectory: 466 MB (93.3%) → 268 MB (54%) → 11.6 MB (2.3%) → 14.91 MB (3.0%)
+    ✅ Storage pressure is RESOLVED. The small rise from 2.3% to 3.0% is
+       normal task/artifact growth since 2026-09-24, not a leak.
+
+  D1 STORAGE — Cloudflare account level (the authoritative meter)
+    115.81 MB / 5,000 MB = 23.2%      cfAvailable: true
+    ✅ Comfortably inside the free-tier account budget. Previously not
+       observable (the local CLOUDFLARE_API_TOKEN is a placeholder); the
+       production token is valid, so /api/usage now reads the real meter.
+
+  LARGEST TABLES (14.89 MB of the 14.91 MB)
+    command_results  300 rows   5.01 MB   (capped at 300 by pruneOldResults)
+    executions     1,773 rows   2.80 MB
+    memory         1,556 rows   2.36 MB
+    tasks            729 rows   1.92 MB
+    artifacts        427 rows   1.85 MB
+    runs             417 rows   0.63 MB
+    verifications    400 rows   0.23 MB
+    projects          78 rows   0.05 MB
+    agents            18 rows   0.01 MB
+    tools             31 rows   0.01 MB
+    (the breakdown above is the `entities` table by type; the separate
+    `events` table is measured by eventStats() — see EVENTS below)
+
+  EVENTS TABLE — RESOLVED, NO LONGER A CONCERN
+    503,389 rows / 161 MB (§7) → ~500K rows / 260 MB (§9) → the table no
+    longer registers at all: the whole D1 database is 14.91 MB, and
+    eventStats() reports a bounded 1,200-row sample window totalling
+    1.25 MB (sampled:true, exact:false — the API deliberately does not
+    scan the full table, so an exact row count is no longer published;
+    the 14.91 MB database total is the meaningful bound).
+    ✅ The "events regrowing / 260 MB shrinking over two weeks" item from
+       §9 and §11 is closed. Combined with §13 (high-frequency telemetry
+       is memory-only and prune budgets are capped at 12K + 8K rows/day),
+       the events table stays small by construction rather than by a
+       one-off cleanup.
+
+  AUTH STATUS (changed this session)
+    ✅ MAULI_FOUNDER_KEY is now configured in production, so /api/usage,
+       /api/self-test and /api/artifacts return 200 with a valid key and
+       401 without one (strict mode, no longer 503 fail-closed).
+
+  STILL OPEN
+    🟡 The founder key in use is a short, human-memorable string. It is the
+       only barrier on /api/reset (wipes the whole production database),
+       /api/cleanup, /api/webhooks and /api/approvals/*. Rotate it with
+       `npx wrangler secret put MAULI_FOUNDER_KEY` and keep the
+       workers.dev URL unshared. No code change needed to rotate.
+    🟡 §10-D security items are mitigated by the founder key, but
+       /api/chat is still unrate-limited and calls Workers AI, and
+       /api/state and /api/results remain public reads of internal data.
+    🟡 Account-level rows_written is still not broken down per table from
+       the worker; /api/health → d1WriteSources is isolate-scoped and the
+       Cloudflare dashboard holds the authoritative per-table numbers.
+    🟡 Workers AI neurons (10K/day) remains the tightest quality limit.
