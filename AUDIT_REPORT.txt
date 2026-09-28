@@ -427,3 +427,78 @@
     🟡 §10-D security items (public /api/reset etc.) remain open.
     🟡 Workers AI neurons (10K/day) still the tightest quality limit:
        roughly 2-4 real generations/day on the free tier.
+
+════════════════════════════════════════════════════════════════════
+SECTION 13 — D1 ROWS_WRITTEN DAILY CAP AUDIT (2026-09-28)
+Alert: "D1 operations are nearing the daily cap — rows_written,
+limit 100,000, 95% reached."
+
+ROOT CAUSES FOUND (each one multiplied by isolate count)
+  1. src/tools.js — registerTool() wrote registeredAt: now() on every
+     call. ensureBuiltinTools() runs on EVERY isolate start, so all
+     ~32 built-in tool rows counted as "changed" on each cold start.
+     Hundreds of isolates/day x 32 rows = the single biggest
+     amplifier. store.put() already skips no-op writes, so the only
+     thing making them "changed" was the fresh timestamp.
+  2. src/store.js — 11 high-frequency telemetry event types
+     (agent.updated, execution.*, memory.created, tool.executed,
+     chat.*, agent.activity, sub_agent_created, duplicate_prevented)
+     were written to D1 AND then deleted again by pruneEvents().
+     Each event cost 1 write on insert + 1 write on delete.
+  3. src/agents.js — seed heartbeat every 5 min per agent x every
+     agent x every isolate that hydrated.
+  4. src/execution.js — running-task heartbeat every 30 s; a single
+     long run could burn thousands of rows in one execution.
+  5. src/tasks.js + src/scheduler.js — completeTask()/failTask()
+     each did a second store.put('tasks', …) just to attach
+     verificationId after the fact: 2 writes per task finish.
+  6. src/db.js — pruneEvents/pruneOldResults DELETEs also count as
+     rows_written; caps were 8 000 + 50 000 + 30 000 = up to 88 000
+     rows/day of pure deletion.
+
+FIXES APPLIED
+  ✅ src/tools.js — registerTool() reuses existing registeredAt and
+     createdAt, so a warm isolate re-registers 0 rows.
+  ✅ src/store.js — MEMORY_ONLY_EVENTS set (the 11 types above) keeps
+     them in the in-memory activity feed but skips D1 entirely;
+     lifecycle events (task.completed, command.completed, …) still
+     persist. Saves 2 rows per event.
+  ✅ src/agents.js — SEED_HEARTBEAT_INTERVAL_MS 5 min -> 15 min.
+  ✅ src/execution.js — HEARTBEAT_INTERVAL_MS 30 s -> 60 s.
+  ✅ src/tasks.js — completeTask(taskId, result, extra) and
+     failTask(taskId, error, extra) fold extra fields into the SAME
+     store.put (default param keeps the old 3-arg call sites valid).
+  ✅ src/scheduler.js — runTask() passes {verificationId} through
+     those calls instead of re-putting the task row.
+  ✅ src/db.js — pruneEvents {batchLimit 6000, dailyCap 12000},
+     pruneOldResults {dailyCap 8000}. Bounded by maintenanceState,
+     so a single day can no longer spend 88K rows on deletion.
+  ✅ src/d1-quota.js — recordD1Write(env, rows, source) now keeps a
+     per-source breakdown; new export d1WriteSourcesSnapshot(env).
+     All call sites tagged ('entity:<type>', 'event:<type>',
+     'prune:events', 'prune:results', 'prune:cleanup').
+  ✅ src/index.js — /api/health returns d1WriteSources so the next
+     alert can be diagnosed from inside the worker (the account
+     GraphQL/REST analytics are unreachable from this environment:
+     the local CLOUDFLARE_API_TOKEN is not a real token).
+
+VERIFICATION
+  ✅ node --test            215/215 pass
+  ✅ node --test tests/*.test.js  189 pass
+  ✅ node --check on index/orchestrator/store/db/scheduler/tasks/
+     execution/agents/d1-quota
+  ✅ npx wrangler deploy --dry-run  586.53 KiB
+  ✅ tests/d1-write-budget.test.js (new, 5 tests) — asserts warm-isolate
+     tool re-registration writes 0 rows, memory-only events persist 0
+     event rows while lifecycle events still do, a second seedAgents()
+     writes nothing, write accounting attributes rows per source, and
+     pruneEvents on 20k events prunes exactly 12000 (daily-cap guard).
+
+STILL OPEN
+  🟡 These fixes are NOT deployed yet — the 95% alert will recur
+     until this branch is committed and merged to main (CI deploys).
+  🟡 MAULI_FOUNDER_KEY is still unset in production, so PR #61 cannot
+     merge and /api/usage, /api/self-test, /api/artifacts return 503.
+  🟡 Account-level rows_written breakdown is still not queryable from
+     here; use /api/health -> d1WriteSources (isolate-scoped) plus the
+     Cloudflare dashboard for the authoritative per-table numbers.
