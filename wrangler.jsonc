@@ -6,6 +6,11 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  // Without this, every `wrangler deploy` deletes all vars and secrets that
+  // are not in this file, so the CI deploy silently removed MAULI_FOUNDER_KEY
+  // (set via `wrangler secret put` / the dashboard) on 2026-09-28 and
+  // /api/usage fell back to 503. keep_vars leaves stored secrets untouched.
+  "keep_vars": true,
   "observability": {
     "enabled": true
   },

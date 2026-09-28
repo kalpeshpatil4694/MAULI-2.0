@@ -550,11 +550,22 @@ account number.
        one-off cleanup.
 
   AUTH STATUS (changed this session)
-    ✅ MAULI_FOUNDER_KEY is now configured in production, so /api/usage,
-       /api/self-test and /api/artifacts return 200 with a valid key and
-       401 without one (strict mode, no longer 503 fail-closed).
+    MAULI_FOUNDER_KEY was set in production and verified working:
+    /api/usage returned 200 with a valid key and 401 with a missing or
+    wrong one. Then the next CI deploy silently removed it again —
+    `wrangler deploy` deletes every var and secret that is not in
+    wrangler.jsonc unless keep_vars is set, so a key added via
+    `wrangler secret put` or the dashboard does not survive a deploy.
+    ✅ Fixed in wrangler.jsonc with "keep_vars": true, so stored secrets
+       now survive CI deploys. Until the key is re-added,
+       /api/usage, /api/self-test and /api/artifacts are back to 503
+       fail-closed, which is the safe direction.
 
   STILL OPEN
+    🟡 MAULI_FOUNDER_KEY must be re-added with
+       `npx wrangler secret put MAULI_FOUNDER_KEY` (or in the dashboard).
+       Do it AFTER the keep_vars fix is deployed, otherwise the next CI
+       deploy removes it again.
     🟡 The founder key in use is a short, human-memorable string. It is the
        only barrier on /api/reset (wipes the whole production database),
        /api/cleanup, /api/webhooks and /api/approvals/*. Rotate it with
