@@ -659,3 +659,97 @@ the project card and from the report drawer.
        calling Workers AI.
     🟡 Account-level rows_written per table is still not queryable from
        inside the worker; /api/health → d1WriteSources is isolate-scoped.
+
+16. ANDROID APK BUILD PATH (2026-09-28) — "GIVE ME A COMMAND AND I GIVE
+    YOU AN APK" WAS NOT TRUE. HERE IS WHY, AND WHAT WAS FIXED.
+────────────────────────────────────────────────────────────
+  The question was whether a command could end in a real APK file on an
+  Android phone. It could not. The dashboard showed 📱 APK buttons, the
+  route existed, the workflow text was generated — and no build ever ran.
+
+  SYMPTOM
+    POST /api/build-app returned
+      404 {"message":"No code artifact found for this project. Run the
+            command first."}
+    for projects that /api/state confidently reported as hasCode:true and
+    that /api/app-files happily returned 30 files for. No GitHub Actions
+    run was ever created for any build.
+
+  ROOT CAUSE 1 — the build never had a workflow to run
+    /api/build-app pushed the generated project files to
+    build/project-<id> and then tried to push its own copy of
+    .github/workflows/build-apps.yml, so that pushing files would trigger
+    a build. That PUT's response was never inspected:
+
+      await fetch('.../contents/.github/workflows/build-apps.yml',
+                  { method:'PUT', ... });   // no .ok check, no error
+
+    Writing under .github/workflows needs a token scope the worker's
+    GITHUB_TOKEN does not have, so the PUT failed every time and the
+    failure was discarded. The branch ended up with www/ and friends and
+    no workflow — and the API replied "8 files pushed to GitHub. Build
+    will start shortly.", which was untrue. No run, no APK, forever.
+    Confirmed on the live worker: after a real build the branch had
+    www/index.html, www/app.js, www/styles.css and no build-apps.yml,
+    while `gh run list --branch <build branch>` was empty.
+
+  ROOT CAUSE 2 — the routes read a row-capped cache written by another isolate
+    /api/build-app, /api/app-files, /api/preview-app and /api/build-status
+    all resolved their data from store.list(...). That store is a hydrated
+    cache with per-type row caps (artifacts 600, builds 200) and, on a cold
+    isolate, is empty until hydration finishes. initOnce() started
+    hydration with ctx.waitUntil and returned immediately, so the first
+    requests of every new isolate were answered from that empty store:
+      • a project whose files were already in D1 reported "no code
+        artifact", while /api/state (a separate D1 path) said hasCode:true;
+      • /api/build-status answered 404 "Build not found" for a build that
+        existed and was mid-flight on GitHub.
+    Live evidence: polling one buildId gave 404, 404, 200, 404, 200, 404,
+    200 — the same build, alternating, purely on which isolate answered.
+
+  FIXES
+    ✅ .github/workflows/build-apps.yml now lives in the repository and
+       triggers on `push` to `build/**`, so the file pushes the worker can
+       already make are enough to start packaging. It runs Capacitor,
+       builds a debug APK, verifies it and uploads it as the
+       `android-apk` artifact. concurrency + cancel-in-progress collapses
+       the run storm caused by pushing the project one file at a time.
+    ✅ initOnce() now awaits store.hydrateOnce() instead of backgrounding
+       it. Same tables, same cost, but no route can be answered from an
+       unhydrated store any more. hydrateOnce() is single-flight, so only
+       the first request of an isolate pays.
+    ✅ /api/build-app resolves its artifact list through
+       projectCodeArtifacts(), which falls back to a direct D1 query when
+       the cache has nothing for the project, and hands that list to
+       collectProjectFiles() so the authoritative artifacts are what gets
+       pushed rather than a second cache read.
+    ✅ findBuild() falls back to a direct D1 read by id, so a build
+       started on a previous isolate still has a status.
+    ✅ /api/build-app now refuses early (422) when the project has no
+       www/index.html or no package.json, naming the actual files it did
+       find — instead of pushing a branch whose build was always going to
+       die on `test -s www/index.html`.
+    ✅ collectProjectFiles() de-duplicates repeated paths, newest content
+       winning. /api/app-files returned 30 entries for 8 real files.
+    ✅ tests/build-app-source-lookup.test.js (8 tests) locks all of this in.
+
+  A NOTE ON ONE FALSE ALARM
+    The first 404 looked like a code bug and, in the end, half of it was
+    not: the earlier test used a truncated project id
+    (project_a191fe03-cd96-4ce6 instead of the real
+    project_a191fe03-cd96-4ce6-a54a-4948e8c2b818). The truncation is
+    worth knowing about because the dashboard renders full ids and a
+    hand-copied id is easy to clip. The cold-isolate bug in root cause 2
+    was real and independently verified.
+
+  STILL OPEN
+    🟡 The worker still attempts its own workflow PUT and still discards
+       the response. It is now harmless (the repository workflow wins) but
+       the discard itself is unfixed, and it needs a GITHUB_TOKEN with the
+       workflows scope to ever succeed.
+    🟡 Builds consume GitHub Actions minutes (~10 min per APK). A free
+       public repo gets 2,000 min/month, so a heavy day of rebuilds will
+       hit it and the button will start failing on quota, not on code.
+    🟡 The generated debug APK is installable but unsigned, so Android
+       shows an "unknown source" warning. A release APK needs a keystore
+       in a secret, which is a deliberate next step, not an oversight.

@@ -59,6 +59,25 @@ export async function d1Put(env, type, value, { critical = false } = {}) {
   }
 }
 
+// Read a single entity straight from D1. The in-memory store is a hydrated,
+// row-capped cache, so on a cold isolate `store.list(...)` can be missing rows
+// that definitely exist in D1. Routes that must always answer for a specific
+// record (build status, project deliverable files) use this as a fallback so
+// they never report "not found" for data that is really there.
+export async function d1Get(env, type, id) {
+  if (!hasD1(env) || !type || !id) return null;
+  try {
+    const row = await env.DB
+      .prepare('SELECT data FROM entities WHERE type = ? AND id = ? LIMIT 1')
+      .bind(String(type), String(id))
+      .first();
+    recordD1Read(env, 1);
+    return row?.data ? JSON.parse(row.data) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function d1Events(env, limit = 50) {
   const safeLimit = Math.min(50, Math.max(1, Number(limit) || 50));
   const result = await env.DB.prepare('SELECT id,type,payload,created_at FROM events ORDER BY created_at DESC LIMIT ?').bind(safeLimit).all();

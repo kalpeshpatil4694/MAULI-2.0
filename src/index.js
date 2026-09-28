@@ -9,7 +9,7 @@ import { planCommand, resumeApprovedCommand } from './orchestrator.js';
 import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { collectProjectFiles, createZip } from './zip.js';
-import { ensureSchema, hasD1, d1List, d1Events, claimBuildVersion, getBuildVersion, getUsageReport, cleanupD1 } from './db.js';
+import { ensureSchema, hasD1, d1List, d1Get, d1Events, claimBuildVersion, getBuildVersion, getUsageReport, cleanupD1 } from './db.js';
 import { recoverRunningExecutions } from './execution.js';
 import { requireFounder, checkRateLimit, checkCommandRateLimit, getRateLimitStats } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
@@ -38,6 +38,33 @@ import { getD1UsageFromAPI, getWorkerAnalytics, getKVUsage, getFullUsageReport, 
 function artifactJson(artifact) { return artifact ? ok({ artifact }) : fail('Artifact not found',404); }
 function isIsolatedTestEnv(env) { return env?.SKIP_RESULT_PERSISTENCE === true || env?.SKIP_RESULT_PERSISTENCE === 'true' || env?.MAULI_TEST_MODE === true || env?.MAULI_TEST_MODE === 'true'; }
 
+// store.list() is a hydrated, row-capped cache. On a cold isolate the artifacts
+// table is only partially loaded, so a project whose code really exists in D1
+// could report "no code artifact" purely because of which rows made it into
+// this isolate. When the cache has nothing for the project we ask D1 directly.
+async function projectCodeArtifacts(projectId, env) {
+  const cached = store.list('artifacts').filter(a => a.projectId === projectId && a.type === 'code-workspace');
+  if (cached.length) return cached;
+  if (!hasD1(env) || !projectId) return cached;
+  try {
+    const rows = await env.DB.prepare(
+      "SELECT data FROM entities WHERE type = 'artifacts' ORDER BY updated_at DESC LIMIT 3000"
+    ).all();
+    const all = (rows.results ?? []).map(r => JSON.parse(r.data));
+    return all.filter(a => a.projectId === projectId && a.type === 'code-workspace');
+  } catch {
+    return cached;
+  }
+}
+
+// Same idea for a single build record: the in-memory list is capped, so a build
+// started on a previous isolate could be invisible and report a false 404.
+async function findBuild(buildId, env) {
+  const cached = store.list('builds').find(b => b.id === buildId);
+  if (cached) return cached;
+  return hasD1(env) ? d1Get(env, 'builds', buildId) : null;
+}
+
 // Lazy initialization — only run once per Worker lifetime
 let _initialized = false;
 let _toolsReady = false;
@@ -46,12 +73,15 @@ async function initOnce(env, ctx) {
   _initialized = true;
   try { await ensureSchema(env); } catch(_) {} // DDL may fail if D1 limit exceeded — non-fatal
   store.configure(env);
-  // Hydrate in the background. ctx.waitUntil keeps the promise alive after the response
-  // is sent: without it the isolate is torn down mid-hydration, the store never becomes
-  // hydrated, and every /api/state poll re-read all of D1 (the rows_read bleed).
+  // Hydrate before serving. This used to be fire-and-forget through ctx.waitUntil,
+  // which left the first requests of every cold isolate running against an empty
+  // store: /api/build-status returned a false 404 for a build that existed, and
+  // /api/build-app claimed a project had "no code artifact" when its files were
+  // already in D1. Reading a row-capped cache while another isolate wrote the row
+  // is the whole defect. Cost is unchanged (the same tables were read either way)
+  // and hydrateOnce() is single-flight, so only the first request pays for it.
   if (!store.hydrated) {
-    const hydration = store.hydrateOnce().catch(()=>{});
-    if (ctx?.waitUntil) ctx.waitUntil(hydration);
+    await store.hydrateOnce().catch(()=>{});
   }
 }
 // Bounded, cached snapshot used only until a cold isolate finishes hydrating.
@@ -454,11 +484,15 @@ export default { async fetch(request, env, ctx) { try {
     const body=await json(request);
     const projectId=body.projectId;const platform=body.platform||'android';
     if(!projectId)return fail('projectId required',400);
-    const codeArtifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
-    const latest=codeArtifacts.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
-    if(!latest)return fail('No code artifact found for this project. Run the command first.',404);
-    const files=collectProjectFiles(projectId,latest,store);
+    const codeArtifacts=await projectCodeArtifacts(projectId,env);
+    if(!codeArtifacts.length)return fail('No code artifact found for this project. Run the command first.',404);
+    const latest=codeArtifacts.slice().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0];
+    const files=collectProjectFiles(projectId,latest,store,codeArtifacts);
     if(!files.length)return fail('No buildable files in artifact',404);
+    // Capacitor's webDir is www/. Failing here with a clear message beats
+    // pushing a branch whose workflow dies on `test -s www/index.html`.
+    if(!files.some(f=>f.path==='www/index.html'))return fail('This project has no www/index.html, which is the web app folder an APK is built from. Re-run the command so the app files are generated.',422,{projectId,files:files.map(f=>f.path)});
+    if(!files.some(f=>f.path==='package.json'))return fail('This project has no package.json, so an Android build cannot be configured.',422,{projectId,files:files.map(f=>f.path)});
     // Push files to GitHub
     const token=env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT;
     const repo=env?.GITHUB_RESULT_REPO||'kalpeshpatil4694/MAULI-2.0';
