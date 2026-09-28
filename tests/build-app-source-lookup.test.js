@@ -19,6 +19,12 @@ test('the repository ships a push-triggered workflow for the build branches', ()
   assert.match(buildWorkflow, /actions\/upload-artifact@v4/);
   // Every project file is pushed separately, so only the last run should finish.
   assert.match(buildWorkflow, /cancel-in-progress:\s*true/);
+  // Capacitor 7 needs `javac` source release 21 and this job runs Java 17, so an
+  // unpinned install fails with "error: invalid source release: 21".
+  assert.match(buildWorkflow, /@capacitor\/core@6/);
+  assert.match(buildWorkflow, /@capacitor\/cli@6/);
+  assert.match(buildWorkflow, /@capacitor\/android@6/);
+  assert.match(buildWorkflow, /java-version:\s*17/);
 });
 
 test('the HTTP path hydrates before serving instead of racing background hydration', () => {
