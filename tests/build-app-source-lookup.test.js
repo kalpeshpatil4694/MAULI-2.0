@@ -63,6 +63,17 @@ test('build-status falls back to D1 when the capped in-memory list lacks the bui
   assert.match(index, /d1Get\(env, 'builds', buildId\)/);
 });
 
+test('the build record is written as a critical row so it survives the write budget', () => {
+  // /api/build-app writes the record on one isolate and /api/build-status reads it
+  // from whichever isolate answers the next dashboard poll. Written non-critically
+  // it was dropped whenever the write budget was tight, so a build that really was
+  // running on GitHub answered 404 forever.
+  const store = readFileSync(new URL('../src/store.js', import.meta.url), 'utf8');
+  const critical = /const CRITICAL_TYPES = new Set\(\[([^\]]*)\]\)/.exec(store)?.[1] ?? '';
+  assert.match(critical, /'builds'/, 'builds must be a critical write');
+  assert.match(critical, /'build_locks'/);
+});
+
 test('collectProjectFiles can be given the authoritative artifact list', () => {
   const emptyStore = { list: () => [] };
   const artifacts = [
