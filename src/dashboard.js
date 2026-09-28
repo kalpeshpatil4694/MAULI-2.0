@@ -517,8 +517,8 @@ function updateStats(){
   if($('navT'))$('navT').textContent=S.tasks.filter(t=>t.state==='working').length||S.tasks.length;
   if($('navAp'))$('navAp').textContent=S.approvals.length;
   if($('ovP'))$('ovP').textContent=S.projects.length;if($('ovC'))$('ovC').textContent=S.projects.filter(p=>p.state==='completed').length;
-  if($('ovA'))$('ovA').textContent=S.projects.filter(p=>p.state==='active').length;if($('ovAg'))$('ovAg').textContent=S.agents.length;if($('ovArt'))$('ovArt').textContent=S.artifacts.length;
-  if($('projCnt'))$('projCnt').textContent=S.projects.length+' projects';if($('taskCnt'))$('taskCnt').textContent=S.tasks.length+' tasks';
+  if($('ovA'))$('ovA').textContent=S.projects.filter(p=>p.state==='active').length;if($('ovAg'))$('ovAg').textContent=S.agents.length;if($('ovArt'))$('ovArt').textContent=totals.artifacts??S.artifacts.length;
+  if($('projCnt'))$('projCnt').textContent=(totals.projects??S.projects.length)+' projects';if($('taskCnt'))$('taskCnt').textContent=(totals.tasks??S.tasks.length)+' tasks';
 }
 
 // ─── RENDERERS ───
@@ -542,7 +542,10 @@ function renderProjects(){
   const search=($('projSearch')?.value||'').toLowerCase();const filter=$('projFilter')?.value||'';
   let list=S.projects;if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>projRealState(p)===filter);
   let h='<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
-  for(const p of list){const hasCode=S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');const rs=projRealState(p);const tasks=S.tasks.filter(t=>t.projectId===p.id);const done=tasks.filter(t=>t.state==='completed').length;const total=tasks.length;
+  // hasCode comes from the server (it can see every artifact); the capped local sample
+  // is only a fallback, which is why the download/preview/build buttons used to vanish
+  // for finished projects whose artifact sat outside /api/state's newest 100.
+  for(const p of list){const hasCode=('hasCode' in p)?!!p.hasCode:S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');const rs=projRealState(p);const tasks=S.tasks.filter(t=>t.projectId===p.id);const done=tasks.filter(t=>t.state==='completed').length;const total=tasks.length;
     h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(rs)+'">'+esc(rs)+'</span></td><td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
     h+='<button class="btn btn-a btn-s proj-detail" data-pid="'+p.id+'">📄 Details</button>';
     h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥</button>';
@@ -633,7 +636,10 @@ function renderMemory(){
   $('memList').innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No memory</div>';
 }
 function renderMonitor(){
-  const grid=[{l:'Projects',v:S.projects.length,i:'📁',a:true},{l:'Tasks',v:S.tasks.length,i:'📋',a:S.tasks.some(t=>t.state==='working')},{l:'Agents',v:S.agents.length,i:'🤖',a:true},{l:'Working',v:S.tasks.filter(t=>t.state==='working').length,i:'⚡',a:S.tasks.some(t=>t.state==='working')},{l:'Completed',v:S.tasks.filter(t=>t.state==='completed').length,i:'✅',a:true},{l:'Failed',v:S.tasks.filter(t=>t.state==='failed').length,i:'❌',a:S.tasks.some(t=>t.state==='failed')},{l:'Events',v:S.events.length,i:'📡',a:S.events.length>0},{l:'Artifacts',v:S.artifacts.length,i:'📦',a:S.artifacts.length>0}];
+  // The lists are capped at 100/300 rows; without the server totals this grid read
+  // "300 tasks / 100 artifacts" while the header correctly said 738/429.
+  const tot=(S.summary&&S.summary.totals)||{};
+  const grid=[{l:'Projects',v:tot.projects??S.projects.length,i:'📁',a:true},{l:'Tasks',v:tot.tasks??S.tasks.length,i:'📋',a:S.tasks.some(t=>t.state==='working')},{l:'Agents',v:S.agents.length,i:'🤖',a:true},{l:'Working',v:S.tasks.filter(t=>t.state==='working').length,i:'⚡',a:S.tasks.some(t=>t.state==='working')},{l:'Completed',v:S.tasks.filter(t=>t.state==='completed').length,i:'✅',a:true},{l:'Failed',v:S.tasks.filter(t=>t.state==='failed').length,i:'❌',a:S.tasks.some(t=>t.state==='failed')},{l:'Events',v:S.events.length,i:'📡',a:S.events.length>0},{l:'Artifacts',v:tot.artifacts??S.artifacts.length,i:'📦',a:(tot.artifacts??S.artifacts.length)>0}];
   $('monGrid').innerHTML=grid.map(g=>'<div class="card stat" style="margin-bottom:0;'+(g.a?'border-color:var(--accent)':'')+'"><div class="stat-l">'+g.i+' '+g.l+'</div><div class="stat-v" style="font-size:22px">'+g.v+'</div></div>').join('');
   $('monAgents').innerHTML=S.agents.map(a=>'<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="width:6px;height:6px;border-radius:50%;background:var(--green);margin-top:4px"></div><div style="font-size:12px"><b>'+esc(a.name||a.id)+'</b> — '+esc(a.role||'Agent')+'</div></div>').join('')||'<div style="color:var(--text2);padding:10px">No agents</div>';
   $('monTasks').innerHTML=S.tasks.slice(-10).reverse().map(t=>'<div style="padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px">'+esc(t.title||t.id)+'</span><span class="badge badge-'+tBadge(t.state)+'">'+esc(t.state)+'</span></div><div class="pbar"><div class="pfill'+(t.state==='completed'?' done':'')+'" style="width:'+pct(t.state)+'%"></div></div></div>').join('')||'<div style="color:var(--text2);padding:10px">No tasks</div>';

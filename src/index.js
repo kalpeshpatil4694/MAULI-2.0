@@ -86,6 +86,28 @@ function compactStateItem(item, type) {
   }
   return copy;
 }
+// True row counts per entity type. The state lists are deliberately capped (100/300/100)
+// so counting them would report "300 tasks / 100 artifacts" forever while the real numbers
+// are 738/429. One index-backed GROUP BY, reached only on a cold isolate and only once per
+// 5 s snapshot cache. Returns null when D1 is unavailable so the caller can omit totals.
+async function safeTypeCounts(env) {
+  if (!hasD1(env)) return null;
+  try {
+    const rows = await env.DB.prepare("SELECT type, COUNT(*) AS cnt FROM entities WHERE type IN ('projects','tasks','artifacts') GROUP BY type").all();
+    const out = { projects: 0, tasks: 0, artifacts: 0 };
+    for (const r of (rows?.results ?? [])) if (r && Object.prototype.hasOwnProperty.call(out, r.type)) out[r.type] = Number(r.cnt) || 0;
+    return out;
+  } catch (_) { return null; }
+}
+
+// Which projects actually shipped code. /api/state caps the artifact list at 100 (429
+// exist), so the browser cannot work this out from the payload — it used to gate the
+// download / preview / build buttons on that capped sample and hid them for most finished
+// projects. Derive it server side and ship one boolean per project.
+function codeProjectIds(artifacts) {
+  return new Set((Array.isArray(artifacts) ? artifacts : []).filter(a => a && a.type === 'code-workspace').map(a => a.projectId));
+}
+
 function compactStateList(list, type) { return (Array.isArray(list) ? list : []).map(item => compactStateItem(item, type)); }
 
 // A single failed D1 read must not discard the whole snapshot. Cold isolates routinely
@@ -159,9 +181,12 @@ async function stateSnapshot(env) {
   const approvalList = keep(approvals, 'approvals');
   const artifactList = keep(artifacts, 'artifacts');
   const eventList = Array.isArray(events) ? events : keep(null, 'events');
+  const totals = await safeTypeCounts(env);
+  const codeProjects = codeProjectIds(artifactList);
+  const withCode = p => ({ ...p, hasCode: codeProjects.has(p && p.id) });
   const snapshot = {
     agents: compactStateList(dedupeAgentList(agentList).slice(0,50),'agents'),
-    projects: compactStateList(projectList,'projects'),
+    projects: compactStateList(projectList,'projects').map(withCode),
     tasks: compactStateList(taskList,'tasks'),
     approvals: compactStateList(approvalList,'approvals'),
     artifacts: compactStateList(artifactList,'artifacts'),
@@ -176,7 +201,7 @@ async function stateSnapshot(env) {
       artifacts === null ? 'artifacts' : null,
       !Array.isArray(tasks) ? 'tasks' : null,
     ].filter(Boolean).join(',') || null,
-    summary: { projects: projectList.length, tasks: taskList.length, running: taskList.filter(t => ['working','assigned'].includes(t.state)).length, failed: taskList.filter(t => t.state === 'failed').length, artifacts: artifactList.length }
+    summary: { projects: projectList.length, tasks: taskList.length, running: taskList.filter(t => ['working','assigned'].includes(t.state)).length, failed: taskList.filter(t => t.state === 'failed').length, artifacts: artifactList.length, ...(totals ? { totals } : {}) }
   };
   // Only promote a snapshot that actually read something into the "last good" slot.
   if (!snapshot.degraded || agentList.length) _lastGoodSnapshot = snapshot;
@@ -189,7 +214,7 @@ async function stateSnapshot(env) {
 // response as degraded instead of blanking the dashboard to zeros.
 async function statePayload(env, recoveredRuns) {
   const memoryState = () => {
-    const projects = compactStateList(listProjects().slice(-100),'projects');
+    const projects = compactStateList(listProjects().slice(-100),'projects').map(p => ({ ...p, hasCode: codeProjectIds(store.list('artifacts')).has(p && p.id) }));
     const tasks = compactStateList(listTasks().slice(-300),'tasks');
     const artifacts = compactStateList(store.list('artifacts').slice(-100),'artifacts');
     const agents = compactStateList(listAgents().slice(0,50),'agents');

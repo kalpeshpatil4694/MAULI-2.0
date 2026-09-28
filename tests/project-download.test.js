@@ -18,7 +18,11 @@ test('Downloads list does not gate the button on the capped /api/state snapshot'
   // loadDl() hid the Download button for most completed projects.
   assert.match(live, /window\.loadDl=function/);
   assert.match(live, /class="btn btn-g btn-s dl-btn"/);
-  assert.doesNotMatch(live, /S\.artifacts\.some/);
+  // Scope the assertion to the loadDl override itself: the Builds-page override keeps
+  // the capped sample only as a fallback when the server omits hasCode.
+  const loadDlBlock = /window\.loadDl=function\(\)\{[\s\S]*?\n  \};/.exec(live)?.[0] ?? '';
+  assert.ok(loadDlBlock, 'the loadDl override must be present');
+  assert.doesNotMatch(loadDlBlock, /S\.artifacts\.some/, 'loadDl must not gate on the capped artifact snapshot');
 });
 
 test('download failures report the real reason instead of a blank No files', () => {
