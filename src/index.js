@@ -138,6 +138,21 @@ function codeProjectIds(artifacts) {
   return new Set((Array.isArray(artifacts) ? artifacts : []).filter(a => a && a.type === 'code-workspace').map(a => a.projectId));
 }
 
+// Which of those can actually become an APK. hasCode only says a code-workspace
+// artifact exists; Capacitor needs www/index.html (its webDir) on top of that. A
+// project can be full of server-side files — server.js, package.json, README.md —
+// and still have no web app at all. Offering such a project a 📱 button and then
+// refusing it on click is the worst of both answers, so the client is told up front.
+function buildableProjectIds(artifacts) {
+  const out = new Set();
+  for (const a of (Array.isArray(artifacts) ? artifacts : [])) {
+    if (!a || a.type !== 'code-workspace' || !a.projectId) continue;
+    const files = a.content?.files;
+    if (Array.isArray(files) && files.some(f => f?.path === 'www/index.html')) out.add(a.projectId);
+  }
+  return out;
+}
+
 function compactStateList(list, type) { return (Array.isArray(list) ? list : []).map(item => compactStateItem(item, type)); }
 
 // A single failed D1 read must not discard the whole snapshot. Cold isolates routinely
@@ -213,7 +228,11 @@ async function stateSnapshot(env) {
   const eventList = Array.isArray(events) ? events : keep(null, 'events');
   const totals = await safeTypeCounts(env);
   const codeProjects = codeProjectIds(artifactList);
-  const withCode = p => ({ ...p, hasCode: codeProjects.has(p && p.id) });
+  const buildable = buildableProjectIds(artifactList);
+  const withCode = p => {
+    const hasCode = codeProjects.has(p && p.id);
+    return { ...p, hasCode, canBuild: hasCode && buildable.has(p && p.id) };
+  };
   const snapshot = {
     agents: compactStateList(dedupeAgentList(agentList).slice(0,50),'agents'),
     projects: compactStateList(projectList,'projects').map(withCode),
@@ -244,7 +263,13 @@ async function stateSnapshot(env) {
 // response as degraded instead of blanking the dashboard to zeros.
 async function statePayload(env, recoveredRuns) {
   const memoryState = () => {
-    const projects = compactStateList(listProjects().slice(-100),'projects').map(p => ({ ...p, hasCode: codeProjectIds(store.list('artifacts')).has(p && p.id) }));
+    const storeArtifacts = store.list('artifacts');
+    const codeProjects = codeProjectIds(storeArtifacts);
+    const buildable = buildableProjectIds(storeArtifacts);
+    const projects = compactStateList(listProjects().slice(-100),'projects').map(p => {
+      const hasCode = codeProjects.has(p && p.id);
+      return { ...p, hasCode, canBuild: hasCode && buildable.has(p && p.id) };
+    });
     const tasks = compactStateList(listTasks().slice(-300),'tasks');
     const artifacts = compactStateList(store.list('artifacts').slice(-100),'artifacts');
     const agents = compactStateList(listAgents().slice(0,50),'agents');

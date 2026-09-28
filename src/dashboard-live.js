@@ -201,13 +201,87 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     let h='';
     for(const p of S.projects){
       const hasCode=('hasCode' in p)?!!p.hasCode:S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
+      // canBuild=false means the project shipped code but has no www/index.html, so
+      // an APK is impossible. Say so on the row instead of handing over a button that
+      // can only come back with an error.
+      const canBuild=('canBuild' in p)?!!p.canBuild:hasCode;
       h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(p.name||p.objective||p.id)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(p.state)+'</div></div><div style="display:flex;gap:4px">';
-      if(hasCode)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android">📱 APK</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop">🖥️ EXE</button>';
+      if(hasCode&&canBuild)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android">📱 APK</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop">🖥️ EXE</button>';
+      else if(hasCode)h+='<span class="badge badge-y" title="या project मध्ये www/index.html नाही, त्यामुळे APK बनत नाही" style="cursor:help">⚠️ APK नाही — web app नाही</span>';
       else h+='<span class="badge badge-y">No code</span>';
       h+='</div></div>';
     }
     const el=$('buildOut');
     if(el)el.innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No projects</div>';
+  };
+  // Tapping 📱 used to dump the raw API envelope into the toast:
+  //   {"ok":false,"error":{"message":"...","details":{"files":["server.js",...]}}}
+  // which covered the page and told the founder nothing they could act on. The API
+  // answer is right — a project with no www/index.html genuinely cannot become an
+  // APK — so the fix is to say it in a sentence and name the fix, not to hide it.
+  function buildErrorText(err){
+    const raw=String((err&&err.message)||err||'').trim();
+    let body=null;
+    try{body=JSON.parse(raw);}catch(_){}
+    const inner=body&&body.error?body.error:null;
+    const message=(inner&&inner.message)||(body&&body.message)||raw;
+    const files=inner&&inner.details&&Array.isArray(inner.details.files)?inner.details.files:null;
+    if(/www\/index\.html/i.test(message)){
+      return 'या project मध्ये www/index.html नाही, आणि त्याशिवाय APK बनत नाही.'+
+        (files&&files.length?(' या project मध्ये फक्त आहेत: '+files.join(', ')+'. '):' ')+
+        'नवीन command द्या किंवा "Build an Android app for <idea>" असा command द्या.';
+    }
+    if(/no package\.json/i.test(message)){
+      return 'या project मध्ये package.json नाही, त्यामुळे Android build configure होत नाही. नवीन command द्या.';
+    }
+    if(/No code artifact/i.test(message)){
+      return 'या project ने अजून code generate केलेला नाही. आधी command पूर्ण होऊ द्या, मग 📱 APK दाबा.';
+    }
+    if(/Founder key/i.test(message))return 'Founder key लागत आहे. डॅशबोर्डवर key भरा आणि पुन्हा प्रयत्न करा.';
+    if(/does not have push permissions|GitHub token/i.test(message)){
+      return 'GitHub token ला push permission नाही. GITHUB_TOKEN तपासा (Settings → Environment).';
+    }
+    return message.length>220?message.slice(0,220)+'…':(message||'Build सुरू करता आला नाही.');
+  }
+  window.startBuild=async function(pid,plat,btn){
+    const label=plat==='android'?'📱 APK':'🖥️ EXE';
+    if(btn){btn.disabled=true;btn.textContent='Starting…';}
+    try{
+      const r=await api('/api/build-app',{method:'POST',body:JSON.stringify({projectId:pid,platform:plat})});
+      const buildId=r&&r.buildId;
+      if(btn)btn.textContent='Building…';
+      toast(plat==='android'?'📱 APK build सुरू — सुमारे 2 मिनिटं':'🖥️ Desktop build सुरू', 'ok');
+      if(!buildId)return;
+      let att=0;
+      const poll=async()=>{
+        att++;
+        try{
+          const s=await api('/api/build-status/'+encodeURIComponent(buildId));
+          if(s&&s.downloadUrl){
+            if(btn){btn.textContent='⬇ Download';btn.disabled=false;btn.onclick=()=>window.open(s.downloadUrl,'_blank');}
+            toast('✅ Build पूर्ण — Download दाबा','ok');
+            return;
+          }
+          if(s&&(s.status==='failure'||s.status==='error'||s.status==='failed')){
+            if(btn){btn.textContent='Failed';btn.disabled=false;}
+            toast('❌ Build fail — GitHub Actions मध्ये log बघा','err');
+            return;
+          }
+          if(s&&s.status==='superseded'){
+            if(btn){btn.textContent=label;btn.disabled=false;}
+            return;
+          }
+          if(att<60)setTimeout(poll,10000);
+          else if(btn){btn.textContent='Check GitHub';btn.disabled=false;}
+        }catch(e){
+          if(att<60)setTimeout(poll,10000);
+        }
+      };
+      setTimeout(poll,6000);
+    }catch(e){
+      if(btn){btn.textContent=label;btn.disabled=false;}
+      toast(buildErrorText(e),'err');
+    }
   };
   schedulePoll(500);
 })();

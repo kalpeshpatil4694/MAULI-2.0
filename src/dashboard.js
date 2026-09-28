@@ -545,12 +545,13 @@ function renderProjects(){
   // hasCode comes from the server (it can see every artifact); the capped local sample
   // is only a fallback, which is why the download/preview/build buttons used to vanish
   // for finished projects whose artifact sat outside /api/state's newest 100.
-  for(const p of list){const hasCode=('hasCode' in p)?!!p.hasCode:S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');const rs=projRealState(p);const tasks=S.tasks.filter(t=>t.projectId===p.id);const done=tasks.filter(t=>t.state==='completed').length;const total=tasks.length;
+  for(const p of list){const hasCode=('hasCode' in p)?!!p.hasCode:S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');const canBuild=('canBuild' in p)?!!p.canBuild:hasCode;const rs=projRealState(p);const tasks=S.tasks.filter(t=>t.projectId===p.id);const done=tasks.filter(t=>t.state==='completed').length;const total=tasks.length;
     h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(rs)+'">'+esc(rs)+'</span></td><td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
     h+='<button class="btn btn-a btn-s proj-detail" data-pid="'+p.id+'">📄 Details</button>';
     h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥</button>';
     if(hasCode)h+='<button class="btn btn-a btn-s" onclick="window.open(\\'/api/preview-app?projectId='+p.id+'\\',\\'_blank\\')">👁️</button>';
-    if(hasCode)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android">📱</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop">🖥️</button>';
+    if(hasCode&&canBuild)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android" title="Android APK build">📱</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop" title="Desktop build">🖥️</button>';
+    else if(hasCode)h+='<span class="badge badge-y" title="या project मध्ये web app (www/index.html) नाही, त्यामुळे APK/EXE बनत नाही" style="cursor:help;align-self:center">⚠️ web app नाही</span>';
     h+='</td></tr>';}
   h+='</tbody></table>';$('projList').innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No projects</div>';
 }
