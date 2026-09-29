@@ -818,3 +818,80 @@ the project card and from the report drawer.
        answers "Artifact not available (410)" and the APK must be rebuilt.
     🟡 The zip route holds the whole archive in memory (a few hundred KB
        today). Very large projects should stream instead.
+
+18. THE DOWNLOAD FIXES THAT NEVER RAN, AND THE BUILD THAT NEVER REPORTED (2026-09-29)
+
+  REPORTED
+    Still no download after the section 17 fixes were deployed.
+
+  ROOT CAUSE 1 — the injected live layer's overrides were bypassed
+    dashboard.js renders the tool buttons (📥 📱 👁️) and wires them through ONE
+    delegated click listener of its own:
+        document.addEventListener('click',e=>{const dl=...closest('.dl-btn');
+          if(dl)downloadZip(dl.dataset.pid);const bl=...closest('.bld-btn');
+          if(bl)startBuild(bl.dataset.pid,bl.dataset.plat,bl)});
+    Those calls resolve to dashboard.js's OWN function declarations. The live
+    layer runs in a separate <script>, so its `window.downloadZip=...`,
+    `window.startBuild=...`, `window.loadDl=...` and `window.loadBuilds=...`
+    never replaced them. Every "fixed" download therefore still ran the original
+    code: saveProjectFiles() firing one <a download> per file (Chrome blocks all
+    but the first) and window.open(s.downloadUrl) (401, no founder header).
+    This is also why the reported toast was the RAW api() envelope: it came from
+    dashboard.js's catch{toast(e.message,'err')}, not from the live layer's
+    buildErrorText(), which was never reached.
+
+  ROOT CAUSE 2 — /api/build-status still read the capped build list
+    The findBuild() helper had been added for exactly this, but the route was
+    still `store.list('builds').find(...)`. Polling one real build id from the
+    live worker gave:
+        [1] 404 Build not found
+        [2] 200 in_progress
+        [3] 404 Build not found
+        [4] 404 Build not found
+        [5] 404 Build not found
+    So a build could finish while the founder's polling isolate never saw it,
+    and the ⬇ Download button never appeared at all.
+
+  ROOT CAUSE 3 — the 👁️ preview button was an inline window.open()
+        onclick="window.open('/api/preview-app?projectId=...','_blank')"
+    /api/preview-app is founder-protected, so that opened a 401 JSON page.
+
+  FIXES
+    ✅ The live layer now installs a CAPTURE-phase delegated click listener for
+       .dl-btn / .bld-btn / .pv-btn. Capture runs before dashboard.js's
+       bubble-phase handler, and stopPropagation() keeps the old path from
+       firing, so the fixed implementations are the only ones that run.
+    ✅ /api/build-status uses `await findBuild(buildId,env)` (D1 fallback).
+    ✅ 👁️ is now <button class="... pv-btn" data-pid="...">. __mauliOpenPreview()
+       fetches the html with the founder header, inlines the project's www/*.css
+       and www/*.js (relative paths do not resolve inside a blob: URL), and opens
+       it from a blob object URL. The inline script tag is emitted as
+       '<scr'+'ipt>' so it cannot terminate the page's own script block.
+    ✅ tests/dashboard-live-routing.test.js (5 tests) locks the capture-phase
+       routing, the pv-btn markup, the html inlining, and the findBuild() call.
+
+  VERIFIED END TO END ON THE LIVE WORKER (project_5d0b7412-270b-4f9d-9d19-e71a61a2e9d7,
+  founder command "Off-line chess game", which ships only www/index.html plus
+  server.js/package.json/README.md)
+    ✅ POST /api/build-app      → 200, "4 files pushed", build_1790705086385_9mn8po
+    ✅ GitHub run 36609548347   → Android APK: success; artifact android-apk
+                                   id 11052194911, 3,368,149 bytes
+    ✅ unzip -l app-debug.apk   → app-debug.apk, 3,748,560 bytes
+    ✅ GET /api/download-artifact/11052194911?name=mauli-android.apk  (key)
+                                → HTTP 200, content-disposition attachment,
+                                  3,368,149 bytes; without the key → 401
+    ✅ GET /api/app-files?projectId=…      → 4 files (was 22 with 5 duplicates)
+    ✅ GET /api/project-download?projectId=… (key) → HTTP 200, one zip, 4 unique
+      entries, filename mauli-project_5d0b7412-….zip; without the key → 401
+
+  NOTE — files no longer required by the build
+    The worker-generated workflow (still pushed, still 403s on the workflows
+    scope) demanded www/app.js and www/styles.css. Capacitor needs neither: the
+    webDir entry point and a package.json are enough. It now matches the
+    repository workflow and only asserts www/index.html + package.json.
+
+  STILL OPEN
+    🟡 dashboard.js still ships its own downloadZip()/startBuild()/loadDl()/
+       loadBuilds() as dead fallbacks. They are bypassed in production but they
+       are why this class of bug is hard to see; deleting them is the next
+       cleanup.
