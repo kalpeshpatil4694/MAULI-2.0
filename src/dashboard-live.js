@@ -160,16 +160,33 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     const d=await r.json();
     return Array.isArray(d.files)?d.files:[];
   }
-  function saveProjectFiles(files){
-    for(let i=0;i<files.length;i++){
-      const f=files[i];
-      const url=URL.createObjectURL(new Blob([f.content],{type:'text/plain'}));
-      const a=document.createElement('a');
-      a.href=url;
-      a.download=String(f.path||('file-'+i)).split('/').pop()||('file-'+i+'.txt');
-      document.body.appendChild(a);a.click();a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),4000);
+  // Every protected download has to be fetched with the founder key header, then
+  // saved from a blob. window.open(url) sends no header, so the APK/EXE download
+  // returned 401 in a new tab and looked like a dead button.
+  async function fetchAsBlob(url,retried){
+    const r=await fetch(url,{headers:window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{}});
+    if(r.status===401||r.status===503){
+      if(!retried&&window.__mauliRequestFounderKey&&window.__mauliRequestFounderKey())return fetchAsBlob(url,true);
+      throw new Error('Founder key needed — paste it to download');
     }
+    if(!r.ok){
+      let body={};try{body=await r.json();}catch(_){ }
+      const m=String((body.error&&body.error.message)||body.message||'');
+      if(/No code artifacts/i.test(m))throw new Error('This project has no code files to download');
+      if(/No files found/i.test(m))throw new Error('This project has no downloadable files');
+      if(/Artifact not available/i.test(m))throw new Error('APK GitHub वरून मिळाला नाही — तो 14 दिवसांनी expire होतो. पुन्हा Build दाबा.');
+      throw new Error(m||('Download failed ('+r.status+')'));
+    }
+    const cd=r.headers.get('content-disposition')||'';
+    const named=/filename="?([^";]+)"?/.exec(cd);
+    return {blob:await r.blob(),name:named?named[1]:null};
+  }
+  function saveBlob(blob,name){
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=String(name||'mauli-download');a.rel='noopener';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),10000);
   }
   window.loadDl=function(){
     let h='';
@@ -183,13 +200,17 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     const list=$('dlList');
     if(list)list.innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No projects</div>';
   };
+  // One zip per project. The old version called saveProjectFiles() once per entry
+  // from /api/app-files — 20+ <a download> clicks in a row — and Chrome allows only
+  // the first automatic download, so the founder saw nothing arrive. /api/app-files
+  // also listed the same file once per code artifact.
   window.downloadZip=async function(pid){
     toast('Loading...','info');
     try{
-      const files=await fetchProjectFiles(pid,false);
-      if(!files.length){toast('This project has no downloadable files','err');return;}
-      saveProjectFiles(files);
-      toast(files.length===1?'Downloaded 1 file':('Downloaded '+files.length+' files'),'ok');
+      const {blob,name}=await fetchAsBlob('/api/project-download?projectId='+encodeURIComponent(pid),false);
+      if(!blob||!blob.size){toast('This project has no downloadable files','err');return;}
+      saveBlob(blob,name||('mauli-'+pid+'.zip'));
+      toast('✅ Download पूर्ण — Files / Downloads मध्ये बघा','ok');
     }catch(e){toast((e&&e.message)||'Download failed','err');}
   };
   window.__mauliDownloadProject=window.downloadZip;
@@ -258,7 +279,18 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
         try{
           const s=await api('/api/build-status/'+encodeURIComponent(buildId));
           if(s&&s.downloadUrl){
-            if(btn){btn.textContent='⬇ Download';btn.disabled=false;btn.onclick=()=>window.open(s.downloadUrl,'_blank');}
+            // window.open here was the real reason the APK never downloaded: the route
+            // needs the founder key, and a new tab cannot send the header, so the
+            // founder got a 401 JSON page while the toast said the build had finished.
+            if(btn){btn.textContent='⬇ Download';btn.disabled=false;btn.onclick=async()=>{
+              btn.disabled=true;btn.textContent='Downloading…';
+              try{
+                const {blob,name}=await fetchAsBlob(s.downloadUrl,false);
+                saveBlob(blob,name||(plat==='android'?'mauli-android.apk':'mauli-desktop.AppImage'));
+                toast('✅ Download पूर्ण','ok');
+              }catch(e){toast((e&&e.message)||'Download failed','err');}
+              btn.disabled=false;btn.textContent='⬇ Download';
+            };}
             toast('✅ Build पूर्ण — Download दाबा','ok');
             return;
           }

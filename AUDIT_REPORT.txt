@@ -753,3 +753,68 @@ the project card and from the report drawer.
     🟡 The generated debug APK is installable but unsigned, so Android
        shows an "unknown source" warning. A release APK needs a keystore
        in a secret, which is a deliberate next step, not an oversight.
+
+17. DOWNLOAD NEVER ARRIVED — TWO INDEPENDENT DEFECTS (2026-09-29)
+
+  REPORTED
+    "Ajun pan download hot nai" — a founder tapped Download (both the 📥
+    deliverable button and, after a build, ⬇ Download) and no file ever
+    appeared on an Android phone.
+
+  ROOT CAUSE 1 — window.open() cannot send the founder key
+    After a successful build the button was wired as:
+        btn.onclick=()=>window.open(s.downloadUrl,'_blank')
+    with
+        s.downloadUrl='/api/download-artifact/<id>?name=mauli-android.apk'
+    That route calls requireFounder(), and requireFounder() reads the key
+    from a request header (x-mauli-founder / x-founder-key / x-api-key /
+    Authorization: Bearer). The dashboard keeps the key in sessionStorage
+    and attaches it through window.__mauliFounderHeaders(). A new tab
+    opened with window.open() inherits none of that, so the route answered
+    401 {"ok":false,"error":{"message":"Founder key required or invalid"}}
+    and the browser navigated to a JSON page instead of saving an APK.
+    Verified directly:
+        curl .../api/download-artifact/10967188332   → HTTP 401
+
+  ROOT CAUSE 2 — one browser download per file, blocked after the first
+    window.downloadZip() fetched /api/app-files and then called
+    saveProjectFiles(), which fired one <a download> click per entry.
+    Chrome permits a single automatic download per gesture; the rest are
+    silently dropped (or held behind a permission prompt the founder never
+    sees on mobile). On top of that /api/app-files built its list with raw
+    `store.list('artifacts')` and no de-duplication, so a project with six
+    code-workspace artifacts returned 22 entries for 6 real files — five
+    copies of www/index.html. Confirmed live for
+    project_5d0b7412-270b-4f9d-9d19-e71a61a2e9d7: 22 entries, 5×
+    www/index.html, 6× server.js, 7× package.json, 6× README.md.
+
+  FIXES
+    ✅ New GET /api/project-download?projectId=... returns ONE zip,
+       built with createZip() from collectProjectFiles() — the same
+       authority and the same de-duplication /api/build-app uses.
+       Headers: content-type application/zip,
+       content-disposition attachment; filename="mauli-<projectId>.zip",
+       content-length, cache-control no-store.
+    ✅ /api/app-files and /api/preview-app now use
+       projectCodeArtifacts() + collectProjectFiles() instead of the
+       capped in-memory store.list('artifacts'), so they no longer
+       duplicate paths and no longer return a false 404 on a cold isolate.
+    ✅ The dashboard fetches every protected download with the founder
+       header and saves it from a blob:
+           fetchAsBlob(url,retried) + saveBlob(blob,name)
+       fetchAsBlob retries once after asking for the founder key when it
+       sees 401/503, and turns the API envelope into a sentence
+       (no code files / no downloadable files / artifact expired).
+    ✅ window.downloadZip() now performs exactly one download
+       (/api/project-download) and reports "✅ Download पूर्ण".
+    ✅ The ⬇ Download button after a build does the same, and restores
+       its label if the fetch fails.
+    ✅ tests/project-download-zip.test.js (5 tests) locks in the unique
+       zip entries, the shared artifact authority, and the absence of
+       window.open() for protected downloads.
+
+  STILL OPEN
+    🟡 GitHub keeps build artifacts for 14 days; after that the proxy
+       answers "Artifact not available (410)" and the APK must be rebuilt.
+    🟡 The zip route holds the whole archive in memory (a few hundred KB
+       today). Very large projects should stream instead.
