@@ -661,7 +661,10 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname.startsWith('/api/build-status/')){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const buildId=url.pathname.split('/').pop();
-    const build=store.list('builds').find(b=>b.id===buildId);
+    // findBuild() asks D1 when the capped in-memory list does not have the row.
+    // Polling the same build id used to answer 404/404/200/404 from different
+    // isolates, so a founder's build finished but the Download button never came.
+    const build=await findBuild(buildId,env);
     if(!build)return fail('Build not found',404);
     if(build.status==='superseded')return ok({buildId,status:'superseded',supersededBy:build.supersededBy||null,downloadUrl:null,pushedAt:build.pushedAt,platform:build.platform,filesPushed:build.filesPushed});
     const token=env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT;

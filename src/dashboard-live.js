@@ -315,6 +315,47 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       toast(buildErrorText(e),'err');
     }
   };
+  // dashboard.js registers its own bubble-phase click handler that calls its LOCAL
+  // downloadZip()/startBuild() — not the overrides this layer puts on window. So the
+  // fixes above never ran for the Projects table or the Builds page: 📥 started 20+
+  // <a download> clicks that Chrome blocks after the first, and 📱 finished in
+  // window.open(s.downloadUrl), which cannot send the founder key and answered 401.
+  // A capture-phase listener runs first and stops the event from reaching the old one.
+  document.addEventListener('click',e=>{
+    const t=(e.target&&e.target.closest)?e.target.closest('.dl-btn,.bld-btn,.pv-btn'):null;
+    if(!t)return;
+    e.preventDefault();e.stopPropagation();
+    if(t.classList.contains('dl-btn')){window.downloadZip(t.dataset.pid);return;}
+    if(t.classList.contains('bld-btn')){window.startBuild(t.dataset.pid,t.dataset.plat,t);return;}
+    window.__mauliOpenPreview(t.dataset.pid);
+  },true);
+  // /api/preview-app is founder-protected too, so the html has to be fetched with the
+  // key and opened from a blob. Relative app.js/styles.css do not resolve inside a
+  // blob: URL, so files the project ships under www/ are inlined before opening.
+  window.__mauliOpenPreview=async function(pid){
+    toast('Loading...','info');
+    try{
+      const {blob}=await fetchAsBlob('/api/preview-app?projectId='+encodeURIComponent(pid),false);
+      let html=await blob.text();
+      let css='';let js='';
+      try{
+        const files=await fetchProjectFiles(pid,false);
+        for(const f of files){
+          const p=String(f.path||'');const base=p.split('/').pop();
+          if(!p.startsWith('www/'))continue;
+          if(/\.css$/i.test(base))css+='<style>'+f.content+'</style>';
+          else if(/\.js$/i.test(base))js+='<scr'+'ipt>'+f.content+'</scr'+'ipt>';
+        }
+      }catch(_){ }
+      if(css)html=/<\/head>/i.test(html)?html.replace(/<\/head>/i,m=>css+m):css+html;
+      if(js)html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,m=>js+m):html+js;
+      const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
+      const w=window.open(url,'_blank');
+      if(!w){URL.revokeObjectURL(url);toast('Preview blocked — pop-up allow करा','err');return;}
+      setTimeout(()=>URL.revokeObjectURL(url),120000);
+      toast('✅ Preview नवीन tab मध्ये उघडला','ok');
+    }catch(e){toast((e&&e.message)||'Preview failed','err');}
+  };
   schedulePoll(500);
 })();
 </script>`;

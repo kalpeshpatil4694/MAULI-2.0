@@ -549,7 +549,8 @@ function renderProjects(){
     h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(rs)+'">'+esc(rs)+'</span></td><td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
     h+='<button class="btn btn-a btn-s proj-detail" data-pid="'+p.id+'">📄 Details</button>';
     h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥</button>';
-    if(hasCode)h+='<button class="btn btn-a btn-s" onclick="window.open(\\'/api/preview-app?projectId='+p.id+'\\',\\'_blank\\')">👁️</button>';
+    // A class, not an inline window.open(): /api/preview-app is founder-protected and a new tab cannot send the key header, so this button used to open a 401 page. The injected live layer (DASHBOARD_LIVE_SCRIPT) handles .pv-btn with the key attached.
+    if(hasCode)h+='<button class="btn btn-a btn-s pv-btn" data-pid="'+p.id+'" title="App preview">👁️</button>';
     if(hasCode&&canBuild)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android" title="Android APK build">📱</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop" title="Desktop build">🖥️</button>';
     else if(hasCode)h+='<span class="badge badge-y" title="या project मध्ये web app (www/index.html) नाही, त्यामुळे APK/EXE बनत नाही" style="cursor:help;align-self:center">⚠️ web app नाही</span>';
     h+='</td></tr>';}
