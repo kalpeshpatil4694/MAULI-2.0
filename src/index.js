@@ -584,9 +584,10 @@ export default { async fetch(request, env, ctx) { try {
     wfLines.push('      - name: Validate source files');
     wfLines.push('        run: |');
     wfLines.push('          set -e');
+    // Capacitor only needs the webDir entry point and a package.json. Demanding
+    // www/app.js and www/styles.css failed every project that inlines its script
+    // and styles in index.html — the build died on `test -s` before Capacitor ran.
     wfLines.push('          test -s www/index.html');
-    wfLines.push('          test -s www/app.js');
-    wfLines.push('          test -s www/styles.css');
     wfLines.push('          test -s package.json');
     wfLines.push('          echo \"Source files validated\"');
     wfLines.push('      - name: Setup Capacitor Android');
