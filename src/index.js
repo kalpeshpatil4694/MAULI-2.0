@@ -584,9 +584,10 @@ export default { async fetch(request, env, ctx) { try {
     wfLines.push('      - name: Validate source files');
     wfLines.push('        run: |');
     wfLines.push('          set -e');
+    // Capacitor only needs the webDir entry point and a package.json. Demanding
+    // www/app.js and www/styles.css failed every project that inlines its script
+    // and styles in index.html — the build died on `test -s` before Capacitor ran.
     wfLines.push('          test -s www/index.html');
-    wfLines.push('          test -s www/app.js');
-    wfLines.push('          test -s www/styles.css');
     wfLines.push('          test -s package.json');
     wfLines.push('          echo \"Source files validated\"');
     wfLines.push('      - name: Setup Capacitor Android');
@@ -765,29 +766,42 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/app-files'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const projectId=url.searchParams.get('projectId');
     if(!projectId)return fail('projectId required',400);
-    const artifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
+    // Same authority as /api/build-app: every code-workspace artifact D1 holds for
+    // the project, not whichever rows the capped in-memory cache happens to have.
+    const artifacts=await projectCodeArtifacts(projectId,env);
     if(artifacts.length===0)return fail('No code artifacts',404);
-    const files=[];
-    for(const artifact of artifacts){
-      const ac=artifact.content||{};
-      if(Array.isArray(ac.files)){
-        for(const f of ac.files){files.push({path:f.path,content:f.content})}
-      }
-    }
+    // collectProjectFiles() de-duplicates by path. Without it this route returned the
+    // same file up to six times (one copy per code-workspace artifact) and the client
+    // fired one browser download per entry — Chrome allows the first and silently
+    // drops the rest, so a finished project looked like it downloaded nothing.
+    const files=collectProjectFiles(projectId,null,store,artifacts);
     if(files.length===0)return fail('No files found',404);
     return ok({files,projectId,count:files.length});
+  }
+  // A deliverable is one zip, not twenty browser downloads. The dashboard used to
+  // loop the /api/app-files entries through an <a download> each, which Chrome blocks
+  // after the first on mobile, and those entries were duplicated per artifact.
+  if(request.method==='GET'&&url.pathname==='/api/project-download'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const projectId=url.searchParams.get('projectId');
+    if(!projectId)return fail('projectId required',400);
+    const artifacts=await projectCodeArtifacts(projectId,env);
+    if(artifacts.length===0)return fail('No code artifacts',404);
+    const files=collectProjectFiles(projectId,null,store,artifacts);
+    if(files.length===0)return fail('No files found',404);
+    const zip=createZip(files);
+    const name='mauli-'+String(projectId).replace(/[^a-zA-Z0-9_-]/g,'_')+'.zip';
+    return new Response(zip,{status:200,headers:{'content-type':'application/zip','content-disposition':'attachment; filename="'+name+'"','content-length':String(zip.length),'cache-control':'no-store'}});
   }
   if(request.method==='GET'&&url.pathname==='/api/preview-app'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const projectId=url.searchParams.get('projectId');
     if(!projectId)return fail('projectId required',400);
-    const artifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
+    const artifacts=await projectCodeArtifacts(projectId,env);
     if(artifacts.length===0)return fail('No code artifacts',404);
-    for(const artifact of artifacts){
-      const ac=artifact.content||{};
-      if(Array.isArray(ac.files)){
-        for(const f of ac.files){if(f.path.endsWith('.html'))return new Response(f.content,{headers:{'content-type':'text/html;charset=utf-8'}})}
-      }
-    }
+    // The APK web app entry point first, then any other html file.
+    const files=collectProjectFiles(projectId,null,store,artifacts);
+    const html=files.find(f=>f.path==='www/index.html')||files.find(f=>f.path.endsWith('.html'));
+    if(html)return new Response(html.content,{headers:{'content-type':'text/html;charset=utf-8'}});
     return fail('No HTML files',404);
   }
   
