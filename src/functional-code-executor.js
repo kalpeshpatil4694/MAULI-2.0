@@ -199,6 +199,11 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   if (!runtimeEnv?.AI?.run) {
     const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
     if (templateResult.files?.length > 0) {
+      // A template emits a single index.html. Shipped like that, the project has no
+      // package.json, so the build flow (which requires www/index.html + package.json)
+      // cannot turn it into an APK and the founder gets a download that does nothing.
+      // The fallback must be as deliverable as the real thing.
+      templateResult.files = ensurePackageJson(templateResult.files, objective);
       const artifact = registerArtifact({
         projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
         content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: templateResult.notes || [] },
@@ -257,6 +262,8 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   // Fallback to templates
   const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
   if (templateResult.files?.length > 0) {
+    // Same requirement as the branch above: a fallback project still has to be installable.
+    templateResult.files = ensurePackageJson(templateResult.files, objective);
     const artifact = registerArtifact({
       projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
       content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), 'Template fallback used'] },
