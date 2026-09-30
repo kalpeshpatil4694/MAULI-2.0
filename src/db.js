@@ -1,4 +1,4 @@
-import { canWriteD1, reserveD1Rows, recordD1Write, recordD1Read, noteD1WriteBlocked } from './d1-quota.js';
+import { canWriteD1, reserveD1Rows, recordD1Write, recordD1Read, noteD1WriteBlocked, d1WriteBlockedSnapshot } from './d1-quota.js';
 import { queueQuotaSnapshot } from './queue-quota.js';
 
 export function hasD1(env) { return Boolean(env?.DB && typeof env.DB.prepare === 'function'); }
@@ -52,7 +52,22 @@ export async function d1List(env, type, { existingTasks, limit } = {}) {
 export async function d1Put(env, type, value, { critical = false, expectedUpdatedAt = null } = {}) {
   // Reserve a small write budget before executing. Actual rows_written is recorded
   // from D1 metadata after success, so the dashboard remains honest about writes.
-  if (!(await reserveD1Rows(env, 2, critical))) return { ...value, _d1WriteDeferred: true, _d1WriteLimit: true };
+  if (!(await reserveD1Rows(env, 2, critical))) {
+    // Say WHY the write was refused. "write blocked" told the founder nothing and looked
+    // like a product fault; the isolate that tripped the guard is the only one that knows
+    // the reason, so it has to carry it. (Isolates are independent, so an isolate that has
+    // not yet seen the rejection still attempts the write and reports Cloudflare's own
+    // message — the failure is always explained somewhere, never silently dropped.)
+    const blocked = d1WriteBlockedSnapshot(env);
+    return {
+      ...value,
+      _d1WriteDeferred: true,
+      _d1WriteLimit: true,
+      _d1WriteError: blocked
+        ? `D1 writes are blocked: the account exceeded Cloudflare's daily row write limit. Writes resume after ${blocked.resetsAt}.`
+        : 'D1 writes are blocked by the local safety ceiling.',
+    };
+  }
   // The version must strictly advance. Two writes inside the same millisecond would share
   // an updated_at, and the compare-and-set below compares that value — a stale writer whose
   // clock reading coincides with the newer row would be accepted instead of rejected.
