@@ -31,7 +31,13 @@ export function assignTask(taskId,agentId=null) {
 }
 
 export function startTask(taskId){const task=store.get('tasks',taskId);if(!task)return null;const started=store.put('tasks',{...task,state:'working',startedAt:task.startedAt??now(),attempts:(task.attempts??0)+1,id:task.id});if(started.agentId)updateAgent(started.agentId,{state:'working',currentTaskId:started.id});store.addEvent('task.started',started);return started;}
-export function markVerifying(taskId,result={}){const task=store.get('tasks',taskId);if(!task)return null;const next=store.put('tasks',{...task,state:'verifying',result,id:task.id});if(task.agentId)updateAgent(task.agentId,{state:'verifying',currentTaskId:task.id});store.addEvent('task.verifying',next);return next;}
+export function markVerifying(taskId,result={}){const task=store.get('tasks',taskId);if(!task)return null;
+  // 'verifying' is a state the task only ever occupies between 'working' and the verdict.
+  // Keeping it in memory is enough: an invocation killed during verification leaves the
+  // durable row at 'working', which orphan recovery already reclaims exactly the same way
+  // it reclaims a stranded 'verifying' row. Persisting it cost a row write per task for a
+  // state nobody could observe after the fact.
+  const next=store.putTransient('tasks',{...task,state:'verifying',result,id:task.id});if(task.agentId)updateAgent(task.agentId,{state:'verifying',currentTaskId:task.id});store.addEvent('task.verifying',next);return next;}
 export function completeTask(taskId,result={},extra={}){const task=store.get('tasks',taskId);if(!task)return null;const completed=store.put('tasks',{...task,...enrichTaskTiming({...task,state:'completed',completedAt:now()}),state:'completed',result,...extra,id:task.id});if(task.agentId)updateAgent(task.agentId,{state:'available',currentTaskId:null});store.addEvent('task.completed',completed);
   for(const dependent of store.list('tasks')){if(dependent.state==='blocked'&&Array.isArray(dependent.dependsOn)&&dependent.dependsOn.includes(taskId)&&dependenciesCompleted(dependent))assignTask(dependent.id);}
   return completed;

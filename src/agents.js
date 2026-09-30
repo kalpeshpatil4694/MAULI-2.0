@@ -8,7 +8,44 @@ export const AGENT_STATES = ['registered','available','assigned','working','veri
 // UPSERT of the same row instead of inserting a fresh duplicate copy on every cold start.
 export function builtinAgentId(name){return 'agent-builtin-'+String(name??'agent').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
 export function registerAgent({ name, role, department = 'General', capabilities = [], tools = [], metadata = {}, id: requestedId }) { const agent=store.put('agents',{id:requestedId??id('agent'),name,role,department,capabilities,tools,state:'available',heartbeatAt:now(),metadata}); store.addEvent('agent.registered',agent); return agent; }
-export function updateAgent(idValue, patch) { const current=store.get('agents',idValue); if(!current)return null; const next=store.put('agents',{...current,...patch,id:current.id}); store.addEvent('agent.updated',next); return next; }
+// A heartbeat is only useful once it can actually change a decision: claimNextTask and
+// recoverStaleTasks both work on a 90s lease, so refreshing the stamp more often than
+// that writes the same fact again. Every task claimed and released produced several agent
+// row writes purely because `heartbeatAt` moved, and store.put's no-change check ignores
+// updatedAt but not heartbeatAt — so an unchanged agent could never no-op. Reusing the
+// previous stamp inside the window lets an agent whose state did not change skip the write
+// entirely, while the in-memory copy still carries the precise value for this isolate.
+const HEARTBEAT_WRITE_INTERVAL_MS=60_000;
+// A task walks its agent through assigned → working → verifying → completed → available,
+// and each step wrote the row again: five writes per task for a fact that only matters
+// between isolates. The in-memory copy is always exact. D1 is written at most once per
+// window per agent, with one exception — an agent going idle is always written, because
+// that is the state another isolate reads to decide whether it may be claimed. Skipping it
+// would make a free agent look busy and starve the scheduler, never the reverse, so a
+// throttled write can under-use an agent but cannot double-assign one.
+const AGENT_WRITE_INTERVAL_MS=60_000;
+const agentWriteThrottle=new Map();
+export function updateAgent(idValue, patch) {
+  const current=store.get('agents',idValue); if(!current)return null;
+  const next={...current,...patch,id:current.id};
+  if(patch && 'heartbeatAt' in patch){
+    const previous=Date.parse(current.heartbeatAt??'');
+    const proposed=Date.parse(patch.heartbeatAt??'');
+    if(Number.isFinite(previous)&&Number.isFinite(proposed)&&proposed-previous<HEARTBEAT_WRITE_INTERVAL_MS){
+      next.heartbeatAt=current.heartbeatAt;
+    }
+  }
+  const stamp=Date.now();
+  const last=agentWriteThrottle.get(current.id)??0;
+  const goingIdle=current.state!=='available'&&next.state==='available';
+  if(goingIdle||stamp-last>=AGENT_WRITE_INTERVAL_MS){
+    agentWriteThrottle.set(current.id,stamp);
+    const saved=store.put('agents',next);
+    store.addEvent('agent.updated',saved);
+    return saved;
+  }
+  return store.putTransient('agents',next);
+}
 function agentDedupeScore(agent){
   const metadata=agent?.metadata??{};
   let score=Object.keys(metadata.learning??{}).length*10+Object.keys(metadata.skillTree??{}).length*2+Math.max(0,Number(metadata.successRate??0))*5;

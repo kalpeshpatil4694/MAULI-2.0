@@ -7,17 +7,29 @@ import { hasD1, d1List, d1Put, d1Event, d1Events } from './db.js';
 // the build existed on GitHub and in one isolate's memory but was simply not in
 // D1 for the next request — a permanent 404 on a build that was running.
 const CRITICAL_TYPES = new Set(['projects','tasks','runs','command_results','verifications','artifacts','builds','build_locks','approvals']);
-// Events whose payload's entity already has its own row (agents, runs, executions,
-// memory, chat messages, activities, tool runs). Persisting them to D1 costs one
-// rows_written per event on insert AND another on prune-delete, on top of the entity
-// upsert that already recorded the same fact. They stay in the in-memory feed for the
-// live dashboard; only the D1 copy is skipped. This cuts roughly two thirds of the
-// per-task event writes that pushed the account to 95% of the 100K/day free budget.
+// Events whose payload's entity already has its own row (agents, tasks, verifications,
+// runs, executions, memory, chat messages, activities, tool runs). Persisting them to D1
+// costs one rows_written per event on insert AND another on prune-delete, on top of the
+// entity upsert that already recorded the same fact. They stay in the in-memory feed for
+// the live dashboard; only the D1 copy is skipped.
+//
+// The task lifecycle is the expensive case: every task moved through assigned → working →
+// verifying → completed, and several of those transitions wrote BOTH a task row and an
+// event saying the same thing. Measured on a full 13-task command that narration was the
+// majority of the 375 daily writes, and most of it is recoverable from the task row itself
+// (state, attempts, infraRecoveries, error, verificationId, agentId).
+//
+// task.completed and command.completed deliberately stay persisted: those are the
+// completion audit trail, and dropping them would trade a recoverability problem for a
+// cost problem without the founder ever asking for it.
 const MEMORY_ONLY_EVENTS = new Set([
-  'agent.updated', 'agent.activity', 'agent.sub_agent_created',
+  'agent.updated', 'agent.registered', 'agent.activity', 'agent.sub_agent_created',
   'execution.started', 'execution.completed', 'execution.failed', 'execution.duplicate_prevented',
   'memory.created', 'tool.executed',
   'chat.user_message', 'chat.assistant_response',
+  'task.assigned', 'task.verifying',
+  'scheduler.task_claimed', 'scheduler.task_recovered',
+  'verification.completed',
 ]);
 // Tables the dashboard counters are built from. If one of these fails to load the isolate
 // must not advertise itself as hydrated, or the counters would render an empty store.
@@ -78,8 +90,19 @@ export class MemoryStore {
       this.pendingWrites.add(write);
     }
     return item;
+  }  // Update the in-memory row without touching D1. For states that exist only between two
+  // durable ones: an invocation that dies mid-transition leaves the previous durable state,
+  // and orphan recovery already handles that state identically, so the extra row write per
+  // task buys nothing but cost.
+  putTransient(type, value) {
+    const bucket=this.data.get(type)??new Map();
+    const previous=value?.id ? bucket.get(value.id) : null;
+    if (previous && comparable(previous) === comparable(value)) return previous;
+    const item={...value,id:value.id??id(type),updatedAt:now(),createdAt:value.createdAt??now()};
+    bucket.set(item.id,item); this.data.set(type,bucket);
+    return item;
   }
-  addEvent(type,payload) {
+  addEvent(type, payload) {
     const event={id:id('evt'),type,payload,at:now()}; this.events.push(event); if(this.events.length>1000)this.events.shift();
     if(hasD1(this.env) && !MEMORY_ONLY_EVENTS.has(type)) {
       const critical=type.startsWith('command.')||type.startsWith('project.')||type.startsWith('task.')||type.startsWith('verification.')||type.startsWith('artifact.');
