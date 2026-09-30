@@ -53,7 +53,9 @@ export class MemoryStore {
     if(hasD1(this.env)) {
       const critical=CRITICAL_TYPES.has(type);
       let write;
-      write=d1Put(this.env,type,item,{critical}).then(result=>{
+      // Pass the version this row was read at so D1 can reject a write built on a copy
+      // another isolate has since replaced (see d1Put's compare-and-set).
+      write=d1Put(this.env,type,item,{critical,expectedUpdatedAt:previous?.updatedAt??null}).then(result=>{
         if(critical&&result?._d1WriteDeferred){
           const reason=result._d1WriteError|| (result._d1WriteLimit?'write blocked':'unknown error');
           this.persistenceErrors.push(new Error(`D1 persistence deferred for ${type}/${item.id}: ${reason}`));

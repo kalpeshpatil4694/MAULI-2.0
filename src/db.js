@@ -49,15 +49,44 @@ export async function d1List(env, type, { existingTasks, limit } = {}) {
   return rows.map(project => ({ ...project, state: projectStateFromTasks(project, tasks) }));
 }
 
-export async function d1Put(env, type, value, { critical = false } = {}) {
+export async function d1Put(env, type, value, { critical = false, expectedUpdatedAt = null } = {}) {
   // Reserve a small write budget before executing. Actual rows_written is recorded
   // from D1 metadata after success, so the dashboard remains honest about writes.
   if (!(await reserveD1Rows(env, 2, critical))) return { ...value, _d1WriteDeferred: true, _d1WriteLimit: true };
-  const now = new Date().toISOString();
+  // The version must strictly advance. Two writes inside the same millisecond would share
+  // an updated_at, and the compare-and-set below compares that value — a stale writer whose
+  // clock reading coincides with the newer row would be accepted instead of rejected.
+  const stamp = Date.now();
+  let now = new Date(stamp).toISOString();
+  if (expectedUpdatedAt) {
+    const read = Date.parse(expectedUpdatedAt);
+    if (Number.isFinite(read) && read >= stamp) now = new Date(read + 1).toISOString();
+  }
   const item = { ...value, createdAt: value.createdAt ?? now, updatedAt: now };
+  // Compare-and-set on updated_at. Every isolate holds its own hydrated copy of a row and
+  // writes the WHOLE row back, so two isolates that read the same task and finish at
+  // different times both stamp a fresh updated_at and the last one wins — regardless of
+  // which copy is older. That is how a completed task silently rolled back to 'queued':
+  // progress was made, then an isolate holding a stale row overwrote it, the task was
+  // re-claimed, and the project never converged. Guarding the update with the version the
+  // writer actually read makes writes monotonic — a stale writer is rejected (0 rows
+  // written) instead of resurrecting its old copy, and the newer truth survives.
+  const cas = expectedUpdatedAt
+    ? ' ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at WHERE entities.updated_at = ?'
+    : ' ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at';
+  const sql = `INSERT INTO entities(type,id,data,created_at,updated_at) VALUES(?,?,?,?,?)${cas}`;
+  const bindings = expectedUpdatedAt
+    ? [type, item.id, JSON.stringify(item), item.createdAt, now, expectedUpdatedAt]
+    : [type, item.id, JSON.stringify(item), item.createdAt, now];
   try {
-    const result = await env.DB.prepare(`INSERT INTO entities(type,id,data,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at`).bind(type, item.id, JSON.stringify(item), item.createdAt, now).run();
-    recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1), 'entity:'+type);
+    const result = await env.DB.prepare(sql).bind(...bindings).run();
+    const written = Number(result?.meta?.rows_written) || 0;
+    // rows_written === 0 on a rejected compare-and-set: the row moved on while we worked.
+    if (expectedUpdatedAt && written === 0) {
+      recordD1Write(env, 0, 'entity-stale:' + type);
+      return { ...item, _d1WriteStale: true, _d1WriteExpected: expectedUpdatedAt };
+    }
+    recordD1Write(env, Math.max(1, written || 1), 'entity:'+type);
     return item;
   } catch (error) {
     return { ...item, _d1WriteDeferred: true, _d1WriteError: error?.message ?? String(error) };
