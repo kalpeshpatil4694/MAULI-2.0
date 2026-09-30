@@ -74,7 +74,16 @@ const AI_ATTEMPT_TIMEOUT_MS = 40_000;
  */
 function ensurePackageJson(files, objective) {
   const list = Array.isArray(files) ? files : [];
-  const name = String(objective || 'mauli-app').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'mauli-app';
+  const words = String(objective || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    // Drop the instruction words: a package named "build-a-pomodoro-timer-web-app"
+    // describes the request, not the project.
+    .filter(w => w && !['build','create','make','a','an','the','simple','app','application','web','website','with','that','for','me'].includes(w))
+    .slice(0, 3);
+  const name = words.join('-').slice(0, 30) || 'mauli-app';
   const isEmpty = (content) => {
     const raw = String(content ?? '').trim();
     if (!raw) return true;
