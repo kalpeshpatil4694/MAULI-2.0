@@ -56,6 +56,16 @@ export class MemoryStore {
       // Pass the version this row was read at so D1 can reject a write built on a copy
       // another isolate has since replaced (see d1Put's compare-and-set).
       write=d1Put(this.env,type,item,{critical,expectedUpdatedAt:previous?.updatedAt??null}).then(result=>{
+        // d1Put persists the version it actually wrote, which can differ by a millisecond
+        // from the one stamped above. The in-memory copy must adopt it: if it kept its own
+        // timestamp, the next write's compare-and-set would compare against a version D1
+        // never had, be rejected as stale, and this isolate would silently stop persisting
+        // that row for the rest of its life.
+        const persisted=result?.updatedAt;
+        const current=bucket.get(item.id);
+        if(persisted&&current&&current.updatedAt!==persisted){
+          bucket.set(item.id,{...current,updatedAt:persisted});
+        }
         if(critical&&result?._d1WriteDeferred){
           const reason=result._d1WriteError|| (result._d1WriteLimit?'write blocked':'unknown error');
           this.persistenceErrors.push(new Error(`D1 persistence deferred for ${type}/${item.id}: ${reason}`));
