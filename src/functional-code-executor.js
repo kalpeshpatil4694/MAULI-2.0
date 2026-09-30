@@ -65,6 +65,31 @@ function resolveRuntimeEnv(env) {
 }
 
 const AI_ATTEMPT_TIMEOUT_MS = 40_000;
+
+/**
+ * A model that answers with an empty {} manifest has produced a project that cannot be
+ * installed — the APK build needs a real package.json — so this repairs rather than
+ * rejects. Rejecting would throw the whole app away and fall back to a template, which is
+ * a worse answer than a correct manifest for code the founder never has to read.
+ */
+function ensurePackageJson(files, objective) {
+  const list = Array.isArray(files) ? files : [];
+  const name = String(objective || 'mauli-app').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'mauli-app';
+  const isEmpty = (content) => {
+    const raw = String(content ?? '').trim();
+    if (!raw) return true;
+    try {
+      const parsed = JSON.parse(raw);
+      return !parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length === 0;
+    } catch { return false; }
+  };
+  const index = list.findIndex(f => f.path === 'package.json');
+  const manifest = JSON.stringify({ name, version: '1.0.0', private: true, scripts: { start: 'npx serve www' } }, null, 2);
+  if (index === -1) return [...list, { path: 'package.json', content: manifest }];
+  if (isEmpty(list[index].content)) list[index] = { ...list[index], content: manifest };
+  return list;
+}
+
 const DEFAULT_CODE_MODEL_FALLBACK = '@cf/qwen/qwen3-30b-a3b-fp8';
 
 function withTimeout(promise, ms) {
@@ -78,9 +103,10 @@ function withTimeout(promise, ms) {
 const WEB_TASK_PROMPT = `You are a senior web developer generating a COMPLETE, WORKING web application.
 
 OUTPUT FORMAT: Return ONLY a valid JSON object with this exact structure:
-{"summary":"brief description","files":[{"path":"www/index.html","content":"FULL HTML"},{"path":"www/app.js","content":"FULL JAVASCRIPT"},{"path":"www/styles.css","content":"FULL CSS"},{"path":"package.json","content":"{}"},{"path":"README.md","content":"# App"}],"tests":["test description"],"notes":["note"]}
+{"summary":"brief description","files":[{"path":"www/index.html","content":"FULL HTML"},{"path":"www/app.js","content":"FULL JAVASCRIPT"},{"path":"www/styles.css","content":"FULL CSS"},{"path":"package.json","content":"{\"name\":\"my-app\",\"version\":\"1.0.0\",\"scripts\":{\"start\":\"npx serve www\"}}"},{"path":"README.md","content":"# App"}],"tests":["test description"],"notes":["note"]}
 
 CRITICAL RULES:
+0. package.json MUST be a real manifest with at least "name", "version" and "scripts". NEVER output an empty {} for it — an empty manifest breaks the build and the app cannot be installed.
 1. www/index.html MUST be a complete, standalone HTML file with <!DOCTYPE html>, <html>, <head>, <body> tags
 2. www/app.js MUST contain ALL JavaScript logic — event handlers, functions, DOM manipulation
 3. www/styles.css MUST contain ALL styles — layout, colors, responsive design, animations
@@ -131,7 +157,7 @@ export async function probeAiGeneration(objective, { env, acceptance = [] } = {}
         { role: 'user', content: prompt }
       ], { maxTokens: 3000 }), AI_ATTEMPT_TIMEOUT_MS);
       const parsed = parseModel(raw);
-      const files = filesOf(parsed?.files);
+      const files = ensurePackageJson(filesOf(parsed?.files), objective);
       // Validate against a web task: this probe uses the web prompt, so it must be held to
       // the same bar the executor applies (a real index.html plus real app.js/styles.css),
       // or it would report success for output the executor would reject and fall back.
@@ -205,7 +231,7 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   }
 
   // If AI succeeded, use its output
-  const files = filesOf(parsed?.files);
+  const files = ensurePackageJson(filesOf(parsed?.files), objective);
   if (!invalid(files, task)) {
     const tests = Array.isArray(parsed.tests) ? parsed.tests.map(text).filter(Boolean).slice(0, 20) : [];
     const notes = Array.isArray(parsed.notes) ? parsed.notes.map(text).filter(Boolean).slice(0, 20) : [];

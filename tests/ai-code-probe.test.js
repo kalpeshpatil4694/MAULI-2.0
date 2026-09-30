@@ -40,8 +40,8 @@ test('a usable model response is reported as generated, with the files it return
   const result = await probeAiGeneration('Build a calculator web app', { env });
   assert.equal(result.available, true);
   assert.equal(result.generated, true);
-  assert.equal(result.fileCount, 3);
-  assert.deepEqual(result.files.map(f => f.path).sort(), ['www/app.js', 'www/index.html', 'www/styles.css']);
+  assert.equal(result.fileCount, 4, 'the three generated files plus the synthesised manifest');
+  assert.deepEqual(result.files.map(f => f.path).sort(), ['package.json', 'www/app.js', 'www/index.html', 'www/styles.css']);
   assert.equal(result.hasPlaceholder, false);
   assert.match(result.preview, /<!DOCTYPE html>/, 'the real generated HTML comes back, not a label');
   assert.equal(env.calls.length, 1, 'one AI request was made');
@@ -86,4 +86,51 @@ test('the probe writes nothing to the store', async () => {
   }
   assert.equal(before.puts, 0, 'no entity may be persisted by the probe');
   assert.equal(store.events.length, before.events, 'no event may be emitted by the probe');
+});
+
+test('an empty {} manifest is repaired rather than shipped', async () => {
+  // The probe's prompt example literally showed "content":"{}", and the model obeyed: every
+  // generated project carried a 2-byte manifest that cannot be installed or built. Rejecting
+  // it would discard the whole app for a template fallback; repairing it delivers the code.
+  const weakManifest = JSON.stringify({
+    summary: 'Calculator',
+    files: [
+      { path: 'www/index.html', content: '<!DOCTYPE html><html><head><title>c</title><link rel="stylesheet" href="styles.css"></head><body><div id="d">0</div><script src="app.js"></script></body></html>' },
+      { path: 'www/app.js', content: 'x'.repeat(400) },
+      { path: 'www/styles.css', content: 'y'.repeat(300) },
+      { path: 'package.json', content: '{}' },
+    ],
+  });
+  const result = await probeAiGeneration('Build a simple calculator web app', { env: fakeEnv(weakManifest) });
+  assert.equal(result.generated, true, 'the app is kept');
+  const manifest = result.files.find(f => f.path === 'package.json');
+  assert.ok(manifest, 'a manifest is always present');
+  assert.ok(manifest.bytes > 2, `the empty manifest must be repaired, got ${manifest.bytes} bytes`);
+});
+
+test('a real manifest from the model is left alone', async () => {
+  const real = JSON.stringify({
+    summary: 'Calculator',
+    files: [
+      { path: 'www/index.html', content: '<!DOCTYPE html><html><head><title>c</title><link rel="stylesheet" href="styles.css"></head><body><div id="d">0</div><script src="app.js"></script></body></html>' },
+      { path: 'www/app.js', content: 'x'.repeat(400) },
+      { path: 'www/styles.css', content: 'y'.repeat(300) },
+      { path: 'package.json', content: JSON.stringify({ name: 'calc', version: '2.0.0', dependencies: { serve: '^14' } }) },
+    ],
+  });
+  const result = await probeAiGeneration('Build a simple calculator web app', { env: fakeEnv(real) });
+  const manifest = result.files.find(f => f.path === 'package.json');
+  assert.ok(manifest.bytes > 40, 'the model’s own manifest is preserved');
+});
+
+test('a missing manifest is added so the project can always be built', async () => {
+  const noManifest = JSON.stringify({
+    files: [
+      { path: 'www/index.html', content: '<!DOCTYPE html><html><head><title>c</title><link rel="stylesheet" href="styles.css"></head><body><div id="d">0</div><script src="app.js"></script></body></html>' },
+      { path: 'www/app.js', content: 'x'.repeat(400) },
+      { path: 'www/styles.css', content: 'y'.repeat(300) },
+    ],
+  });
+  const result = await probeAiGeneration('Build a simple calculator web app', { env: fakeEnv(noManifest) });
+  assert.ok(result.files.some(f => f.path === 'package.json'), 'a manifest is synthesised when absent');
 });
