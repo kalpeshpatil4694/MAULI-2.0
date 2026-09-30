@@ -28,8 +28,11 @@ export function recoverStuckProjects({ dryRun = false } = {}) {
     if (!byProject.has(task.projectId)) byProject.set(task.projectId, []);
     byProject.get(task.projectId).push(task);
   }
-  const runningRunTaskIds = new Set(
-    store.list('runs').filter(r => r.state === 'running').map(r => r.taskId)
+  const runningRunProjectIds = new Set(
+    store.list('runs')
+      .filter(r => r.state === 'running')
+      .map(r => store.get('tasks', r.taskId)?.projectId)
+      .filter(Boolean)
   );
 
   const reports = [];
@@ -66,7 +69,9 @@ export function recoverStuckProjects({ dryRun = false } = {}) {
       continue;
     }
     // Work exists and something is already runnable or actively executing: leave it alone.
-    if (runnable.length || runningRunTaskIds.size) {
+    // The live-run check must be per-project — one running task anywhere in the system used
+    // to mark every project in_progress, so nothing was ever diagnosed or re-queued.
+    if (runnable.length || runningRunProjectIds.has(project.id)) {
       reports.push({ projectId: project.id, state: project.state, verdict: 'in_progress', counts });
       continue;
     }
