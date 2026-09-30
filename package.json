@@ -1,14 +1,13 @@
 {
-  "name": "mauli2.0",
-  "version": "2.0.0",
-  "private": true,
-  "type": "module",
+  "name": "todo-app",
+  "version": "1.0.0",
+  "description": "Simple to-do list application",
+  "main": "server.js",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "test": "node --test"
+    "start": "node server.js"
   },
-  "devDependencies": {
-    "wrangler": "^4.0.0"
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.19.0"
   }
 }
