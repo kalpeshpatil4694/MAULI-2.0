@@ -413,7 +413,18 @@ export default { async fetch(request, env, ctx) { try {
     // AI path working?" in exactly the conditions where it is otherwise untestable — while
     // D1 writes are refused, the command endpoint cannot get far enough to reach the AI.
     const {probeAiGeneration}=await import('./functional-code-executor.js');
-    const probe=await probeAiGeneration(objective,{env,acceptance:Array.isArray(body.acceptance)?body.acceptance:[]}).catch(error=>({available:true,generated:false,error:String(error?.message??error)}));
+    const probe=await probeAiGeneration(objective,{env,acceptance:Array.isArray(body.acceptance)?body.acceptance:[],includeContent:body.includeContent===true||body.download===true}).catch(error=>({available:true,generated:false,error:String(error?.message??error)}));
+    // A generated app that cannot be taken away is still not a delivered app. When
+    // persistence is refused, the zip is built here and streamed straight out — so the
+    // founder can open and run real AI-written code in the same minute it was generated.
+    if(body.download===true&&probe?.generated){
+      const files=(probe.files??[]).map(f=>({path:f.path,content:f.content??''}));
+      if(files.length){
+        const zip=createZip(files);
+        const safe=objective.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'mauli-app';
+        return new Response(zip,{status:200,headers:{'content-type':'application/zip','content-disposition':`attachment; filename="mauli-${safe}.zip"`,'cache-control':'private, no-store'}});
+      }
+    }
     return ok({probe:{objective,...probe}});
   }
   if(request.method==='POST'&&url.pathname==='/api/maintenance/recover-stuck'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const report=recoverStuckProjects({dryRun:body.dryRun===true});return ok({recoverStuck:report,projects:report.reports});}
