@@ -20,6 +20,12 @@ let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 3000
 let _d1Failed = false; let _d1FailTime = 0; const D1_FAIL_COOLDOWN = 300000; // 5 min retry after D1 failure
 const _projectKickAt = new Map();
 const PROJECT_KICK_COOLDOWN = 30000;
+// A dashboard refresh is the one moment the founder is watching. If a project still has
+// unfinished work, one throttled scheduler tick here means a command cannot sit "active"
+// forever just because its command-triggered tick was cancelled or it landed outside the
+// cron window. 60s keeps a poll from turning into repeated executions.
+let _stateKickAt = 0;
+const STATE_KICK_COOLDOWN = 60000;
 async function hydrate(env) {
   if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
   // After a D1 failure (e.g. daily rows_read limit), retry after the cooldown so the
@@ -123,8 +129,13 @@ export default {
       const response = await app.fetch(request, env, ctx);
       if (response.ok && ctx?.waitUntil) {
         const approvalId = url.pathname.split('/').pop();
-        const approval = store.get('approvals', approvalId);
-        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId, projectId: approval?.projectId, budgetMs: 20_000 }).catch(error => {
+        // index.js already ran governance.approveProject() (approval row -> 'approved',
+        // project -> 'queued', live tasks -> 'queued'). Do not repeat it here: it needs the
+        // request body for the founder note, which is not in scope at this layer, and the
+        // old call site read `body?.note` from the wrong scope — a ReferenceError that the
+        // surrounding .catch(() => null) swallowed, so the project stayed parked.
+        const decided = store.get('approvals', approvalId);
+        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId, projectId: decided?.projectId, budgetMs: 20_000 }).catch(error => {
           store.addEvent('approval.scheduler_error', { approvalId, error: error?.message || 'Scheduler error after approval', at: now() });
         }));
       }
@@ -145,6 +156,16 @@ export default {
     }
 
     const response = await app.fetch(request, env, ctx);
+    // Dashboard poll self-heal (see STATE_KICK_COOLDOWN above).
+    if (request.method === 'GET' && url.pathname === '/api/state' && response.ok && ctx?.waitUntil && store.hydrated && env?.DB) {
+      const unfinished = store.list('tasks').some(t => ['queued','assigned','working','verifying'].includes(t.state));
+      if (unfinished && Date.now() - _stateKickAt >= STATE_KICK_COOLDOWN) {
+        _stateKickAt = Date.now();
+        ctx.waitUntil(schedulerTick(env, { trigger: 'dashboard-poll', budgetMs: 15_000 }).catch(error => {
+          store.addEvent('state.scheduler_error', { error: error?.message || 'Scheduler error from poll', at: now() });
+        }));
+      }
+    }
     // Opening a project detail is also a safe targeted wake-up for that project. This
     // prevents an active project from waiting for a global cron tick when a queued gate
     // was left behind by an isolate/lease/trigger interruption. The cooldown avoids turning

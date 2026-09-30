@@ -28,7 +28,10 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Install Capacitor
-        run: npm install @capacitor/core @capacitor/cli @capacitor/android --no-audit --no-fund
+        # Pinned to 6 for the same reason as build-apps.yml: Capacitor 7 compiles with
+        # `javac` source release 21 and this job runs Java 17, so an unpinned install
+        # failed with "error: invalid source release: 21".
+        run: npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 --no-audit --no-fund
       - name: Init Capacitor
         run: npx cap init mauli-app com.mauli.app --web-dir www || true
       - name: Add Android platform

@@ -20,6 +20,11 @@ export async function ensureSchema(env) {
 }
 
 function projectStateFromTasks(project, tasks) {
+  // A project parked on a founder approval gate must keep that state. Deriving 'active'
+  // from its (blocked/assigned) tasks hid the gate: the dashboard showed an active project
+  // doing nothing, which reads as "my command was not processed" until the founder happens
+  // to open Approvals. The scheduler already refuses to run an awaiting_approval project.
+  if (project?.state === 'awaiting_approval') return 'awaiting_approval';
   const own = tasks.filter(t => t?.projectId === project?.id);
   if (!own.length) return project?.state ?? 'planning';
   if (own.some(t => t.state === 'failed')) return 'escalated';
@@ -127,7 +132,10 @@ const FREE_LIMITS = {
   kvListRequestsPerDay: 1000,
   kvStorageMB: 1024,
   workersAiNeuronsPerDay: 10000,
-  workersAiSafeRequestsPerDay: 18,
+  // /api/usage reports this beside the AI quota. It tracks ai.js AI_SAFE_REQUEST_LIMIT:
+  // code generation runs on the cheap code model (~85 neurons per app) so the 10,000 free
+  // neurons a day now cover ~115 generations instead of ~17 on the 70B chat model.
+  workersAiSafeRequestsPerDay: 90,
   r2StorageGBMonth: 10,
   r2ClassAOperationsMonth: 1000000,
   r2ClassBOperationsMonth: 10000000,

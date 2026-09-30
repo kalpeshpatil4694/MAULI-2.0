@@ -57,6 +57,24 @@ test('/api/app-files and /api/project-download share the build-path authority', 
   assert.match(zipRoute, /content-disposition/);
 });
 
+test('/api/edits lists every project file once, from the same authority as the zip', () => {
+  // The route read the row-capped artifact cache and concatenated each artifact's file
+  // list, so one project answered with www/index.html twice (six times for others) and
+  // a project whose artifact was not hydrated into the isolate listed nothing at all.
+  const get = /if\(request\.method==='GET'&&url\.pathname==='\/api\/edits'\)\{[\s\S]*?\n  \}/.exec(index)?.[0] ?? '';
+  assert.ok(get, 'the edits route must exist');
+  assert.match(get, /const artifacts=await projectCodeArtifacts\(projectId,env\);/);
+  assert.match(get, /collectProjectFiles\(projectId,null,store,artifacts\)/);
+  assert.doesNotMatch(get, /store\.list\('artifacts'\)/, 'no capped in-memory read');
+
+  // The write path must find the workspace the same way, or an edit answers 404 for a
+  // project whose artifact lives in D1 but not in this isolate's cache.
+  const post = /if\(request\.method==='POST'&&url\.pathname==='\/api\/edits'\)\{[\s\S]*?\n  \}/.exec(index)?.[0] ?? '';
+  assert.ok(post, 'the edits write route must exist');
+  assert.match(post, /const workspaceArtifacts=\(await projectCodeArtifacts\(projectId,env\)\)\.filter/);
+  assert.doesNotMatch(post, /store\.list\('artifacts'\)\.find/);
+});
+
 test('the dashboard downloads one zip instead of one click per file', () => {
   const downloadZip = /window\.downloadZip=async function\(pid\)\{[\s\S]*?\n  \};/.exec(live)?.[0] ?? '';
   assert.ok(downloadZip, 'the downloadZip override must be present');
@@ -72,7 +90,11 @@ test('protected downloads are fetched with the founder header, never window.open
   assert.match(live, /__mauliFounderHeaders\(\{\}\)/);
   const startBuild = /window\.startBuild=async function[\s\S]*?\n  \};/.exec(live)?.[0] ?? '';
   assert.ok(startBuild, 'the startBuild override must be present');
-  assert.match(startBuild, /await fetchAsBlob\(s\.downloadUrl,false\)/);
+  // One download helper is shared by the poll result and the /api/project-builds
+  // fallback, so the caller passes the url in instead of reading s.downloadUrl.
+  assert.match(startBuild, /const attachDownload=url=>\{/);
+  assert.match(startBuild, /await fetchAsBlob\(url,false\)/);
   assert.match(startBuild, /saveBlob\(blob,name\|\|/);
+  assert.match(startBuild, /attachDownload\(s\.downloadUrl\)/);
   assert.doesNotMatch(startBuild, /window\.open\(s\.downloadUrl/, 'no header-less navigation');
 });

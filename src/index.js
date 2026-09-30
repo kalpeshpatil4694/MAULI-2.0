@@ -10,6 +10,7 @@ import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { collectProjectFiles, createZip } from './zip.js';
 import { ensureSchema, hasD1, d1List, d1Get, d1Events, claimBuildVersion, getBuildVersion, getUsageReport, cleanupD1 } from './db.js';
+import { recoverStuckProjects } from './maintenance.js';
 import { recoverRunningExecutions } from './execution.js';
 import { requireFounder, checkRateLimit, checkCommandRateLimit, getRateLimitStats } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
@@ -120,14 +121,24 @@ function compactStateItem(item, type) {
 // so counting them would report "300 tasks / 100 artifacts" forever while the real numbers
 // are 738/429. One index-backed GROUP BY, reached only on a cold isolate and only once per
 // 5 s snapshot cache. Returns null when D1 is unavailable so the caller can omit totals.
-async function safeTypeCounts(env) {
-  if (!hasD1(env)) return null;
+const STATE_TOTALS_TTL = 15000;
+let _stateTotals = null; let _stateTotalsTime = 0;
+// Cached so the true counts are identical on every isolate and on both the hydrated and
+// cold-isolate paths. Before this, the hydrated path summed the row-capped in-memory lists
+// (projects/tasks/artifacts) while the cold path used the D1 COUNT — two isolates answering
+// the same dashboard refresh reported different numbers, which is exactly the "values change
+// when I refresh" report. The 15s TTL keeps the read budget bounded (one GROUP BY per window).
+async function safeTypeCounts(env, fresh = false) {
+  if (!hasD1(env)) return _stateTotals;
+  const nowMs = Date.now();
+  if (!fresh && _stateTotals && (nowMs - _stateTotalsTime) < STATE_TOTALS_TTL) return _stateTotals;
   try {
     const rows = await env.DB.prepare("SELECT type, COUNT(*) AS cnt FROM entities WHERE type IN ('projects','tasks','artifacts') GROUP BY type").all();
     const out = { projects: 0, tasks: 0, artifacts: 0 };
     for (const r of (rows?.results ?? [])) if (r && Object.prototype.hasOwnProperty.call(out, r.type)) out[r.type] = Number(r.cnt) || 0;
+    _stateTotals = out; _stateTotalsTime = nowMs;
     return out;
-  } catch (_) { return null; }
+  } catch (_) { return _stateTotals; }
 }
 
 // Which projects actually shipped code. /api/state caps the artifact list at 100 (429
@@ -154,6 +165,31 @@ function buildableProjectIds(artifacts) {
 }
 
 function compactStateList(list, type) { return (Array.isArray(list) ? list : []).map(item => compactStateItem(item, type)); }
+
+// A serving isolate hydrates once and then answers from memory; if it hydrated while a
+// command was still being written it can hold the project row without its tasks, and it
+// never re-hydrates. That is why the Project Details / live-progress screens flipped
+// between the real task list and an empty one across refreshes. These founder-facing
+// screens now read tasks from D1 behind a short cache (also merging any missing rows back
+// into the store so the scheduler sees work written by other isolates). The cache keeps the
+// live card's 5 s poll cheap: at most one bounded tasks read per window.
+const D1_TASK_CACHE_TTL = 20000;
+const _d1TaskCache = { at: 0, rows: null };
+async function d1TasksFresh(env) {
+  if (!hasD1(env)) return null;
+  if (Array.isArray(_d1TaskCache.rows) && (Date.now() - _d1TaskCache.at) < D1_TASK_CACHE_TTL) return _d1TaskCache.rows;
+  try {
+    const rows = await d1List(env, 'tasks', { limit: 1500 });
+    _d1TaskCache.rows = rows; _d1TaskCache.at = Date.now();
+    const bucket = store.data.get('tasks') ?? new Map();
+    for (const t of rows) if (t?.id && !bucket.has(t.id)) bucket.set(t.id, t);
+    if (bucket.size) store.data.set('tasks', bucket);
+    return rows;
+  } catch (_) { return _d1TaskCache.rows; }
+}
+// Test hook: the cache is module-level by design, so tests that swap the D1 double need a
+// way to force a cold read.
+export function __resetD1TaskCache() { _d1TaskCache.at = 0; _d1TaskCache.rows = null; }
 
 // A single failed D1 read must not discard the whole snapshot. Cold isolates routinely
 // race the background hydration, and an all-or-nothing snapshot used to throw and fall
@@ -262,7 +298,7 @@ async function stateSnapshot(env) {
 // in-memory store; if D1 reads fail we still serve the last good snapshot and flag the
 // response as degraded instead of blanking the dashboard to zeros.
 async function statePayload(env, recoveredRuns) {
-  const memoryState = () => {
+  const memoryState = async () => {
     const storeArtifacts = store.list('artifacts');
     const codeProjects = codeProjectIds(storeArtifacts);
     const buildable = buildableProjectIds(storeArtifacts);
@@ -275,7 +311,11 @@ async function statePayload(env, recoveredRuns) {
     const agents = compactStateList(listAgents().slice(0,50),'agents');
     const approvals = compactStateList(listApprovals().slice(-50),'approvals');
     const events = compactStateList(store.recentEvents(30),'events');
-    return { agents, projects, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: projects.length, tasks: tasks.length, running: tasks.filter(t => ['working','assigned'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: artifacts.length, totals: { projects: listProjects().length, tasks: listTasks().length, artifacts: store.list('artifacts').length } } };
+    // Totals come from the same cached D1 COUNT the cold-isolate snapshot uses, so the
+    // counters are identical whichever isolate answers a refresh (the capped in-memory
+    // lists below them differ by isolate, the numbers must not).
+    const totals = await safeTypeCounts(env) ?? { projects: listProjects().length, tasks: listTasks().length, artifacts: store.list('artifacts').length };
+    return { agents, projects, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: totals.projects, tasks: totals.tasks, running: tasks.filter(t => ['working','assigned'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: totals.artifacts, totals } };
   };
   if (store.hydrated) return memoryState();
   if (hasD1(env)) {
@@ -288,7 +328,7 @@ async function statePayload(env, recoveredRuns) {
   }
   // Nothing readable from D1 yet. Returning the bare in-memory state here is what made
   // the counters read 0 — flag it so the client keeps whatever it already rendered.
-  const fallback = memoryState();
+  const fallback = await memoryState();
   _stateDegradedCount.count++;
   _stateDegradedCount.lastAt = new Date().toISOString();
   return { ...fallback, degraded: true, coldIsolate: true, degradedReason: 'no-readable-state' };
@@ -363,6 +403,7 @@ export default { async fetch(request, env, ctx) { try {
   }
   if(request.method==='GET'&&url.pathname==='/api/health') return ok({service:'mauli2.0',status:'healthy',persistence:hasD1(env),r2:Boolean(env?.ARTIFACTS),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),stateReads:stateDiagnostics(),time:now()});
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
+  if(request.method==='POST'&&url.pathname==='/api/maintenance/recover-stuck'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const report=recoverStuckProjects({dryRun:body.dryRun===true});return ok({recoverStuck:report,projects:report.reports});}
   if(request.method==='POST'&&url.pathname==='/api/reset'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const keepAgents=body.keepAgents!==false;const before={projects:store.list('projects').length,tasks:store.list('tasks').length,artifacts:store.list('artifacts').length};store.put('projects',[]);store.put('tasks',[]);store.put('artifacts',[]);store.put('builds',[]);store.put('events',[]);store.put('approvals',[]);if(!keepAgents){const agents=store.list('agents');const fresh=agents.filter(a=>a._builtin);store.put('agents',fresh);}await store.flush();if(hasD1(env)){try{await env.DB.prepare('DELETE FROM entities').run();await env.DB.prepare('DELETE FROM events').run();}catch(e){console.warn('D1 reset failed:',e.message);}}store.addEvent('system.reset',{before,keepAgents,time:now()});return ok({reset:true,before,keepAgents});}
   if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});return ok(await statePayload(env, recoveredRuns));}
   if(request.method==='GET'&&url.pathname==='/api/self-test'){const founder=requireFounder(request,env);if(!founder.ok)return fail(founder.error,founder.status);const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const result=runL1SelfTest();store.addEvent('self_test.completed',{score:result.score,status:result.status});return ok({result});}
@@ -406,12 +447,17 @@ export default { async fetch(request, env, ctx) { try {
   // File Edit API — reads and writes the generated project workspace, while retaining
   // the edit history used by the dashboard. The previous UI-only audit records did not
   // update the actual artifact, so Load always 404'd and Save never changed the product.
-  if(request.method==='GET'&&url.pathname==='/api/edits'){const founder=requireFounder(request,env);if(!founder.ok)return fail(founder.error,founder.status);
+  if(request.method==='GET'&&url.pathname==='/api/edits'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const projectId=url.searchParams.get('projectId');const filePath=url.searchParams.get('filePath');
     if(!projectId)return fail('projectId required',400);
-    const artifacts=store.list('artifacts').filter(a=>a.projectId===projectId&&a.type==='code-workspace');
-    const files=artifacts.flatMap(a=>Array.isArray(a.content?.files)?a.content.files:[]);
+    // Same authority as /api/app-files, the build path and /api/project-download: every
+    // code-workspace artifact D1 holds for the project, de-duplicated by path. The
+    // row-capped cache listed the same file once per artifact (www/index.html twice for
+    // this project, six times for others) and hid projects whose artifact had not been
+    // hydrated into the answering isolate at all.
+    const artifacts=await projectCodeArtifacts(projectId,env);
+    const files=collectProjectFiles(projectId,null,store,artifacts);
     if(filePath){const file=files.find(f=>f.path===filePath);if(!file)return fail('File not found',404);return ok({file:{projectId,path:file.path,content:file.content},files:files.map(f=>({path:f.path}))});}
     return ok({files:files.map(f=>({path:f.path})),count:files.length});
   }
@@ -419,7 +465,8 @@ export default { async fetch(request, env, ctx) { try {
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const body=await json(request);const projectId=String(body.projectId||'').trim();const filePath=String(body.filePath||'').trim();const content=typeof body.content==='string'?body.content:null;
     if(!projectId||!filePath||content===null)return fail('projectId, filePath and content are required',400);
-    const artifact=store.list('artifacts').find(a=>a.projectId===projectId&&a.type==='code-workspace'&&Array.isArray(a.content?.files));
+    const workspaceArtifacts=(await projectCodeArtifacts(projectId,env)).filter(a=>Array.isArray(a.content?.files));
+    const artifact=workspaceArtifacts.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0];
     if(!artifact)return fail('Project code workspace not found',404);
     const files=[...(artifact.content?.files||[])];const index=files.findIndex(f=>f.path===filePath);
     if(index<0)return fail('File not found',404);
@@ -437,7 +484,7 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/live-status'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({status:getLiveStatus()});}
   if(request.method==='GET'&&url.pathname==='/api/activity'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');const agentId=url.searchParams.get('agentId');const limit=parseInt(url.searchParams.get('limit')||'50');return ok({activities:getActivityFeed({limit,projectId,agentId})});}
   if(request.method==='POST'&&url.pathname==='/api/activity'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const activity=recordActivity(body);return ok({activity});}
-  if(request.method==='GET'&&url.pathname.startsWith('/api/project-progress/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const pid=parts[parts.length-1];return ok({progress:getProjectProgress(pid)});}
+  if(request.method==='GET'&&url.pathname.startsWith('/api/project-progress/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const pid=parts[parts.length-1];if(store.hydrated)await d1TasksFresh(env);return ok({progress:getProjectProgress(pid)});}
   // Sub-Agent API
   if(request.method==='POST'&&url.pathname==='/api/sub-agents'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const sub=createSubAgent(body);return ok({subAgent:sub});}
   if(request.method==='GET'&&url.pathname==='/api/sub-agents'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parentId=url.searchParams.get('parentId');if(!parentId)return fail('parentId required',400);return ok({subAgents:getSubAgents(parentId)});}
@@ -449,9 +496,12 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/detail')){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const parts=url.pathname.split('/');const pid=parts[3];
-    const allProjects=hasD1(env)&&store.hydrated?await d1List(env,'projects'):listProjects();
+    // One bounded tasks read feeds both the project state and this project's task list, so
+    // the detail screen can never disagree with /api/project-progress about what exists.
+    const d1Tasks=store.hydrated?await d1TasksFresh(env):null;
+    const allProjects=hasD1(env)&&store.hydrated?await d1List(env,'projects',{existingTasks:d1Tasks??undefined}):listProjects();
     const project=allProjects.find(p=>p.id===pid)||listProjects().find(p=>p.id===pid)||store.get('projects',pid);if(!project)return fail('Project not found',404);
-    const tasks=store.list('tasks').filter(t=>t.projectId===pid);
+    const tasks=d1Tasks?d1Tasks.filter(t=>t.projectId===pid):store.list('tasks').filter(t=>t.projectId===pid);
     const artifacts=store.list('artifacts').filter(a=>a.projectId===pid);
     const events=store.recentEvents().filter(e=>e.payload?.projectId===pid);
     const approvals=store.list('approvals').filter(a=>a.projectId===pid);
@@ -499,10 +549,15 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')&&url.pathname.endsWith('/download')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const artifactId=parts[parts.length-2];const artifact=getArtifact(artifactId);if(!artifact)return fail('Artifact not found',404);const safeName=String(artifact.projectId).replace(/[^a-zA-Z0-9_-]/g,'_');const r2Key=artifact.metadata?.r2Key||artifact.content?.r2Key||artifactZipKey(artifact.projectId,artifact.id);if(hasR2(env)){const cached=await getArtifactObject(env,r2Key);if(cached)return new Response(cached.body,{status:200,headers:{'content-type':'application/zip','content-disposition':`attachment; filename="mauli-${safeName}.zip"`,'cache-control':'private, max-age=300'}})}let files=collectProjectFiles(artifact.projectId,artifact,store);if(!files.length){const tasks=store.list('tasks').filter(t=>t.projectId===artifact.projectId);const summary=[];summary.push({path:'README.md',content:`# MAULI 2.0 — Project Delivery\\n\\n## Project\\n- **ID:** ${artifact.projectId}\\n- **Type:** ${artifact.type}\\n- **Delivered:** ${new Date().toISOString()}\\n\\n## Tasks (${tasks.length})\\n${tasks.map(t=>`- [${t.state}] ${t.title}${t.assignedAgentId?' (Agent: '+t.assignedAgentId+')':''}`).join('\\n')}\\n`});summary.push({path:'project-data.json',content:JSON.stringify({projectId:artifact.projectId,type:artifact.type,content:artifact.content,metadata:artifact.metadata},null,2)});files=summary;}const zip=createZip(files);if(hasR2(env)){await putArtifactZip(env,r2Key,zip,{projectId:artifact.projectId,artifactId:artifact.id}).catch(()=>null);if(!artifact.metadata?.r2Key)store.put('artifacts',{...artifact,metadata:{...(artifact.metadata||{}),r2Key},id:artifact.id})}return new Response(zip,{status:200,headers:{'content-type':'application/zip','content-disposition':`attachment; filename="mauli-${safeName}.zip"`,'cache-control':'private, max-age=300'}});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return artifactJson(getArtifact(url.pathname.split('/').pop()));}
   if(request.method==='POST'&&url.pathname==='/api/command'){const limit=checkCommandRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const body=await json(request);const cmdValidation=validateString(body.command,'command',{minLength:1,maxLength:2000});if(!cmdValidation.ok)return fail(cmdValidation.error,400);const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const isolatedTest=isIsolatedTestEnv(env);let result;try{result=await Promise.race([planCommand(body.command,env),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),60000))]);}catch(e){return ok({result:{status:'error',error:e.message,command:body.command}});}const persistedPayload={command:body.command,generatedAt:now(),result};const saved=isolatedTest?{saved:true,skipped:true,testMode:true}:await saveCommandResult(persistedPayload,env).catch(()=>({saved:false}));return ok({result,resultFile:saved},201);}
-  if(request.method==='POST'&&url.pathname.startsWith('/api/approvals/')){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const approvalId=url.pathname.split('/').pop();const body=await json(request);const result=decideApproval(approvalId,Boolean(body.approved),body.note??'');if(!result)return fail('Approval not found',404);if(result.state==='rejected')return ok({approval:result,status:'rejected'});
-    // Unblock project + tasks so the persistent scheduler picks them up
-    if(result.projectId){const project=store.get('projects',result.projectId);if(project)store.put('projects',{...project,state:'queued',updatedAt:now(),id:project.id});const tasks=store.list('tasks').filter(t=>t.projectId===result.projectId&&t.state!=='completed'&&t.state!=='failed'&&t.state!=='cancelled');for(const t of tasks)store.put('tasks',{...t,state:'queued',updatedAt:now(),id:t.id});}
-    return ok({approval:result,status:'approved',message:'Project approved. Tasks queued for scheduler.'});}
+  if(request.method==='POST'&&url.pathname.startsWith('/api/approvals/')){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const approvalId=url.pathname.split('/').pop();const body=await json(request);const pending=store.get('approvals',approvalId);if(!pending)return fail('Approval not found',404);
+    // A proper approval opens two gates at once: the approval row becomes 'approved', AND the
+    // project + its live tasks are re-queued so the scheduler actually begins the chain.
+    // decideApproval() alone only flipped the row, which left the project parked on
+    // 'awaiting_approval' — the scheduler skips that state, so an approved command never ran.
+    const result=decideApproval(approvalId,Boolean(body.approved),body.note??'');if(result.state==='rejected')return ok({approval:result,status:'rejected'});
+    let project=null;
+    if(result.projectId){project=store.get('projects',result.projectId);const approved=await import('./governance.js').then(m=>m.approveProject(pending,project,body.note??'')).catch(()=>null);project=approved?.project??project;}
+    return ok({approval:result,status:'approved',project:project?{id:project.id,state:project.state}:null,message:'Project approved. Tasks queued for scheduler.'});}
   // ── BUILD APP: Auto-push to GitHub + trigger .apk/.exe build ──
   if(request.method==='POST'&&url.pathname==='/api/build-app'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
@@ -557,103 +612,27 @@ export default { async fetch(request, env, ctx) { try {
       const putResp=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent(path),{method:'PUT',headers:ghHeaders,body:JSON.stringify(putBody)});
       if(putResp.ok){pushed++;}else{const errText=await putResp.text().catch(()=>"");store.addEvent('build.push_error',{path:file.path,status:putResp.status,error:errText.substring(0,200)});}
     }
-    // Push the build-app.yml workflow to the build branch
-    const wfLines=[];
-    wfLines.push('name: Build App');
-    wfLines.push('on:');
-    wfLines.push('  push:');
-    wfLines.push('    paths:');
-    wfLines.push("      - '.github/workflows/build-apps.yml'");
-    wfLines.push('concurrency:');
-    wfLines.push('  group: mauli-build-$'+'{{ github.ref }}');
-    wfLines.push('  cancel-in-progress: true');
-    wfLines.push('jobs:');
-    wfLines.push('  build-android:');
-    wfLines.push('    name: Build Android APK');
-    wfLines.push('    runs-on: ubuntu-latest');
-    wfLines.push('    timeout-minutes: 30');
-    wfLines.push('    steps:');
-    wfLines.push('      - uses: actions/checkout@v4');
-    wfLines.push('      - uses: actions/setup-java@v4');
-    wfLines.push('        with:');
-    wfLines.push('          distribution: temurin');
-    wfLines.push('          java-version: 17');
-    wfLines.push('      - uses: actions/setup-node@v4');
-    wfLines.push('        with:');
-    wfLines.push('          node-version: 20');
-    wfLines.push('      - name: Validate source files');
-    wfLines.push('        run: |');
-    wfLines.push('          set -e');
-    // Capacitor only needs the webDir entry point and a package.json. Demanding
-    // www/app.js and www/styles.css failed every project that inlines its script
-    // and styles in index.html — the build died on `test -s` before Capacitor ran.
-    wfLines.push('          test -s www/index.html');
-    wfLines.push('          test -s package.json');
-    wfLines.push('          echo \"Source files validated\"');
-    wfLines.push('      - name: Setup Capacitor Android');
-    wfLines.push('        run: |');
-    wfLines.push('          npm install --no-audit --no-fund');
-    wfLines.push('          npm install --no-audit --no-fund @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6');
-    wfLines.push('          npx cap add android');
-    wfLines.push('          npx cap sync android');
-    wfLines.push('      - name: Build release APK');
-    wfLines.push('        run: |');
-    wfLines.push('          cd android');
-    wfLines.push('          chmod +x gradlew');
-    wfLines.push('          ./gradlew assembleRelease --no-daemon');
-    wfLines.push('      - name: Verify APK');
-    wfLines.push('        run: |');
-    wfLines.push('          test -s android/app/build/outputs/apk/release/*.apk');
-    wfLines.push('          echo \"APK built successfully\"');
-    wfLines.push('      - uses: actions/upload-artifact@v4');
-    wfLines.push('        with:');
-    wfLines.push('          name: android-apk');
-    wfLines.push('          path: android/app/build/outputs/apk/release/*.apk');
-    wfLines.push('          if-no-files-found: error');
-    wfLines.push('          retention-days: 14');
-    wfLines.push('  build-desktop:');
-    wfLines.push('    name: Build Desktop App');
-    wfLines.push('    runs-on: ubuntu-latest');
-    wfLines.push('    timeout-minutes: 20');
-    wfLines.push('    steps:');
-    wfLines.push('      - uses: actions/checkout@v4');
-    wfLines.push('      - uses: actions/setup-node@v4');
-    wfLines.push('        with:');
-    wfLines.push('          node-version: 20');
-    wfLines.push('      - name: Validate source files');
-    wfLines.push('        run: |');
-    wfLines.push('          set -e');
-    wfLines.push('          test -s www/index.html');
-    wfLines.push('          test -s www/app.js');
-    wfLines.push('          test -s www/styles.css');
-    wfLines.push('          echo \"Source files validated\"');
-    wfLines.push('      - name: Setup Electron');
-    wfLines.push('        run: |');
-    wfLines.push('          mkdir -p electron');
-    wfLines.push('          test -s electron/main.js || printf \'%s\\n\' \'const{app,BrowserWindow}=require(\\"electron\\");const path=require(\\"path\\");function createWindow(){const win=new BrowserWindow({width:1200,height:800,webPreferences:{nodeIntegration:true,contextIsolation:false}});win.loadFile(path.join(__dirname,\\"../www/index.html\\\"));}app.whenReady().then(createWindow);app.on(\\"window-all-closed\\",()=>{if(process.platform!==\\"darwin\\")app.quit()});\' > electron/main.js');
-    wfLines.push('          npm install --no-audit --no-fund --save-dev electron@28 electron-builder@24');
-    wfLines.push('      - name: Build Desktop AppImage');
-    wfLines.push('        run: npx electron-builder --linux AppImage --publish never');
-    wfLines.push('      - name: Verify Desktop');
-    wfLines.push('        run: test -s dist/*.AppImage');
-    wfLines.push('      - uses: actions/upload-artifact@v4');
-    wfLines.push('        with:');
-    wfLines.push('          name: desktop-exe');
-    wfLines.push('          path: dist/*.AppImage');
-    wfLines.push('          if-no-files-found: error');
-    wfLines.push('          retention-days: 14');
+    // The packaging workflow lives in the repository (.github/workflows/build-apps.yml,
+    // triggered by a push to build/**). This handler used to generate its own copy and
+    // PUT it onto the build branch, but writing files under .github/workflows needs a
+    // token scope GITHUB_TOKEN does not have, so that PUT always answered 403 and its
+    // response was never checked. It cost two GitHub API calls per build and left a
+    // second, staler copy of the pipeline that would silently take over if the token
+    // ever gained the workflows scope. The branch already carries the repository
+    // workflow because it is created from main.
     const latestBeforeWorkflow=hasD1(env)?await getBuildVersion(env,projectId):store.get('build_locks','project:'+projectId);
     if(latestBeforeWorkflow?.buildId!==buildId)return ok({buildId,status:'superseded',supersededBy:latestBeforeWorkflow?.buildId||null,pushed});
-    const wfContent=wfLines.join('\n');
-    const wfBase64=typeof btoa==='function'?btoa(unescape(encodeURIComponent(wfContent))):Buffer.from(wfContent).toString('base64');
-    const wfCheck=await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-apps.yml')+'?ref='+buildBranch,{headers:ghHeaders});
-    let wfSha=null;if(wfCheck.ok){const d=await wfCheck.json();wfSha=d.sha;}
-    const wfBody={message:'MAULI build: '+buildId+' workflow',content:wfBase64,branch:buildBranch};
-    if(wfSha)wfBody.sha=wfSha;
-    await fetch('https://api.github.com/repos/'+repo+'/contents/'+encodeURIComponent('.github/workflows/build-apps.yml'),{method:'PUT',headers:ghHeaders,body:JSON.stringify(wfBody)});
     // Store build info
     store.put('builds',{id:buildId,projectId,platform,repo,branch:buildBranch,pushedAt:now(),startedAt,status:pushed>0?'pushed':'failed',filesPushed:pushed,supersededBy:null});
     store.addEvent('build.started',{buildId,projectId,platform,pushed});
+    // store.put() fires its D1 write without awaiting it. The build record is created on
+    // the LAST line of this handler, so the response used to return while the INSERT was
+    // still in flight and the isolate was torn down before it landed. D1 held only 2 build
+    // rows while the dashboard had started several, so /api/build-status answered a
+    // permanent 404 for a build that was running on GitHub: the founder was polling a
+    // build id that could never appear.
+    // Keep the isolate alive until the row is durable.
+    await store.flush().catch(()=>{});
     if(pushed===0){return fail('GitHub token does not have push permissions. The token may be expired or missing repo scope. Please check the GITHUB_TOKEN in Settings > Environment.',500,{buildId,pushed,repo,branch:buildBranch});}
     return ok({buildId,platform,pushed,repo,branch:buildBranch,status:'pushed',message:pushed+' files pushed to GitHub. Build will start shortly.'});
   }
@@ -673,7 +652,7 @@ export default { async fetch(request, env, ctx) { try {
     const ghHeaders={Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'MAULI-2.0-builder'};
     // Check latest workflow run for this branch/path
     const runsResp=await fetch('https://api.github.com/repos/'+repo+'/actions/runs?branch='+encodeURIComponent(build.branch)+'&per_page=10',{headers:ghHeaders});
-    let status='building';let downloadUrl=null;let conclusion=null;
+    let status='building';let downloadUrl=null;let conclusion=null;let viewUrl=null;
     if(runsResp.ok){
       const runsData=await runsResp.json();
       // Find the best run: prefer completed, then in-progress, then queued
@@ -694,19 +673,18 @@ export default { async fetch(request, env, ctx) { try {
               const artData=await artResp.json();
               const apk=artData.artifacts?.find(a=>a.name&&(a.name.toLowerCase().includes('apk')||a.name.toLowerCase().includes('android')));
               if(apk&&!apk.expired)downloadUrl='/api/download-artifact/'+apk.id+'?name='+encodeURIComponent('mauli-android.apk');
-            }else{
-              // Artifacts API may require actions scope - fall back to run page URL
-              downloadUrl=r.html_url;
             }
-          }catch(e){ downloadUrl=r.html_url; }
+            // The artifacts API needs the actions scope and an artifact also expires
+            // after 14 days. The run page is a view link, never a download: returning it
+            // as downloadUrl made the dashboard save an HTML page as mauli-android.apk.
+          }catch(e){ }
         }
-        // If still no download URL, use the best run's HTML page
-        if(!downloadUrl&&bestRun.html_url)downloadUrl=bestRun.html_url;
+        if(bestRun.html_url)viewUrl=bestRun.html_url;
       }
     }
     // Update build status
     store.put('builds',{...build,status:conclusion||status,downloadUrl,checkedAt:now(),id:buildId});
-    return ok({buildId,status:conclusion||status,downloadUrl,pushedAt:build.pushedAt,platform:build.platform,filesPushed:build.filesPushed});
+    return ok({buildId,status:conclusion||status,downloadUrl,viewUrl,pushedAt:build.pushedAt,platform:build.platform,filesPushed:build.filesPushed});
   }
   // ── PROJECT BUILDS: List all builds for a project with download URLs ──
   if(request.method==='GET'&&url.pathname.startsWith('/api/project-builds/')){
@@ -716,10 +694,18 @@ export default { async fetch(request, env, ctx) { try {
     const repo=env?.GITHUB_RESULT_REPO||'kalpeshpatil4694/MAULI-2.0';
     if(!token)return ok({builds:[]});
     const ghHeaders={Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'MAULI-2.0-builder'};
-    // Find builds for this project from our store
-    const localBuilds=store.list('builds').filter(b=>b.projectId===projectId);
-    // Also check GitHub for build/* branches that may match
-    const buildsResp=await fetch('https://api.github.com/repos/'+repo+'/actions/runs?per_page=20',{headers:ghHeaders});
+    // Every build for a project is pushed to its own branch (see /api/build-app).
+    const safeProjectId=String(projectId).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)||'unknown';
+    const buildBranch='build/project-'+safeProjectId;
+    // The in-memory store is a row-capped cache: fall back to D1 when this isolate has
+    // no build row for the project.
+    let localBuilds=store.list('builds').filter(b=>b.projectId===projectId);
+    if(!localBuilds.length&&hasD1(env))localBuilds=(await d1List(env,'builds',{limit:200}).catch(()=>[])).filter(b=>b.projectId===projectId);
+    // Ask GitHub for THIS project's branch. Querying the newest runs of the whole
+    // repository listed unrelated CI runs and other projects' builds as this project's,
+    // so bestAPK could point at an artifact that belonged to a different founder
+    // command — or at a run page that holds no APK at all.
+    const buildsResp=await fetch('https://api.github.com/repos/'+repo+'/actions/runs?branch='+encodeURIComponent(buildBranch)+'&per_page=20',{headers:ghHeaders});
     const ghBuilds=[];
     if(buildsResp.ok){
       const rd=await buildsResp.json();
@@ -737,8 +723,9 @@ export default { async fetch(request, env, ctx) { try {
             if(exe&&!exe.expired)downloadEXE='/api/download-artifact/'+exe.id+'?name='+encodeURIComponent('mauli-desktop.AppImage');
           }
         }catch(e){}
-        // If artifacts API failed (403), use run page as view URL
-        if(!downloadAPK&&!downloadEXE){viewUrl=r.html_url||null;downloadAPK=viewUrl;downloadEXE=viewUrl;}
+        // An artifacts API failure (403) or an expired artifact leaves only a run page,
+        // which is a link and not a download: returning it as downloadAPK saved a
+        // GitHub HTML page as mauli-android.apk.
         if(downloadAPK||downloadEXE||viewUrl){
           ghBuilds.push({id:r.id.toString(),branch:r.head_branch||'',status:r.conclusion,conclusion:r.conclusion,completedAt:r.updated_at,downloadUrlAPK:downloadAPK,downloadUrlEXE:downloadEXE,viewUrl:viewUrl});
         }
@@ -747,8 +734,10 @@ export default { async fetch(request, env, ctx) { try {
     // Merge local + GitHub builds, dedup by best available
     const allBuilds=[...localBuilds.map(b=>({...b,type:b.platform||'android'})),...ghBuilds];
     // Return the best build with download URL
-    const withAPK=allBuilds.find(b=>b.downloadUrl||b.downloadUrlAPK||b.viewUrl);
-    const bestAPK=withAPK?(withAPK.downloadUrl||withAPK.downloadUrlAPK||withAPK.viewUrl||null):null;
+    // Only a proxied /api/download-artifact url is a real APK. Older rows stored the run
+    // page in downloadUrl, and offering that as the download saved an HTML page.
+    const withAPK=allBuilds.find(b=>b.downloadUrlAPK||/^\/api\/download-artifact\//.test(String(b.downloadUrl||'')));
+    const bestAPK=withAPK?(withAPK.downloadUrlAPK||withAPK.downloadUrl||null):null;
     const bestEXE=allBuilds.find(b=>b.downloadUrlEXE)?.downloadUrlEXE||null;
     return ok({builds:allBuilds.slice(0,5),bestAPK,bestEXE});
   }

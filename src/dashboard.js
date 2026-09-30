@@ -420,9 +420,14 @@ function dedupeDashboardAgents(agents){
 }
 function applyDashboardState(d){
   const state=d&&typeof d==='object'?d:{};
-  // A cold Worker isolate can answer /api/state before it can read D1. That payload is
-  // flagged "degraded"; applying it would wipe good rows and flash the dashboard back to
-  // zeros, so keep whatever is already rendered and let the next poll fill it in.
+  // Degraded only means the row LISTS could not be read this time. The true counters
+  // (summary.totals) are computed from a separate, cached D1 COUNT and are still valid, so
+  // apply them even on a degraded payload — otherwise the numbers froze at their last value
+  // and the dashboard gave no sign the system was doing anything.
+  if(state.summary&&typeof state.summary==='object')S.summary=state.summary;
+  // A cold Worker isolate can answer /api/state before it can read D1. Applying its empty
+  // lists would wipe good rows and flash the dashboard back to zeros, so keep whatever is
+  // already rendered and let the next poll fill it in.
   if(state.degraded)return false;
   S.projects=Array.isArray(state.projects)?state.projects:[];
   S.tasks=Array.isArray(state.tasks)?state.tasks:[];
@@ -431,7 +436,6 @@ function applyDashboardState(d){
   S.events=Array.isArray(state.events)?state.events:[];
   S.approvals=Array.isArray(state.approvals)?state.approvals.filter(a=>a.state==='pending'):[];
   S.tools=Array.isArray(state.tools)?state.tools:[];
-  if(state.summary&&typeof state.summary==='object')S.summary=state.summary;
   return true;
 }
 window.__mauliDedupeAgents=dedupeDashboardAgents;

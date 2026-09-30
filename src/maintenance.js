@@ -5,6 +5,99 @@
 import { hasD1 } from './db.js';
 import { store } from './store.js';
 import { schedulerTick } from './scheduler.js';
+import { approveProject } from './governance.js';
+
+// A project is "stuck" when it is still not terminal but nothing can move it forward:
+// no live execution, no runnable task, and no pending founder gate. These accumulate on
+// production after deploys/restarts interrupt an in-flight chain, and they make the project
+// list look broken (a project showing "active" that has been idle for hours).
+const ACTIVE_PROJECT_STATES = new Set(['active', 'queued', 'planning', 'escalated', 'executing', 'awaiting_approval']);
+const RUNNABLE_TASK_STATES = new Set(['queued', 'assigned']);
+
+/**
+ * Diagnose every non-terminal project and re-queue the ones that can actually progress.
+ * Returns a per-project verdict so the founder sees *why* each project was or was not
+ * touched, instead of a silent bulk mutation. Safe to call repeatedly (idempotent).
+ */
+export function recoverStuckProjects({ dryRun = false } = {}) {
+  const stamp = new Date().toISOString();
+  const tasks = store.list('tasks');
+  const byProject = new Map();
+  for (const task of tasks) {
+    if (!task?.projectId) continue;
+    if (!byProject.has(task.projectId)) byProject.set(task.projectId, []);
+    byProject.get(task.projectId).push(task);
+  }
+  const runningRunTaskIds = new Set(
+    store.list('runs').filter(r => r.state === 'running').map(r => r.taskId)
+  );
+
+  const reports = [];
+  for (const project of store.list('projects')) {
+    if (!project?.id) continue;
+    if (!ACTIVE_PROJECT_STATES.has(project.state)) continue;
+    const own = byProject.get(project.id) ?? [];
+    const counts = own.reduce((acc, t) => {
+      acc[t.state] = (acc[t.state] ?? 0) + 1;
+      return acc;
+    }, {});
+    const runnable = own.filter(t => RUNNABLE_TASK_STATES.has(t.state));
+    const liveWork = own.filter(t => !['completed', 'cancelled', 'failed'].includes(t.state));
+
+    // A project parked on a founder gate is not stuck: it is waiting for a human.
+    const gate = store.list('approvals').find(a => a.projectId === project.id && a.state === 'pending');
+    if (gate) {
+      reports.push({ projectId: project.id, state: project.state, verdict: 'awaiting_approval', approvalId: gate.id, counts });
+      continue;
+    }
+    // No tasks at all means the plan never landed (or was pruned). Nothing to re-queue;
+    // report it instead of inventing work.
+    if (!own.length) {
+      reports.push({ projectId: project.id, state: project.state, verdict: 'no_tasks', counts });
+      continue;
+    }
+    // Everything finished: the project row simply missed the finalization write.
+    if (!liveWork.length) {
+      if (!dryRun && project.state !== 'completed') {
+        store.put('projects', { ...project, state: 'completed', updatedAt: stamp, id: project.id });
+        store.addEvent('project.recovered', { projectId: project.id, from: project.state, to: 'completed', reason: 'all tasks terminal', at: stamp });
+      }
+      reports.push({ projectId: project.id, state: project.state, verdict: 'finalize_completed', counts });
+      continue;
+    }
+    // Work exists and something is already runnable or actively executing: leave it alone.
+    if (runnable.length || runningRunTaskIds.size) {
+      reports.push({ projectId: project.id, state: project.state, verdict: 'in_progress', counts });
+      continue;
+    }
+    // Everything is blocked/failed/stuck-state with no runnable task and no live run.
+    // Re-queue the live chain through the same governance path a founder approval uses.
+    if (dryRun) {
+      reports.push({ projectId: project.id, state: project.state, verdict: 'would_requeue', counts });
+      continue;
+    }
+    const approved = approveProject(
+      { id: `auto_recovery_${project.id}`, projectId: project.id, risk: 'normal', action: 'stuck-project-recovery', state: 'pending' },
+      project,
+      'automatic stuck-project recovery'
+    );
+    reports.push({
+      projectId: project.id,
+      state: project.state,
+      verdict: approved ? 'requeued' : 'requeue_failed',
+      counts,
+      newState: approved?.project?.state ?? null,
+    });
+  }
+
+  return {
+    scanned: reports.length,
+    requeued: reports.filter(r => r.verdict === 'requeued').length,
+    finalized: reports.filter(r => r.verdict === 'finalize_completed').length,
+    dryRun,
+    reports,
+  };
+}
 
 let _lastAgentDedupe = 0;
 const AGENT_DEDUPE_INTERVAL = 60 * 60 * 1000; // at most once per hour
@@ -115,7 +208,17 @@ export async function dedupeAgents(env) {
  * One code path owns project finalization: run the persistent scheduler, then prune.
  * Exported so the cron handler and tests exercise exactly what production runs.
  */
+let _lastStuckRecovery = 0;
+const STUCK_RECOVERY_INTERVAL = 30 * 60 * 1000; // at most twice per hour
+
 export async function runMaintenance(env, context = {}) {
+  // Self-heal before scheduling: a project whose chain was interrupted by a deploy or
+  // restart is otherwise skipped by the scheduler forever (no runnable task, no live run).
+  let recovery = { scanned: 0, requeued: 0, finalized: 0, skipped: 'cooldown' };
+  if (store.hydrated && Date.now() - _lastStuckRecovery > STUCK_RECOVERY_INTERVAL) {
+    _lastStuckRecovery = Date.now();
+    recovery = recoverStuckProjects({ dryRun: false });
+  }
   const scheduler = await schedulerTick(env, {
     trigger: 'cloudflare-scheduled',
     scheduledTime: context?.scheduledTime ?? Date.now(),
@@ -124,5 +227,5 @@ export async function runMaintenance(env, context = {}) {
     store.addEvent('scheduler.tick_error', { error: error?.message ?? String(error), at: new Date().toISOString() });
     return null;
   });
-  return { scheduler };
+  return { scheduler, recovery };
 }

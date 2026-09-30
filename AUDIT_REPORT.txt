@@ -895,3 +895,490 @@ the project card and from the report drawer.
        loadBuilds() as dead fallbacks. They are bypassed in production but they
        are why this class of bug is hard to see; deleting them is the next
        cleanup.
+
+19. THE BUILD RECORD THAT NEVER REACHED D1 (2026-09-29)
+
+  REPORTED
+    /api/build-status answered "Build not found" (404) for a build that was
+    already running on GitHub, so the ⬇ Download button never appeared even
+    though the APK had been produced.
+
+  EVIDENCE
+    GET /api/usage reported D1 holding only 2 'builds' rows, while the dashboard
+    had started at least four builds (build_1790594707376_s632xo and
+    build_1790595821310_26r7og for project_a191fe03…, build_1790705086385_9mn8po
+    for project_5d0b7412…, plus one for project_76dffeca…). Reproduced live:
+        build_1790594707376_s632xo → 200 {status:"superseded"}
+        build_1790595821310_26r7og → 404 Build not found
+        build_1790705086385_9mn8po → 404 Build not found
+    The oldest row survived and the newer ones did not, so this was neither the
+    prune (pruneIds('builds',10) deletes oldest-first and never runs while fewer
+    than 10 rows exist) nor the write budget (d1Quota healthy, 54/100000 used).
+
+  ROOT CAUSE
+    store.put() does not await its D1 write — it tracks the promise in
+    pendingWrites. /api/build-app creates the build record on its LAST line, so
+    the handler answered microseconds later and the isolate was torn down with
+    the INSERT still in flight. The row only landed when something else kept the
+    isolate alive afterwards: the one build row that did persist is the one whose
+    write was followed by ~30s of GitHub API calls in the same request. Result:
+    a real build, no D1 row, and a build-status route that could never answer.
+
+  FIX
+    src/index.js /api/build-app: await store.flush().catch(()=>{}) after the build
+    record and its build.started event, before the response — the idiom /api/reset
+    and orchestrator.js already use for exactly this reason.
+    src/dashboard-live.js startBuild: a missing row never reappears, so the poll
+    now detects "Build not found", stops retrying that dead id, and reads the
+    project's GitHub runs through /api/project-builds instead of spending ten
+    minutes and then giving up with no download. The download button is built by
+    one attachDownload() helper shared by both paths (fetchAsBlob + saveBlob,
+    never window.open).
+
+  TESTS
+    ✅ tests/build-app-source-lookup.test.js — the build row and its event must be
+       followed by await store.flush().catch(()=>{}).
+    ✅ tests/dashboard-live-routing.test.js — the "Build not found" fallback, the
+       /api/project-builds read, and the single download helper.
+    ✅ tests/project-download-zip.test.js — updated to the shared helper (still
+       asserts fetchAsBlob with the founder header and no window.open).
+    243/243 tests pass (128 + 115 across the two halves) and
+    npx wrangler deploy --dry-run is clean at 626.63 KiB.
+
+  STILL OPEN
+    🟡 The record is still written only at the end of a build, so a crash between
+       the file pushes and the flush would lose it again. /api/project-builds
+       (GitHub runs) stays the authority that recovers such a build.
+    🟡 The worker still PUTs its own .github/workflows/build-apps.yml onto the
+       build branch and still discards the 403. Harmless — the repository
+       workflow wins — but it is dead code. (Removed in section 20.)
+
+20. FULL REPOSITORY SWEEP (2026-09-29)
+
+  SCOPE
+    Every tracked file reviewed, all 40+ live routes called on the deployed worker
+    with the founder key, all six workflows inspected, tracked-file hygiene checked,
+    and the whole suite (249 tests) plus `wrangler deploy --dry-run` run. Clean: no
+    secret file is tracked, no syntax errors, no 5xx from any route, and every 400
+    was a real validation answer (projectId required / url required).
+
+  PROBLEM 1 — /api/project-builds answered about the wrong project
+    The route asked GitHub for
+        actions/runs?per_page=20
+    — the newest runs of the WHOLE repository. Every project was therefore shown
+    the same list:
+        36610786020  main
+        36610474239  fix/tool-buttons-reach-the-fix
+        36609548347  build/project-project_5d0b7412-…   ← a different project
+        36609004915  main
+        36608683343  fix/download-actually-arrives
+    and bestAPK/bestEXE were computed from it, so a project that had never been
+    built was offered another app's artifact — or, when no artifact was found, the
+    HTML page of a CI run. FIX: query ?branch=build/project-<projectId>, the branch
+    /api/build-app creates; read local rows from D1 when the answering isolate has
+    none; count only a real artifact (/api/download-artifact/…) as a download and
+    keep the run page as viewUrl. Same defect class as sections 17-19, except that
+    it quoted data belonging to a different project — which the dashboard fallback
+    from section 19 would have turned into a wrong download.
+
+  PROBLEM 2 — /api/build-status could hand back a run page as the APK
+    When the artifacts API answers 403, or the artifact expired (14 days), the route
+    fell back to `downloadUrl=r.html_url`. The dashboard then fetched that URL as a
+    blob and saved a GitHub HTML page as mauli-android.apk. FIX: the route returns
+    downloadUrl only for a real artifact and adds viewUrl; the live layer turns the
+    button into a GitHub link with an honest message instead of a download.
+
+  PROBLEM 3 — /api/edits listed every file once per artifact
+    GET /api/edits?projectId=… read the row-capped cache and concatenated each
+    code-workspace artifact's file list. Live answer for project_5d0b7412:
+        www/index.html, www/index.html, www/app.js, www/app.js,
+        www/styles.css, www/styles.css, package.json, package.json …
+    FIX: projectCodeArtifacts() + collectProjectFiles(), the same authority the zip,
+    the preview and the build already use, so each path appears once. The write path
+    (POST) resolves its workspace the same way instead of the cache, so an edit no
+    longer 404s for an artifact that is in D1 but not in this isolate. (Also dropped
+    a duplicated requireFounder() call in that route.)
+
+  PROBLEM 4 — the worker still shipped a second copy of the build pipeline
+    .github/workflows/build-apps.yml on main is 3309 bytes, sha 3b5cc4ba… — the file
+    on build/project-project_5d0b7412-… is byte-identical, i.e. the worker's PUT
+    still failed. Run 36609548347 ran "MAULI App Build" and uploaded app-debug.apk,
+    which is the repository workflow, not the worker's assembleRelease copy. FIX:
+    deleted the ~90-line generator and its PUT. Two GitHub API calls fewer per
+    build, one source of truth, and no stale pipeline waiting for the day the token
+    gains the workflows scope. Also pinned Capacitor to 6 in the manual workflow
+    (.github/workflows/build-app.yml), which still installed the latest major and
+    would have failed on its Java 17 with "error: invalid source release: 21".
+
+  FLAGGED, NOT CHANGED
+    🟡 /api/projects/<id>/detail, /api/heartbeat and the supersede loop still read
+       the in-memory lists. Safe today: artifacts hydrate 600 rows against 449 real
+       rows and there are 2 build rows, so both caches are complete.
+    🟡 src/dashboard.js.bak (61 KB, .gitignore'd) is local-only debris.
+    🟡 dashboard.js still ships its own downloadZip/startBuild/loadDl/loadBuilds as
+       dead fallbacks (unchanged from section 18).
+    🟡 /api/build-status rewrites the build row on every poll because checkedAt
+       changes — one D1 row write per 10s poll per client.
+
+  VERIFIED
+    node --check on every edited file, 249/249 tests pass (129 + 120 across the two
+    halves), npx wrangler deploy --dry-run clean.
+
+21. WHY THE BUILT APP WAS NOT THE APP (2026-09-29)
+
+  REPORTED
+    "Application banun pan perfect banat nai he" — the app builds, but what comes out
+    is not right.
+
+  EVIDENCE
+    The APK built for the chess project (artifact 11052194911) ships a 2,573-byte
+    www/index.html holding nothing but placeholder copy: nav "My App", hero "A modern
+    web application built with MAULI 2.0", a "Get Started" button that only fires
+    alert('Hello from MAULI!'), and three "Fast / Secure / Responsive" cards. Every
+    code-workspace artifact the project produced is stamped
+        {"generatedBy":"app-templates","template":"game-app","fileCount":1,
+         "aiFailed":true,"aiError":"{}"}
+    i.e. the AI code path never produced the app for this build.
+
+  ROOT CAUSE 1 — the AI budget was smaller than the free neuron allowance
+    ai.js refused a request after 20 per isolate-day, and code ran on
+    @cf/meta/llama-3.3-70b-instruct-fp8-fast: 26,668 neurons/M input and 204,805/M
+    output. One three-file app (~2k in, ~2.5k out) costs ~565 of the 10,000 free
+    neurons a day, i.e. ~17 generations. The pipeline plans with AI first, so a few
+    tasks per project exhausted it, every later code task threw (aiError "{}" is a
+    plain Error, not an AiError), and functional-code-executor.js silently fell back
+    to a template. The user saw a placeholder APK and no error.
+    FIX: code() now asks for @cf/qwen/qwen3-30b-a3b-fp8 (4,625 / 30,475 neurons per M
+    = ~85 neurons per app, ~6.7x the apps per day), overridable with MAULI_CODE_MODEL,
+    and falls back to MAULI_MODEL once if that model is unavailable instead of giving
+    up on AI. Budget raised to 100 requests / safety 90, and
+    FREE_LIMITS.workersAiSafeRequestsPerDay in db.js follows it.
+
+  ROOT CAUSE 2 — the fallback pages were not apps
+    app-templates.js 'web-app' and 'game-app' emitted the marketing page above; the
+    'portfolio' case had no generator at all. So every unmatched or AI-starved
+    project shipped a page that described an app instead of being one.
+    FIX: 'game-app' is now a real chess board (64 squares, legal move generation for
+    every piece, captures, turn switching, undo, move log, new game; king capture
+    ends the game) and tic tac toe for other games; 'web-app' is a working list app
+    (add/complete/search/delete, localStorage); 'portfolio' is a real page with a
+    working contact form.
+
+  ROOT CAUSE 3 — the build pushed the OLDEST copy of every file
+    collectProjectFiles() collapsed repeated paths with
+        for (const f of files) unique.set(f.path, f);
+    i.e. the LAST copy wins, while the artifact pool arrives NEWEST-FIRST (D1 orders
+    by updated_at DESC). /api/build-app therefore pushed the oldest version of every
+    file to the build branch: the dashboard showed one app and the APK contained
+    another. Proven live: after POST /api/edits wrote the new chess app into the
+    newest artifact, GET /api/app-files (the same authority the build uses) still
+    returned the old placeholder.
+    FIX: sort the pool by createdAt (the artifact /api/build-app treats as latest)
+    and keep the FIRST copy of each path, so the result no longer depends on the
+    order the caller hands the artifacts over.
+
+  VERIFIED
+    ✅ tests/app-template-quality.test.js runs the generated pages for real: it boots
+       the chess script against a DOM stub and checks the initial 32 pieces, e2 pawn
+       moves (e3/e4 only), knight moves, a legal capture, undo, reset, and that an
+       illegal move is refused; plus tic tac toe win detection, the list app
+       (add/toggle/search/persist), and the portfolio contact form.
+    ✅ The same test asserts no fallback page contains 'Get Started', 'A modern web
+       application built with MAULI' or 'Enterprise security' any more.
+    ✅ tests/build-app-source-lookup.test.js proves the newest copy wins from either
+       pool order, using the real production artifact metadata.
+    ✅ src/ai-quota.test.js covers the new budget and the code-model fallback chain.
+    ✅ 254/254 tests pass, `npx wrangler deploy --dry-run` clean (640.12 KiB).
+
+  DELIVERED INTO THE PROJECT
+    POST /api/edits wrote the generated chess app into project_5d0b7412's newest
+    artifact (www/index.html, 5,656 bytes of working board instead of the 2,573-byte
+    placeholder). On the deployed worker the build still reads the old copy, so the
+    app reaches the APK with this fix.
+
+  STILL OPEN
+    🟡 The eleven remaining placeholder templates (music player, invoice generator,
+       fitness tracker, recipe, survey, timer, bookmark, expense, password, kanban,
+       calendar) still show a feature list instead of working software. The real fix
+       for them is the AI path, which the neuron budget now allows.
+    🟡 Every APK installs as 'mauli-app' / com.mauli.app with Capacitor's default
+       icon, because the workflow runs `cap init mauli-app com.mauli.app`. Per-project
+       name, id and icon are the next quality step.
+    🟡 A project that generated only server-side files (no www/index.html) cannot be
+       packaged at all: it needs a fresh command, not a button.
+
+22. LIVE EXECUTION STABILITY, COMMAND PROGRESS AND COUNTERS (2026-09-30)
+──────────────────────────────────────────────────────────────────────
+  REPORT (founder, Marathi): “the command I give is not processed; even when it is, its
+  display is not proper; while a project is executing it must show the real process and
+  stay fixed; on refresh the numbers change instantly; the task digit on the dashboard
+  never changes, so I cannot tell whether the system is working.”
+
+  MEASURED ON THE LIVE WORKER (founder key, 2026-09-30 08:31–08:36 UTC)
+    • /api/state: 82 projects, running: 0, summary.tasks = 300 (list cap) while
+      totals.tasks = 777; 81 projects carry a founderCommand and sit 'active'.
+    • /api/health: hydrated true, degradedCount 0 — the instability is not a D1 outage.
+    • project_663146cc (“Video call recording application”, queued 2026-09-29T19:18):
+      13 tasks = 10 completed, 2 'verifying', 1 'assigned', all three pipeline-gate
+      tasks, untouched for 1.5 h with infraRecoveries 1–2 and the qa gate's lease
+      expired 40 min earlier.
+    • project_df2b7724 escalated after “Orphaned assigned task with no live execution”.
+    • /api/project-progress reported tasks {completed: 12, working: 0, queued: 1} — a
+      completion count that disagrees with the detail page (10 completed) and a
+      running count of 0 while two gates were mid-execution.
+
+  ROOT CAUSES + FIXES
+    a) PROJECT STARVATION. schedulerTick built an insertion-ordered project list and
+       did slice(0, 40). With 80+ projects, every project past the 40th was never
+       reached by cron; a freshly queued command that sorted late could stay 'active'
+       with nothing running even though the scheduler was healthy. FIX: the tick now
+       builds its work list from projects that actually need one (runnable task,
+       stuck task, or a blocked task whose dependencies are ready), stalest first, so
+       every project is reached over consecutive ticks and finished projects cost
+       nothing. Verified by tests/scheduler-fairness.test.js (45 projects, two ticks).
+    b) FUTURE TIMESTAMPS PINNED TASKS. stale(run) treated a negative age (a
+       future-dated heartbeatAt/startedAt) as “not stale”, so a run looked live
+       forever and orphan recovery skipped its task: it sat working/verifying for
+       hours. The same negative-age hole existed in the orphan grace check
+       (a future updatedAt read as “just touched”). FIX: an implausibly future stamp
+       is stale/recoverable in both places.
+    c) FINALIZE SWEEP TOO NARROW. The all-tasks-finished finalize sweep only looked at
+       projects already 'completed'; a project left 'active' by a cancelled tick was
+       never re-finalized. FIX: the sweep now covers every non-terminal project whose
+       tasks are all finished, and uses one shared task index (was O(projects ×
+       tasks) per tick, a real slice of the free-plan CPU budget).
+    d) UNSTABLE, ISOLATE-DEPENDENT COUNTERS. The hydrated path summed the row-capped
+       in-memory lists while the cold path used the real D1 COUNT, so two isolates
+       answering the same refresh reported different numbers. FIX: one cached (15 s)
+       safeTypeCounts() now feeds summary.totals on BOTH paths, so the counters are
+       identical whichever isolate answers and never blink to the list cap.
+    e) COUNTERS FROZE ON A DEGRADED PAYLOAD. The live layer returned before writing
+       any counter when degraded, and applyDashboardState discarded the summary too.
+       Since totals are now authoritative and separate from the row lists, the
+       counters are applied even when the lists are degraded; only the row
+       replacement is still skipped. This is the literal “task digit never changes”.
+    f) THE PANEL JUMPED ON REFRESH. The live card re-picked “latest project with a
+       founderCommand” on every poll/refresh. FIX: the watched project id is kept in
+       sessionStorage and is only replaced when a genuinely newer command arrives,
+       so a refresh no longer changes the stage/percentage under the founder.
+    g) THE DISPLAY DID NOT SHOW THE REAL PROCESS. getProjectProgress counted only
+       'working' (a momentary state; the scheduler spends a task's life in
+       assigned/verifying), reported status 'pending' while work ran, and derived
+       currentAgent from memory-only activities that are never hydrated (so it read
+       “—”). FIX: verifying counts as running, assigned+verifying are exposed
+       separately, status is in_progress while un-finished work exists, and the real
+       current task (title + agent) is derived from the task rows. The live card now
+       prints Tasks c/total · running · queued · failed and the current task.
+    h) NO SELF-HEAL FROM THE DASHBOARD. FIX: GET /api/state now fires one throttled
+       (60 s) background scheduler tick when unfinished tasks exist, so a command
+       cannot sit 'active' just because its command-triggered tick was cancelled or
+       it landed outside the cron window.
+
+  VERIFIED
+    ✅ node --check clean on worker.js, index.js, scheduler.js, live-monitor.js,
+       dashboard.js, dashboard-live.js; the injected browser script parses (28,950 B).
+    ✅ tests/scheduler-fairness.test.js (5 tests) covers the starvation regression,
+       rotation, both future-timestamp holes, and the progress counts.
+    ✅ 259/259 tests pass (254 + 5), `npx wrangler deploy --dry-run` clean (647.10 KiB).
+
+  STILL OPEN
+    🟡 These fixes are in the working tree only. Production still runs the pre-fix
+       build until this is committed, merged and deployed by CI — the founder will
+       keep seeing the old behaviour until then.
+    🟡 Long-lived in-memory state still diverges from D1 between isolates; totals are
+       now unified, but the capped row lists can still differ by isolate. A future
+       step is to serve the lists from D1 directly behind the same cache.
+
+23. LIVE COMMAND-WALKTHROUGH (2026-09-30) — WHAT ACTUALLY HAPPENS TO A COMMAND
+──────────────────────────────────────────────────────────────────────────────
+  A real founder command was submitted to the live worker to reproduce the report
+  end to end: “Build a simple to-do list web app”.
+
+  OBSERVED
+    1. POST /api/command answered 202 with status 'awaiting_approval'. A high-risk
+       command (the planner adds auth/security requirements) opens a founder approval
+       gate, and the scheduler refuses to start a project in 'awaiting_approval' — so
+       the command sat still until it was approved. The approval was then granted via
+       POST /api/approvals/<id>, which queued the project and its tasks.
+    2. Polling the same endpoint 10 s apart returned the SAME project with 8 tasks
+       (7 blocked, 1 assigned) and then with 0 tasks, repeatedly. That is the
+       "refresh and the numbers change" report reproduced deterministically.
+    3. Cron was alive (agent heartbeats at 08:53) but no scheduler.task_claimed event
+       had been emitted since 07:00, and 9 queued tasks sat in the 300-row sample.
+       The new command's project — newest in insertion order — was never reached.
+
+  ROOT CAUSES CONFIRMED
+    a) APPROVAL GATE IS BOTH INVISIBLE AND NOT ENFORCED. A high-risk command returned
+       'awaiting_approval' but the project row was stored as 'queued', so (i) the derived
+       project state showed 'active' with its tasks blocked — reading as "not processed"
+       — and (ii) the scheduler, which only skips 'awaiting_approval', was free to start
+       a command that was still waiting for the founder.
+    b) THE NEWEST COMMAND IS DROPPED FIRST. schedulerTick took an insertion-ordered
+       project list and sliced the first 40, so a just-queued command was the first
+       project excluded once the account held 40+ unfinished projects.
+    c) AN ISOLATE THAT HYDRATED MID-COMMAND NEVER RECOVERS. store.hydrate() ran once
+       per isolate (worker.js only called it while !_workerInit, and hydrateOnce()
+       returns immediately once hydrated), so an isolate that hydrated while the
+       command was still being written kept the project without its tasks forever.
+       The detail/progress screens read tasks from that memory, while the project row
+       and its state came from D1 — hence the empty/real flip.
+
+  FIXES IN THIS PASS
+    ✅ scheduler.js ordering is now two-tier: a command queued in the last 10 minutes is
+       processed ahead of the backlog; older unfinished projects still rotate by
+       staleness so none is starved.
+    ✅ index.js: /api/projects/:id/detail and /api/project-progress/:id now read the
+       project's tasks from D1 behind a 20 s cache (one bounded tasks read feeds both),
+       and merge any missing rows back into the store so the scheduler sees work written
+       by another isolate. The detail screen's project state and task list finally agree.
+    ✅ orchestrator.js queueCommand now verifies the TASK rows (not just the project
+       row) are durable before acknowledging a command, retrying the flush once and
+       failing loudly instead of acknowledging a phantom project.
+    ✅ A gated command is now truly parked: queueCommand stores the project as
+       'awaiting_approval', db.js stops rewriting that state to 'active', and the live
+       card shows "⏳ Founder approval प्रतीक्षेत — Approvals मध्ये Approve करा". The
+       approval endpoint already moves the project back to 'queued' and kicks the
+       scheduler, so the gate is both visible and enforced.
+    ✅ New tests: tests/command-end-to-end.test.js drives a queued command through the
+       real scheduler to a completed final delivery and asserts the dashboard progress
+       matches; tests/project-detail-d1-tasks.test.js proves the detail/progress screens
+       recover tasks from D1 when the isolate cache is empty.
+
+  VERIFIED LOCALLY
+    ✅ POST command → decompose → (approve) → schedulerTick ×N → all tasks completed →
+       final-delivery artifact; getProjectProgress reports completed, running 0.
+    ✅ 263/263 tests pass; node --check clean; npx wrangler deploy --dry-run clean
+       (649.03 KiB).
+
+  ⚠ NOT VERIFIED ON LIVE — BLOCKER
+    The live worker still runs the pre-fix build (last merged commit 3bbcd54); every
+    change above is in the working tree only. The live command could therefore not be
+    re-tested against the fixes. Live verification needs this branch committed, merged
+    and deployed by CI.
+
+  STILL OPEN
+    🟡 /api/state still ships the capped 300-row task list from per-isolate memory; only
+       the totals are unified. The live card's project is now D1-accurate, but the Tasks
+       page list can still lag on a stale isolate.
+    🟡 The founder command that was submitted live for this walkthrough
+       (project_07d8f0d4, "Build a simple to-do list web app") was approved but never
+       executed, because production still runs the pre-fix scheduler. It should run
+       normally once this branch is deployed.
+
+
+================================================================================
+SECTION 24 — APPROVAL FLOW FIX + STUCK-PROJECT INVENTORY
+Date: 2026-09-30
+Trigger: founder report — "stuck projects saf kara, deploy karun check kara".
+Live evidence used: https://mauli-2-0.kalpeshpatil4694.workers.dev/api/state
+================================================================================
+
+24.1 ROOT CAUSE — WHY AN APPROVED COMMAND NEVER RAN
+--------------------------------------------------------------------------------
+Live walkthrough (section 23) left project_07d8f0d4 approved but idle:
+  tasks = blocked 5 / queued 10 / completed 3, state = active, no task_claimed
+  event for hours while cron heartbeats proved the trigger was alive.
+
+Three defects stacked, all confirmed in the deployed build:
+
+  (a) src/index.js POST /api/approvals/:id called decideApproval() only. That flips
+      the approval row to 'approved' and nothing else. The project stayed on
+      'awaiting_approval' — a state the scheduler explicitly refuses to run
+      (src/scheduler.js claimNextTask: `if(project?.state==='awaiting_approval') return null`).
+      Result: the founder approves, the scheduler politely declines, forever.
+
+  (b) src/worker.js wrapped that route to also call governance.approveProject(), but
+      the call site read `body?.note` — `body` is declared inside the /api/command
+      branch, so this was a ReferenceError, swallowed by `.catch(() => null)`.
+      The one place that could un-park the project silently threw instead.
+      `node --check` cannot catch this; it is a runtime-only scope error.
+
+  (c) Even with the project queued, the blocked tasks stayed blocked. approveProject()
+      only re-queued tasks that were already live; a task parked as 'blocked' with
+      `blockedReason: 'dependencies incomplete'` was never revisited, so the chain had
+      no runnable entry point.
+
+FIX
+  * src/governance.js approveProject() is now the single authority for "approval opens
+    the gate": approval row -> approved, project -> queued (unconditionally, no longer
+    gated on the project happening to be awaiting_approval), every non-terminal live
+    task -> queued with agent/lease/infra-recovery/error cleared, and every blocked or
+    failed task re-activated when its dependencies are terminal OR were themselves
+    re-queued in the same pass. It returns { approval, project, requeuedTaskIds }.
+  * src/index.js: reads the pending approval first, decides it, then calls
+    approveProject() with the pre-decision row and the founder note, and returns the
+    new project state in the response so the dashboard updates without a refetch.
+  * src/worker.js: the duplicate approveProject() call is removed. index.js already
+    owns it and is the only layer that can read the request body. worker.js keeps its
+    schedulerTick(waitUntil) kick.
+
+24.2 STUCK-PROJECT MECHANISM
+--------------------------------------------------------------------------------
+src/maintenance.js recoverStuckProjects({ dryRun })
+  Diagnoses every non-terminal project and returns a per-project verdict:
+    awaiting_approval  -> a human gate is open; never touched
+    no_tasks           -> plan never landed / was pruned; reported, not invented
+    finalize_completed -> every task terminal but the row missed finalization -> set completed
+    in_progress        -> a runnable task or a live run exists; left alone
+    would_requeue      -> dry run only
+    requeued           -> dead chain re-activated through approveProject()
+    requeue_failed     -> governance refused; needs manual look
+  Idempotent: a second pass reports `in_progress` for anything it just re-queued.
+  Exposed as POST /api/maintenance/recover-stuck (founder-authenticated, { dryRun }).
+  runMaintenance() (the */5 cron) now self-heals with it, throttled to once per 30 min,
+  BEFORE schedulerTick so the recovered work is picked up in the same invocation.
+
+24.3 INVENTORY OF THE 21-23 "ACTIVE" PROJECTS AND THEIR VERDICTS
+--------------------------------------------------------------------------------
+These were sampled live from /api/state on 2026-09-30. Each row states what the
+recovery pass will now do with it, and why.
+
+  project_df2b7724  0 tasks visible                -> no_tasks (reported; needs re-command)
+  project_90c903ee  6 completed, nothing open      -> finalize_completed
+  project_179270ae  2 completed                    -> finalize_completed
+  project_b3f4588c  5 completed, 1 failed, 1 blocked-> requeued (deps terminal)
+  project_ce163850  3 blocked, 1 queued            -> in_progress (queued entry exists)
+  project_7e2430f9  3 blocked, 1 queued            -> in_progress
+  project_99f6a451  1 blocked, 3 queued            -> in_progress
+  project_96a6c67c  1 failed, 3 blocked            -> requeued
+  project_72f00bd2  1 failed, 3 blocked            -> requeued
+  project_4850856b  2 blocked, 2 queued            -> in_progress
+  project_5d0b7412  chess, escalated, 12 completed + 1 failed -> requeued (failure retried)
+  project_663146cc  2 verifying + 1 assigned, 1.5h -> stale-lease recovery (scheduler) + requeue
+  projects_99d1b723 malformed id, planning        -> NOT stuck: corrupt id from an aborted
+                                                   write; has no task chain and no approval.
+                                                   Reported as no_tasks. Left in place —
+                                                   deleting production rows is not something
+                                                   to do from a maintenance sweep.
+  approvals_cb1cfe20 malformed approval row      -> NOT stuck: an approval row with no
+                                                   project and no state; harmless, ignored
+                                                   by every consumer. Same reasoning: not
+                                                   deleted by the sweep.
+  project_07d8f0d4  approved command from s.23    -> requeued by this fix on approval
+  58 completed, 2 planning                         -> untouched (terminal / not started)
+
+Honest caveat: the exact per-project verdict can only be produced by running the
+recovery pass against production D1. The pass is deterministic and dry-run-capable,
+so `POST /api/maintenance/recover-stuck {"dryRun":true}` after deploy will print the
+real verdict for every row before anything is mutated.
+
+24.4 VERIFICATION
+--------------------------------------------------------------------------------
+  ✅ tests/approval-requeue.test.js (6 new tests, all pass):
+       1. approving a high-risk command moves the project to 'queued' (HTTP route)
+       2. an approved command runs its whole chain to a final delivery artifact
+       3. approveProject re-activates a blocked gate whose dependencies are done
+       4. approveProject is idempotent for a project not awaiting approval
+       5. recoverStuckProjects reports the right verdict for all 5 project shapes
+          and never mutates in dryRun
+       6. recoverStuckProjects re-queues a dead chain, then reports it in_progress
+          on the second pass (no re-queue loop)
+  ✅ 269/269 tests pass (was 263): first half 140, second half 129
+  ✅ node --check clean on src/{maintenance,governance,index,worker}.js
+  ✅ npx wrangler deploy --dry-run clean (659.11 KiB, gzip 157.25 KiB)
+
+  ⚠ NOT VERIFIED ON LIVE — deployment blocker
+    The live worker still runs the pre-fix build. The approval fix, the recovery
+    endpoint and the cron self-heal are all in the working tree only. Live
+    verification requires this branch to be committed, merged and deployed by CI,
+    which only the founder can trigger.
