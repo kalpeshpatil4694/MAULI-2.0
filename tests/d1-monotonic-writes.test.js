@@ -77,6 +77,28 @@ test('a new row is always inserted, with no version to compare against', async (
   assert.equal(JSON.parse(db.rows.get('projects::p1').data).state, 'queued');
 });
 
+test('an isolate can update the same row repeatedly', async () => {
+  // The in-memory copy must adopt the version D1 actually persisted. When it kept its own
+  // timestamp instead, the second update compared against a version D1 never had, was
+  // rejected as stale, and the isolate silently stopped persisting that row — progress that
+  // looked fine locally and failed intermittently in CI, depending on whether the two
+  // timestamps landed in the same millisecond.
+  const db = fakeD1();
+  store.configure({ DB: db });
+  store.data = new Map();
+  store.events = [];
+
+  let row = store.put('tasks', { id: 't3', state: 'queued' });
+  await Promise.all([...store.pendingWrites]);
+  for (const state of ['working', 'verifying', 'completed']) {
+    store.put('tasks', { ...store.get('tasks', 't3'), state });
+    await Promise.all([...store.pendingWrites]);
+    assert.equal(JSON.parse(db.rows.get('tasks::t3').data).state, state,
+      `the update to '${state}' must be persisted, not rejected as stale`);
+  }
+  store.configure(null);
+});
+
 test('store.put forwards the version it read so the write can be rejected', async () => {
   const db = fakeD1();
   store.configure({ DB: db });
