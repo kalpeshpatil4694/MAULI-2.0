@@ -134,3 +134,16 @@ test('a missing manifest is added so the project can always be built', async () 
   const result = await probeAiGeneration('Build a simple calculator web app', { env: fakeEnv(noManifest) });
   assert.ok(result.files.some(f => f.path === 'package.json'), 'a manifest is synthesised when absent');
 });
+
+test('includeContent returns the generated code, not just its size', async () => {
+  // "Generated" is not the same as "delivered". Without the actual bytes the founder has
+  // nothing to open, and the claim that the AI works rests on a summary line.
+  const result = await probeAiGeneration('Build a simple calculator web app', { env: fakeEnv(GOOD_RESPONSE), includeContent: true });
+  assert.equal(result.generated, true);
+  const html = result.files.find(f => f.path === 'www/index.html');
+  assert.match(html.content, /<!DOCTYPE html>/);
+  assert.ok(html.content.length > 50, 'the real source comes back');
+  const without = await probeAiGeneration('Build a simple calculator web app', { env: fakeEnv(GOOD_RESPONSE) });
+  assert.equal(without.files.find(f => f.path === 'www/index.html').content, undefined,
+    'the default response stays small');
+});

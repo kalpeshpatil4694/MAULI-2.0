@@ -142,7 +142,7 @@ RULES:
  * path working. This runs the identical prompt, parsing and validation loop against the
  * real binding and returns the verdict, so the two can be told apart.
  */
-export async function probeAiGeneration(objective, { env, acceptance = [] } = {}) {
+export async function probeAiGeneration(objective, { env, acceptance = [], includeContent = false } = {}) {
   const runtimeEnv = resolveRuntimeEnv(env);
   if (!runtimeEnv?.AI?.run) {
     return { available: false, reason: 'no-ai-binding', model: env?.MAULI_CODE_MODEL ?? DEFAULT_CODE_MODEL_FALLBACK };
@@ -166,7 +166,9 @@ export async function probeAiGeneration(objective, { env, acceptance = [] } = {}
         return {
           available: true, generated: true, attempt: attempt + 1,
           fileCount: files.length,
-          files: files.map(f => ({ path: f.path, bytes: String(f.content ?? '').length })),
+          files: includeContent
+            ? files.map(f => ({ path: f.path, bytes: String(f.content ?? '').length, content: String(f.content ?? '') }))
+            : files.map(f => ({ path: f.path, bytes: String(f.content ?? '').length })),
           summary: text(parsed.summary ?? '').slice(0, 300),
           hasPlaceholder: /AI generation unavailable|placeholder|TODO: implement/i.test(files.map(f => String(f.content)).join('\n')),
           preview: String(files.find(f => /index\.html$/i.test(f.path))?.content ?? files[0]?.content ?? '').slice(0, 400),
