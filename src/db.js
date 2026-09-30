@@ -1,4 +1,4 @@
-import { canWriteD1, reserveD1Rows, recordD1Write, recordD1Read } from './d1-quota.js';
+import { canWriteD1, reserveD1Rows, recordD1Write, recordD1Read, noteD1WriteBlocked } from './d1-quota.js';
 import { queueQuotaSnapshot } from './queue-quota.js';
 
 export function hasD1(env) { return Boolean(env?.DB && typeof env.DB.prepare === 'function'); }
@@ -89,6 +89,10 @@ export async function d1Put(env, type, value, { critical = false, expectedUpdate
     recordD1Write(env, Math.max(1, written || 1), 'entity:'+type);
     return item;
   } catch (error) {
+    // Cloudflare rejecting a write for the account's daily ceiling is not a transient
+    // failure: it is a state the operator has to know about. Recording it is what turns a
+    // silently stalled dashboard into a reported, attributable one.
+    noteD1WriteBlocked(env, error);
     return { ...item, _d1WriteDeferred: true, _d1WriteError: error?.message ?? String(error) };
   }
 }
@@ -126,6 +130,7 @@ export async function d1Event(env, event, { critical = false } = {}) {
     recordD1Write(env, Math.max(1, Number(result?.meta?.rows_written) || 1), 'event:'+String(event?.type||'unknown'));
     return event;
   } catch (error) {
+    noteD1WriteBlocked(env, error);
     return { ...event, _d1WriteDeferred: true, _d1WriteError: error?.message ?? String(error) };
   }
 }
