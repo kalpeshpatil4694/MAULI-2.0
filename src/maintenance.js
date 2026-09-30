@@ -45,7 +45,6 @@ export function recoverStuckProjects({ dryRun = false } = {}) {
       return acc;
     }, {});
     const runnable = own.filter(t => RUNNABLE_TASK_STATES.has(t.state));
-    const liveWork = own.filter(t => !['completed', 'cancelled', 'failed'].includes(t.state));
 
     // A project parked on a founder gate is not stuck: it is waiting for a human.
     const gate = store.list('approvals').find(a => a.projectId === project.id && a.state === 'pending');
@@ -59,11 +58,14 @@ export function recoverStuckProjects({ dryRun = false } = {}) {
       reports.push({ projectId: project.id, state: project.state, verdict: 'no_tasks', counts });
       continue;
     }
-    // Everything finished: the project row simply missed the finalization write.
-    if (!liveWork.length) {
+    // Everything finished AND every task actually passed: the row missed the finalization
+    // write. Completion must mean "no task failed" — buildFinalDelivery refuses a delivery
+    // that has a failed task, so marking such a project completed would be a lie that the
+    // very next scheduler pass contradicts with a command.failed event.
+    if (own.every(t => t.state === 'completed')) {
       if (!dryRun && project.state !== 'completed') {
         store.put('projects', { ...project, state: 'completed', updatedAt: stamp, id: project.id });
-        store.addEvent('project.recovered', { projectId: project.id, from: project.state, to: 'completed', reason: 'all tasks terminal', at: stamp });
+        store.addEvent('project.recovered', { projectId: project.id, from: project.state, to: 'completed', reason: 'all tasks completed', at: stamp });
       }
       reports.push({ projectId: project.id, state: project.state, verdict: 'finalize_completed', counts });
       continue;
@@ -75,8 +77,9 @@ export function recoverStuckProjects({ dryRun = false } = {}) {
       reports.push({ projectId: project.id, state: project.state, verdict: 'in_progress', counts });
       continue;
     }
-    // Everything is blocked/failed/stuck-state with no runnable task and no live run.
-    // Re-queue the live chain through the same governance path a founder approval uses.
+    // Nothing is runnable and nothing is executing: a dead chain. Re-queue the live work
+    // through the same governance path a founder approval uses, which also retries any
+    // failed or blocked task whose dependencies are satisfied.
     if (dryRun) {
       reports.push({ projectId: project.id, state: project.state, verdict: 'would_requeue', counts });
       continue;
@@ -86,6 +89,16 @@ export function recoverStuckProjects({ dryRun = false } = {}) {
       project,
       'automatic stuck-project recovery'
     );
+    const after = store.list('tasks').filter(t => t.projectId === project.id);
+    const stillFailed = after.filter(t => t.state === 'failed');
+    // A task that failed and cannot be retried is a real outcome, not a bug to paper over.
+    // Retire the project as failed so it stops masquerading as active work in the list.
+    if (stillFailed.length) {
+      store.put('projects', { ...store.get('projects', project.id), state: 'failed', updatedAt: stamp, id: project.id });
+      store.addEvent('project.recovered', { projectId: project.id, from: project.state, to: 'failed', reason: `${stillFailed.length} unretriable task(s)`, at: stamp });
+      reports.push({ projectId: project.id, state: project.state, verdict: 'failed_chain', counts, failedTasks: stillFailed.length });
+      continue;
+    }
     reports.push({
       projectId: project.id,
       state: project.state,
@@ -99,6 +112,7 @@ export function recoverStuckProjects({ dryRun = false } = {}) {
     scanned: reports.length,
     requeued: reports.filter(r => r.verdict === 'requeued').length,
     finalized: reports.filter(r => r.verdict === 'finalize_completed').length,
+    failed: reports.filter(r => r.verdict === 'failed_chain').length,
     dryRun,
     reports,
   };
