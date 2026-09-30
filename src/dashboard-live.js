@@ -11,12 +11,20 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   const get=(id)=>document.getElementById(id);
   function message(html){const e=get('cmdRes');if(!e)return;e.style.display='block';e.innerHTML=html;}
   function badge(s){const v=String(s||'queued');return '<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:rgba(0,212,255,.1);color:var(--accent);font-size:10px;font-weight:600">'+esc(v)+'</span>';}
+  // The watched project id survives a refresh, so the panel does not jump to a different
+  // project (and a different stage/percentage) every time the page reloads.
+  const ACTIVE_KEY='mauli_active_project';
+  const rememberProject=pid=>{try{pid?sessionStorage.setItem(ACTIVE_KEY,pid):sessionStorage.removeItem(ACTIVE_KEY);}catch(_){}};
+  const rememberedProject=()=>{try{return sessionStorage.getItem(ACTIVE_KEY)||null;}catch(_){return null;}};
   function showProject(p,progress){
     if(!p)return;
     const pr=progress||{}; const timing=pr.timing||{};
     const pct=Number.isFinite(Number(pr.percentage))?Math.max(0,Math.min(100,Number(pr.percentage))):({completed:100,working:60,assigned:35,queued:20,awaiting_approval:10,failed:100}[p.state]??10);
     const stage=pr.stage||p.state||'queued';
     const next=pr.nextStage||'—';
+    const ti=pr.tasks||{};
+    const n=v=>Number.isFinite(Number(v))?Number(v):0;
+    const cur=pr.currentTask;
     message('<div style="font-family:inherit;line-height:1.6">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>MAULI execution</b>'+badge(p.state)+'</div>'+
       '<div style="margin-top:7px;font-size:11px;color:var(--text2)">'+esc(p.name||p.objective||p.id)+'</div>'+
@@ -24,7 +32,11 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px;font-size:10px">'+
       '<span>Stage: <b>'+esc(stage)+'</b></span><span>Progress: <b>'+pct+'%</b></span>'+
       '<span>Agent: <b>'+esc(pr.currentAgent?.name||pr.currentAgent?.id||'—')+'</b></span><span>Next: <b>'+esc(next)+'</b></span>'+ '<span>Command: <b>'+esc(stamp(pr.commandReceivedAt))+'</b></span><span>Elapsed: <b>'+esc(timing.elapsedFormatted||'0s')+'</b></span>'+ '<span>Estimated: <b>'+esc(timing.estimatedDurationFormatted||'—')+'</b></span><span>Remaining: <b>'+esc(timing.remainingFormatted||'—')+'</b></span>'+
+      '<span>Tasks: <b>'+n(ti.completed)+'/'+(n(ti.total)||'—')+'</b></span><span>Running: <b>'+n(ti.running??ti.working)+'</b></span>'+
+      '<span>Queued: <b>'+n(ti.queued)+'</b></span><span>Failed: <b>'+n(ti.failed)+'</b></span>'+
+      (cur?'<div style="grid-column:1/-1;margin-top:4px;color:var(--text2)">Current task: <b style="color:var(--text)">'+esc(cur.title)+'</b>'+(cur.agentName?' — '+esc(cur.agentName):'')+'</div>':'')+
       '</div>'+
+      (p.state==='awaiting_approval'?'<div style="margin-top:8px;color:var(--yellow);font-weight:600">⏳ Founder approval प्रतीक्षेत — Approvals मध्ये "Approve" करा आणि मग हा command चालू होईल.</div>':'')+
       (p.state==='completed'?'<div style="margin-top:8px;color:var(--green);font-weight:600">✅ Final delivery completed</div>':'')+
       (p.state==='failed'?'<div style="margin-top:8px;color:var(--red);font-weight:600">❌ Execution failed — recovery required</div>':'')+
       '<button class="proj-detail-btn" style="margin-top:8px;background:var(--accent);color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600" onclick="window.__showProjDetail&&window.__showProjDetail(\''+esc(p.id)+'\')">📄 View Full Project Details</button>'+
@@ -40,9 +52,16 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       const candidates=projects.filter(p=>p&&p.founderCommand&&p.queuedAt);
       candidates.sort((a,b)=>Date.parse(b.queuedAt||b.createdAt||0)-Date.parse(a.queuedAt||a.createdAt||0));
       const latest=candidates[0];
-      if(latest&&(!state.activeProject||latest.id!==state.activeProject.id)){
-        state.activeProject=latest;
-        showProject(latest,null);
+      // Stay on the project the founder is already watching. Re-picking "latest" on every
+      // poll is what made the whole panel change on refresh; switch only when a genuinely
+      // newer command appears (or the watched project disappears).
+      const watchedId=state.activeProject?state.activeProject.id:rememberedProject();
+      const watched=watchedId?(projects.find(p=>p.id===watchedId)||null):null;
+      const newerArrived=latest&&watched&&latest.id!==watched.id&&Date.parse(latest.queuedAt||latest.createdAt||0)>Date.parse(watched.queuedAt||watched.createdAt||0);
+      if(latest&&(!watched||newerArrived)){
+        state.activeProject=latest;rememberProject(latest.id);showProject(latest,null);
+      } else if(watched){
+        state.activeProject=watched;
       }
       if(state.activeProject){
         const fresh=projects.find(p=>p.id===state.activeProject.id)||state.activeProject;
@@ -52,17 +71,21 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
         showProject(fresh,progress);
       }
       // Keep the visible counters synchronized even if the legacy dashboard render is unchanged.
-      // A degraded payload means a cold isolate could not read D1 yet — writing its empty
-      // lists into the counters is what made them flip back to 0 at random. Skip it.
-      if(d.degraded){state.retrySoon=true;return;}
       const set=(id,v)=>{const e=get(id);if(e)e.textContent=String(v);};
-      // True store-wide totals: the shipped lists are capped (100/300/100), so counting
-      // rows froze Tasks at 300 and Artifacts at 100 forever.
+      // True store-wide totals now come from the same cached D1 COUNT on every isolate, so
+      // they are valid even when the row LISTS are degraded — writing them keeps the numbers
+      // moving instead of freezing them, which is the "task digit doesn't change" report.
       const totals=(d.summary&&typeof d.summary==='object'&&d.summary.totals)||{};
-      set('sProj',Number.isFinite(Number(totals.projects))?Number(totals.projects):projects.length);set('navP',projects.length);
-      if(Array.isArray(d.tasks)){set('sTask',Number.isFinite(Number(totals.tasks))?Number(totals.tasks):d.tasks.length);set('navT',d.tasks.filter(t=>t.state==='working').length||d.tasks.length);}
-      if(Array.isArray(d.agents)){set('sAg',d.agents.length);set('navA',d.agents.length);}
-      if(Array.isArray(d.artifacts))set('sArt',Number.isFinite(Number(totals.artifacts))?Number(totals.artifacts):d.artifacts.length);
+      const hasTotals=Number.isFinite(Number(totals.tasks))||Number.isFinite(Number(totals.projects));
+      if(!d.degraded||hasTotals){
+        set('sProj',Number.isFinite(Number(totals.projects))?Number(totals.projects):projects.length);set('navP',projects.length);
+        if(Array.isArray(d.tasks)){set('sTask',Number.isFinite(Number(totals.tasks))?Number(totals.tasks):d.tasks.length);set('navT',d.tasks.filter(t=>t.state==='working').length||d.tasks.length);}
+        if(Array.isArray(d.agents)){set('sAg',d.agents.length);set('navA',d.agents.length);}
+        if(Array.isArray(d.artifacts))set('sArt',Number.isFinite(Number(totals.artifacts))?Number(totals.artifacts):d.artifacts.length);
+      }
+      // A degraded payload means the lists themselves are incomplete; keep the rows already
+      // rendered rather than blanking the screen, and retry sooner.
+      if(d.degraded){state.retrySoon=true;return;}
       // Refresh every data-backed panel from this response without a second poll.
       document.dispatchEvent(new CustomEvent('mauli:state',{detail:d}));
     }catch(_){ }
@@ -274,24 +297,52 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       toast(plat==='android'?'📱 APK build सुरू — सुमारे 2 मिनिटं':'🖥️ Desktop build सुरू', 'ok');
       if(!buildId)return;
       let att=0;
+      // The build record is written on the last line of /api/build-app, and its D1 write
+      // used to be lost when the response returned first. /api/build-status then answered
+      // "Build not found" for a build that was already running on GitHub, and the poll
+      // retried that dead id for ten minutes before giving up with no download at all.
+      // A missing row never reappears, so switch to the project's GitHub runs instead.
+      let viaProjectBuilds=false;
+      const attachDownload=url=>{
+        if(!btn)return;
+        btn.textContent='⬇ Download';btn.disabled=false;
+        btn.onclick=async()=>{
+          btn.disabled=true;btn.textContent='Downloading…';
+          try{
+            const {blob,name}=await fetchAsBlob(url,false);
+            saveBlob(blob,name||(plat==='android'?'mauli-android.apk':'mauli-desktop.AppImage'));
+            toast('✅ Download पूर्ण','ok');
+          }catch(e){toast((e&&e.message)||'Download failed','err');}
+          btn.disabled=false;btn.textContent='⬇ Download';
+        };
+      };
       const poll=async()=>{
         att++;
         try{
+          if(viaProjectBuilds){
+            const r=await api('/api/project-builds/'+encodeURIComponent(pid));
+            const url=plat==='android'?(r&&r.bestAPK):(r&&r.bestEXE);
+            if(url){attachDownload(url);toast('✅ Build पूर्ण — Download दाबा','ok');return;}
+            if(att<60)setTimeout(poll,10000);
+            else if(btn){btn.textContent='Check GitHub';btn.disabled=false;}
+            return;
+          }
           const s=await api('/api/build-status/'+encodeURIComponent(buildId));
           if(s&&s.downloadUrl){
             // window.open here was the real reason the APK never downloaded: the route
             // needs the founder key, and a new tab cannot send the header, so the
             // founder got a 401 JSON page while the toast said the build had finished.
-            if(btn){btn.textContent='⬇ Download';btn.disabled=false;btn.onclick=async()=>{
-              btn.disabled=true;btn.textContent='Downloading…';
-              try{
-                const {blob,name}=await fetchAsBlob(s.downloadUrl,false);
-                saveBlob(blob,name||(plat==='android'?'mauli-android.apk':'mauli-desktop.AppImage'));
-                toast('✅ Download पूर्ण','ok');
-              }catch(e){toast((e&&e.message)||'Download failed','err');}
-              btn.disabled=false;btn.textContent='⬇ Download';
-            };}
+            attachDownload(s.downloadUrl);
             toast('✅ Build पूर्ण — Download दाबा','ok');
+            return;
+          }
+          // /api/build-status only reports downloadUrl for a real artifact. A finished run
+          // with an expired (14 days) or unauthorised artifact reports viewUrl instead, and
+          // the run page needs no founder key, so window.open is the right tool for it.
+          // Treating it as a download saved a GitHub HTML page as mauli-android.apk.
+          if(s&&!s.downloadUrl&&s.viewUrl&&s.status==='success'){
+            if(btn){btn.textContent='GitHub बघा';btn.disabled=false;btn.onclick=()=>window.open(s.viewUrl,'_blank','noopener');}
+            toast('⚠️ Build झाला पण APK सापडला नाही — artifact 14 दिवसांत expire होतो. पुन्हा 📱 दाबा.','err');
             return;
           }
           if(s&&(s.status==='failure'||s.status==='error'||s.status==='failed')){
@@ -306,7 +357,8 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
           if(att<60)setTimeout(poll,10000);
           else if(btn){btn.textContent='Check GitHub';btn.disabled=false;}
         }catch(e){
-          if(att<60)setTimeout(poll,10000);
+          if(/Build not found/i.test(String((e&&e.message)||e||'')))viaProjectBuilds=true;
+          if(att<60)setTimeout(poll,viaProjectBuilds?6000:10000);
         }
       };
       setTimeout(poll,6000);

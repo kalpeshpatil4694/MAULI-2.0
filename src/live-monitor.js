@@ -44,9 +44,14 @@ export function getProjectProgress(projectId) {
 
   const total = tasks.length;
   const completed = tasks.filter(t => t.state === 'completed').length;
-  const working = tasks.filter(t => t.state === 'working').length;
   const failed = tasks.filter(t => t.state === 'failed').length;
   const blocked = tasks.filter(t => t.state === 'blocked').length;
+  // The scheduler spends most of a task's life in 'assigned'/'verifying' (executeTask owns
+  // the brief 'working' window). Counting only 'working' made the live view report
+  // "running: 0" and a completion count that disagreed with the project detail page.
+  const verifying = tasks.filter(t => t.state === 'verifying').length;
+  const assigned = tasks.filter(t => t.state === 'assigned').length;
+  const working = tasks.filter(t => t.state === 'working' || t.state === 'verifying').length;
   const queued = tasks.filter(t => t.state === 'queued' || t.state === 'assigned').length;
   const recentActivities = activities.sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp))).slice(0, 10);
 
@@ -70,7 +75,10 @@ export function getProjectProgress(projectId) {
 
   const percentage = total > 0 ? Math.round(completed / total * 100) : 0;
   const nextStage = stageIndex >= 8 ? null : ['Understanding','Planning','Agent Assignment','Development / Execution','Automated Test','Security Check','Artifact / Build','Final QA','Final Delivery'][stageIndex + 1];
-  const currentAgent = lastActivity?.agentId || activeAgents[0] || null;
+  // Activities are memory-only and are not hydrated, so currentAgent was almost always
+  // null on a fresh isolate. Fall back to the agent actually holding the running task.
+  const runningTask = tasks.find(t => t.state === 'working') || tasks.find(t => t.state === 'verifying') || tasks.find(t => t.state === 'assigned') || null;
+  const currentAgent = lastActivity?.agentId || runningTask?.agentId || runningTask?.assignedAgentId || activeAgents[0] || null;
   const project=store.get('projects',projectId); const timing=enrichProjectTiming(project,tasks);
 
   return {
@@ -80,14 +88,17 @@ export function getProjectProgress(projectId) {
     stageCount: 9,
     nextStage,
     currentAgent,
-    tasks: { total, completed, working, failed, blocked, queued },
+    tasks: { total, completed, working, failed, blocked, queued, verifying, assigned, running: working + assigned },
+    // The real task under execution right now, so the dashboard can name it instead of
+    // showing a bare stage label.
+    currentTask: runningTask ? { id: runningTask.id, title: runningTask.title || runningTask.id, state: runningTask.state, agentId: runningTask.agentId || runningTask.assignedAgentId || null, agentName: (store.get('agents', runningTask.agentId || runningTask.assignedAgentId) || {})?.name || null } : null,
     percentage,
     recentActivities,
     activeAgents,
     messages: messages.length,
     latestBuild,
     lastActivity,
-    status: failed > 0 ? 'has_failures' : working > 0 ? 'in_progress' : completed === total && total > 0 ? 'completed' : 'pending', timing, commandReceivedAt:project?.commandReceivedAt||project?.createdAt||null, commandStartedAt:project?.commandStartedAt||project?.startedAt||null, commandCompletedAt:project?.commandCompletedAt||project?.completedAt||project?.failedAt||null
+    status: failed > 0 ? 'has_failures' : (total > 0 && completed === total) ? 'completed' : total > 0 ? 'in_progress' : 'pending', timing, commandReceivedAt:project?.commandReceivedAt||project?.createdAt||null, commandStartedAt:project?.commandStartedAt||project?.startedAt||null, commandCompletedAt:project?.commandCompletedAt||project?.completedAt||project?.failedAt||null
   };
 }
 

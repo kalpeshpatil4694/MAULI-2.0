@@ -227,6 +227,139 @@ var GENERATORS = {
   'calendar-app': function(o) { return { summary: 'Calendar app with events, reminders, and month/week views.', files: genericAppFiles(o, 'calendar-app'), tests: ['Add event', 'Navigate months', 'View toggle'], notes: ['Responsive', 'LocalStorage'] }; }
 };
 
+// ── Functional fallbacks (2026-09-29) ──────────────────────────────────────────────
+// The bare 'web-app' and 'game-app' generators produced a marketing landing page that only
+// DESCRIBED the app: 'My App', a 'Get Started' alert button and three 'Fast / Secure /
+// Responsive' cards. A project whose AI generation failed therefore shipped an APK whose
+// entire content was that placeholder — the reported "application banun pan perfect banat
+// nahi": the app builds, but what installs is not the app. Both types now emit software
+// that actually works, and a website/portfolio request keeps a real page instead of the
+// fake feature grid.
+
+function chessFiles() {
+  var body = '<div class="app"><header class="hd"><h1>&#9812; Offline Chess</h1><p>Two players on one device — tap a piece, then tap where it goes</p></header>';
+  body += '<div id="st" class="st">White to move</div><div id="bd" class="bd"></div><div id="cap" class="cap"></div>';
+  body += '<div class="bar"><button class="btn" onclick="reset()">New game</button><button class="btn bo" onclick="undo()">Undo</button></div>';
+  body += '<div id="log" class="log"></div></div>';
+  var css = '.app{max-width:560px;margin:0 auto;padding:14px}.hd{text-align:center;padding:6px 0}.hd h1{font-size:20px;color:var(--accent)}.hd p{font-size:12px;color:var(--text-muted);margin-top:4px}.st{text-align:center;font-size:14px;font-weight:600;margin:10px 0;min-height:20px}.bd{display:grid;grid-template-columns:repeat(8,1fr);border:2px solid var(--border);border-radius:8px;overflow:hidden;max-width:440px;margin:0 auto}.sq{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:min(7vw,30px);line-height:1;cursor:pointer;user-select:none}.lt{background:#e8edf5;color:#101623}.dk{background:#5b6b8c;color:#fff}.sel{outline:3px solid var(--accent);outline-offset:-3px}.mv{box-shadow:inset 0 0 0 3px var(--green)}.bar{display:flex;gap:8px;justify-content:center;margin:14px 0}.btn{padding:8px 14px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}.bo{background:transparent;border:1px solid var(--border);color:var(--text)}.cap{text-align:center;font-size:20px;min-height:26px;color:var(--text-muted)}.log{max-height:96px;overflow:auto;font-family:monospace;font-size:11px;color:var(--text-muted);text-align:center;margin-top:6px;line-height:1.7}.log span{display:inline-block;padding:0 6px}';
+  var js = [
+    "var G={K:'\u2654',Q:'\u2655',R:'\u2656',B:'\u2657',N:'\u2658',P:'\u2659',k:'\u265A',q:'\u265B',r:'\u265C',b:'\u265D',n:'\u265E',p:'\u265F'};",
+    "var START=['rnbqkbnr','pppppppp','........','........','........','........','PPPPPPPP','RNBQKBNR'];",
+    "function fresh(){var b=[];for(var r=0;r<8;r++){for(var c=0;c<8;c++){var ch=START[r].charAt(c);b.push(ch==='.'?null:{t:ch.toLowerCase(),w:ch===ch.toUpperCase()})}}return b}",
+    "function on(r,c){return r>=0&&r<8&&c>=0&&c<8}",
+    "function at(r,c){return on(r,c)?board[r*8+c]:null}",
+    "function sq(i){return 'abcdefgh'.charAt(i%8)+(8-Math.floor(i/8))}",
+    "function movesFrom(i){var p=board[i];if(!p)return [];var r=Math.floor(i/8),c=i%8,out=[];",
+    "function step(rr,cc){if(!on(rr,cc))return false;var q=at(rr,cc);if(q&&q.w===p.w)return false;out.push(rr*8+cc);return !q}",
+    "if(p.t==='p'){var d=p.w?-1:1;if(on(r+d,c)&&!at(r+d,c)){out.push((r+d)*8+c);var home=p.w?6:1;if(r===home&&!at(r+2*d,c))out.push((r+2*d)*8+c)}for(var dc=-1;dc<=1;dc+=2){if(on(r+d,c+dc)){var q=at(r+d,c+dc);if(q&&q.w!==p.w)out.push((r+d)*8+c+dc)}}}",
+    "else if(p.t==='n'){[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(function(s){step(r+s[0],c+s[1])})}",
+    "else if(p.t==='k'){[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(function(s){step(r+s[0],c+s[1])})}",
+    "else{var dirs=p.t==='r'?[[-1,0],[1,0],[0,-1],[0,1]]:p.t==='b'?[[-1,-1],[-1,1],[1,-1],[1,1]]:[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];dirs.forEach(function(s){var rr=r+s[0],cc=c+s[1];while(step(rr,cc)){rr+=s[0];cc+=s[1]}})}",
+    "return out}",
+    "var board=fresh(),turn=true,sel=-1,targets=[],log=[],cap=[],over=false;",
+    "function glyph(p){return p?G[p.w?p.t.toUpperCase():p.t]:''}",
+    "function render(){var bd=document.getElementById('bd'),html='';for(var i=0;i<64;i++){var r=Math.floor(i/8),c=i%8;var cls='sq '+(((r+c)%2===0)?'lt':'dk');if(i===sel)cls+=' sel';if(sel>=0&&targets.indexOf(i)>=0)cls+=' mv';html+='<div class=\"'+cls+'\" onclick=\"tap('+i+')\">'+glyph(board[i])+'</div>'}bd.innerHTML=html}",
+    "function note(t){document.getElementById('st').textContent=t}",
+    "function tap(i){if(over)return;var p=board[i];if(sel<0){if(p&&p.w===turn){sel=i;targets=movesFrom(i);render()}return}if(i===sel){sel=-1;targets=[];render();return}if(targets.indexOf(i)<0){if(p&&p.w===turn){sel=i;targets=movesFrom(i);render()}else{note('Illegal move - '+(turn?'White':'Black')+' to move')}return}play(sel,i)}",
+    "function play(from,to){var moved=board[from],taken=board[to];board[to]=moved;board[from]=null;if(moved.t==='p'&&(to<8||to>55))board[to]={t:'q',w:moved.w};if(taken)cap.push(taken);log.push({from:from,to:to,moved:moved,taken:taken});sel=-1;targets=[];if(taken&&taken.t==='k'){over=true;note((taken.w?'Black':'White')+' wins - king captured')}else{turn=!turn;note(turn?'White to move':'Black to move')}render();renderCap();renderLog()}",
+    "function undo(){var h=log.pop();if(!h)return;board[h.from]=h.moved;board[h.to]=h.taken||null;if(h.taken)cap.pop();turn=h.moved.w;over=false;sel=-1;targets=[];note(turn?'White to move':'Black to move');render();renderCap();renderLog()}",
+    "function reset(){board=fresh();turn=true;sel=-1;targets=[];log=[];cap=[];over=false;note('White to move');render();renderCap();renderLog()}",
+    "function renderCap(){document.getElementById('cap').innerHTML=cap.map(function(p){return glyph(p)}).join(' ')}",
+    "function renderLog(){document.getElementById('log').innerHTML=log.map(function(m,i){return '<span>'+(i+1)+'. '+sq(m.from)+'-'+sq(m.to)+'</span>'}).join('')}",
+    "note('White to move');render();renderCap();renderLog();"
+  ].join('');
+  return [{ path: 'www/index.html', content: h('Offline Chess', body, css, js) }];
+}
+
+function ticTacToeFiles() {
+  var body = '<div class="app"><header class="hd"><h1>&#10060; Tic Tac Toe</h1><p>Two players on one device</p></header><div id="st" class="st">X to move</div><div id="bd" class="bd"></div><div class="bar"><button class="btn" onclick="reset()">New game</button></div><div id="sc" class="sc"></div></div>';
+  var css = '.app{max-width:420px;margin:0 auto;padding:14px}.hd{text-align:center;padding:6px 0}.hd h1{font-size:20px;color:var(--accent)}.hd p{font-size:12px;color:var(--text-muted);margin-top:4px}.st{text-align:center;font-size:15px;font-weight:600;margin:12px 0}.bd{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:300px;margin:0 auto}.sq{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:700;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer}.sq.x{color:var(--accent)}.sq.o{color:var(--accent2)}.bar{text-align:center;margin:16px 0}.btn{padding:10px 18px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer}.sc{text-align:center;font-size:12px;color:var(--text-muted)}';
+  var js = [
+    "var W=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]],b=[],turn='X',over=false,xw=0,ow=0;",
+    "function reset(){b=['','','','','','','','',''];turn='X';over=false;note('X to move');render()}",
+    "function note(t){document.getElementById('st').textContent=t}",
+    "function win(){var w=null;W.forEach(function(l){if(b[l[0]]&&b[l[0]]===b[l[1]]&&b[l[1]]===b[l[2]])w=b[l[0]]});return w}",
+    "function tap(i){if(over||b[i])return;b[i]=turn;var w=win();if(w){over=true;if(w==='X')xw++;else ow++;note(w+' wins!');score()}else if(b.every(function(c){return c})){over=true;note('Draw')}else{turn=turn==='X'?'O':'X';note(turn+' to move')}render()}",
+    "function render(){document.getElementById('bd').innerHTML=b.map(function(v,i){return '<div class=\"sq '+(v==='X'?'x':v==='O'?'o':'')+'\" onclick=\"tap('+i+')\">'+v+'</div>'}).join('')}",
+    "function score(){document.getElementById('sc').textContent='X '+xw+' - '+ow+' O'}",
+    "reset();score();"
+  ].join('');
+  return [{ path: 'www/index.html', content: h('Tic Tac Toe', body, css, js) }];
+}
+
+// A real app for anything without a specific template: a working list that persists.
+function listAppFiles(objective, fallbackTitle, key) {
+  var title = String(objective || fallbackTitle || 'My App').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="cnt" class="cnt"></p></header>';
+  body += '<div class="ir"><input id="ni" class="inp" placeholder="Add an item..." onkeydown="if(event.key===\'Enter\')add()"><button class="btn" onclick="add()">Add</button></div>';
+  body += '<div class="ir"><input id="q" class="inp" placeholder="Search..." oninput="rr()"><button class="btn bo" onclick="clr()">Clear done</button></div>';
+  body += '<div id="li" class="li"></div></div>';
+  var css = '.app{max-width:560px;margin:0 auto;padding:16px}.hd{text-align:center;padding:10px 0}.hd h1{font-size:22px;color:var(--accent)}.cnt{font-size:12px;color:var(--text-muted);margin-top:6px}.ir{display:flex;gap:8px;margin:10px 0}.inp{flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px}.btn{padding:11px 16px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}.bo{background:transparent;border:1px solid var(--border);color:var(--text)}.li{display:flex;flex-direction:column;gap:6px}.it{display:flex;align-items:center;gap:10px;padding:12px;background:var(--card);border-radius:8px;border:1px solid var(--border)}.it.done{opacity:.55}.ck{width:22px;height:22px;border-radius:6px;border:2px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}.ck.on{background:var(--green);border-color:var(--green);color:#04150e}.tx{flex:1;font-size:14px}.tx.done{text-decoration:line-through;color:var(--text-muted)}.dl{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px}.em{text-align:center;padding:30px;color:var(--text-muted);font-size:13px}';
+  var js = [
+    "var KEY='" + key + "',items=[];",
+    "try{items=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){items=[]}",
+    "function save(){try{localStorage.setItem(KEY,JSON.stringify(items))}catch(e){}}",
+    "function find(id){return items.filter(function(i){return i.id===id})[0]||null}",
+    "function add(){var el=document.getElementById('ni');var v=el.value.trim();if(!v)return;items.unshift({id:Date.now(),text:v,done:false});el.value='';save();rr()}",
+    "function tg(id){var it=find(id);if(it){it.done=!it.done;save();rr()}}",
+    "function rm(id){items=items.filter(function(i){return i.id!==id});save();rr()}",
+    "function clr(){items=items.filter(function(i){return !i.done});save();rr()}",
+    "function rr(){var q=document.getElementById('q').value.trim().toLowerCase();var list=items.filter(function(i){return !q||i.text.toLowerCase().indexOf(q)>=0});document.getElementById('li').innerHTML=list.map(function(i){return '<div class=\"it'+(i.done?' done':'')+'\"><div class=\"ck'+(i.done?' on':'')+'\" onclick=\"tg('+i.id+')\">'+(i.done?'&#10003;':'')+'</div><div class=\"tx'+(i.done?' done':'')+'\">'+i.text.replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})+'</div><button class=\"dl\" onclick=\"rm('+i.id+')\">&times;</button></div>'}).join('')||'<div class=em>Nothing here yet - add your first item.</div>';var d=items.filter(function(i){return i.done}).length;document.getElementById('cnt').textContent=d+' of '+items.length+' done'}",
+    "rr();"
+  ].join('');
+  return [{ path: 'www/index.html', content: h(title, body, css, js) }];
+}
+
+// A website/portfolio request really wants a page, not an app: keep one, but make it
+// honest and give it a working contact form instead of a dead 'Get Started' button.
+function portfolioFiles(objective) {
+  var name = String(objective || 'My Portfolio').slice(0, 60);
+  var body = '<nav class="nv"><div class="nb">' + name + '</div><div class="nl"><a href="#about">About</a><a href="#work">Work</a><a href="#contact">Contact</a></div></nav>';
+  body += '<section class="hr"><h1>' + name + '</h1><p>Built with MAULI 2.0</p></section>';
+  body += '<section id="about" class="sec"><h2>About</h2><p>This site was generated from your command. Edit <code>www/index.html</code> to replace this text with your own.</p></section>';
+  body += '<section id="work" class="sec"><h2>Work</h2><div class="cards"><div class="card"><h3>Project one</h3><p>Describe the work.</p></div><div class="card"><h3>Project two</h3><p>Describe the work.</p></div><div class="card"><h3>Project three</h3><p>Describe the work.</p></div></div></section>';
+  body += '<section id="contact" class="sec"><h2>Contact</h2><div class="ir"><input id="cn" class="inp" placeholder="Your name"><input id="ce" class="inp" placeholder="Email"><button class="btn" onclick="send()">Send</button></div><div id="ms" class="ms"></div></section>';
+  var css = '.nv{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}.nb{font-weight:700}.nl a{color:var(--text-muted);text-decoration:none;margin-left:16px;font-size:13px}.nl a:hover{color:var(--accent)}.hr{text-align:center;padding:56px 16px}.hr h1{font-size:34px;color:var(--accent);margin-bottom:10px}.hr p{color:var(--text-muted)}.sec{max-width:820px;margin:0 auto;padding:18px 20px}.sec h2{font-size:20px;margin-bottom:10px}.sec p{color:var(--text-muted);font-size:14px;line-height:1.6}.sec code{background:var(--card);padding:2px 6px;border-radius:4px;font-size:12px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:12px}.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}.card h3{font-size:15px;margin-bottom:6px}.ir{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}.inp{flex:1;min-width:170px;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text)}.btn{padding:11px 18px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer}.ms{margin-top:12px;display:flex;flex-direction:column;gap:8px}.mi{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px}.mi b{color:var(--accent)}';
+  var js = [
+    "var KEY='mauli-contact',msgs=[];",
+    "try{msgs=JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){msgs=[]}",
+    "function show(){document.getElementById('ms').innerHTML=msgs.map(function(m){return '<div class=mi><b>'+esc(m.n)+'</b> &middot; '+esc(m.e)+'<br>'+esc(m.t)+'</div>'}).join('')}",
+    "function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}",
+    "function send(){var n=document.getElementById('cn').value.trim(),e=document.getElementById('ce').value.trim();if(!n||!e){return}msgs.unshift({n:n,e:e,t:new Date().toLocaleString()});document.getElementById('cn').value='';document.getElementById('ce').value='';try{localStorage.setItem(KEY,JSON.stringify(msgs))}catch(x){}show()}",
+    "show();"
+  ].join('');
+  return [{ path: 'www/index.html', content: h(name, body, css, js) }];
+}
+
+// Rebind the two fake generators and add the website case. The type-specific placeholder
+// templates (music player, invoice, ...) still describe an intended feature set; the real
+// fix for those is the AI path, which now has ~6.7x the daily neuron budget.
+GENERATORS['game-app'] = function(o) {
+  var chess = /chess|checker|draught|shatranj/i.test(String(o || ''));
+  return {
+    summary: chess ? 'Offline two-player chess with legal moves, capture list, undo and move log.' : 'Two-player tic tac toe with win detection and score.',
+    files: chess ? chessFiles() : ticTacToeFiles(),
+    tests: chess ? ['Select a piece and move it', 'Captures remove the piece', 'Undo reverts a move'] : ['Place a mark', 'Win is detected', 'Score updates'],
+    notes: ['Self-contained: one www/index.html, no network needed']
+  };
+};
+GENERATORS['web-app'] = function(o) {
+  return {
+    summary: 'Working list app (add, complete, search, delete) with local persistence.',
+    files: listAppFiles(o, 'My App', 'mauli-app-items'),
+    tests: ['Add an item', 'Toggle complete', 'Search filters the list'],
+    notes: ['Self-contained: one www/index.html', 'LocalStorage persistence']
+  };
+};
+GENERATORS['portfolio'] = function(o) {
+  return {
+    summary: 'Portfolio/website page with about, work and a working contact form.',
+    files: portfolioFiles(o),
+    tests: ['Navigation scrolls to sections', 'Contact form stores a message'],
+    notes: ['Self-contained: one www/index.html']
+  };
+};
+
 export function generateFromTemplate(project) {
   var objective = project.objective || project.name || '';
   var capabilities = project.capabilities || project.requirements || [];

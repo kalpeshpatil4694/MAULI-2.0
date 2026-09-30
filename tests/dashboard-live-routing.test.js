@@ -53,6 +53,23 @@ test('/api/build-status survives a cold isolate instead of answering a false 404
   assert.match(index, /async function findBuild\(buildId, env\) \{[\s\S]*?d1Get\(env, 'builds', buildId\)/);
 });
 
+test('a build whose D1 row was lost still offers the GitHub artifact', () => {
+  // /api/build-app creates the build record on its last line, so the D1 write could lose
+  // the race against the response. /api/build-status then answered "Build not found"
+  // forever for a build that was already running, and the founder polled a dead id for
+  // ten minutes and got no download. Fall back to the project's GitHub runs.
+  const startBuild = /window\.startBuild=async function\(pid,plat,btn\)\{[\s\S]*?\n  \};/.exec(live)?.[0] ?? '';
+  assert.ok(startBuild, 'startBuild must exist');
+  assert.match(startBuild, /let viaProjectBuilds=false;/);
+  assert.match(startBuild, /if\(\/Build not found\/i\.test\(String\(\(e&&e\.message\)\|\|e\|\|''\)\)\)viaProjectBuilds=true;/);
+  assert.match(startBuild, /api\('\/api\/project-builds\/'\+encodeURIComponent\(pid\)\)/);
+  assert.match(startBuild, /plat==='android'\?\(r&&r\.bestAPK\):\(r&&r\.bestEXE\)/);
+  // The download button has to stay one implementation, used by both paths: window.open
+  // cannot send the founder key, so the APK has to be fetched and saved as a blob.
+  assert.match(startBuild, /const attachDownload=url=>\{/);
+  assert.equal((startBuild.match(/attachDownload\(/g) ?? []).length, 2, 'used by both the poll and the fallback path');
+});
+
 test('every build button is rendered with the pid the live layer needs', () => {
   // The live handlers read dataset.pid, so the markup has to carry it.
   const html = dashboardHTML();

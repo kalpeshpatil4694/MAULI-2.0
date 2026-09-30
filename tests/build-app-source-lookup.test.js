@@ -74,15 +74,25 @@ test('the build record is written as a critical row so it survives the write bud
   assert.match(critical, /'build_locks'/);
 });
 
+test('build-app keeps the isolate alive until the build row is durable', () => {
+  // store.put() does not await its D1 write, and the build record is created on the last
+  // line of the handler. The response therefore returned with the INSERT still in flight
+  // and the isolate was torn down before it landed: D1 held only 2 build rows while the
+  // dashboard had started several builds, so /api/build-status answered a permanent 404
+  // for a build that was genuinely running on GitHub.
+  const row = /store\.put\('builds',\{id:buildId,[^\n]*\n\s*store\.addEvent\('build\.started'[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*await store\.flush\(\)\.catch\(\(\)=>\{\}\);/;
+  assert.match(index, row, 'the build row must be flushed before the handler answers');
+});
+
 test('collectProjectFiles can be given the authoritative artifact list', () => {
   const emptyStore = { list: () => [] };
   const artifacts = [
-    { projectId: 'p1', type: 'code-workspace', content: { files: [
+    { projectId: 'p1', type: 'code-workspace', createdAt: '2026-09-28T01:00:00.000Z', content: { files: [
       { path: 'www/index.html', content: 'A' },
       { path: 'www/index.html', content: 'A' },
       { path: 'www/app.js', content: 'B' },
     ] } },
-    { projectId: 'p1', type: 'code-workspace', content: { files: [
+    { projectId: 'p1', type: 'code-workspace', createdAt: '2026-09-29T01:00:00.000Z', content: { files: [
       { path: 'www/index.html', content: 'A' },
       { path: 'www/app.js', content: 'B2' },
     ] } },
@@ -92,7 +102,11 @@ test('collectProjectFiles can be given the authoritative artifact list', () => {
   assert.deepEqual(fromProvided, [
     { path: 'www/index.html', content: 'A' },
     { path: 'www/app.js', content: 'B2' },
-  ], 'repeated paths must collapse to one entry, and the newest content wins');
+  ], 'repeated paths must collapse to the NEWEST copy, whatever order the pool arrives in');
+
+  // Same result with the pool reversed: the rule is the newest artifact, not list order.
+  const reversed = collectProjectFiles('p1', artifacts[0], emptyStore, [...artifacts].reverse());
+  assert.deepEqual(reversed, fromProvided);
 
   // Without the explicit list the function keeps its original cache-based behaviour.
   const fromCache = collectProjectFiles('p1', artifacts[0], { list: () => artifacts });

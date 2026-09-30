@@ -1,8 +1,16 @@
 import './functional-code-executor.js';
 
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const AI_DAILY_REQUEST_LIMIT = 20;
-const AI_SAFE_REQUEST_LIMIT = 18;
+// Neuron cost is why apps arrived "built but not right". The chat model above bills
+// 26,668 neurons per M input tokens and 204,805 per M output tokens, so one three-file app
+// (~2k in, ~2.5k out) spends ~565 of the 10,000 free neurons a day — about 17 generations.
+// The pipeline hit that ceiling constantly (every recent artifact in production said
+// {"generatedBy":"app-templates","aiFailed":true,"aiError":"{}"}) and every affected
+// project shipped a placeholder page instead of its app. @cf/qwen/qwen3-30b-a3b-fp8 bills
+// 4,625 / 30,475 and is a code-capable model: ~85 neurons per app, ~6.7x the apps per day.
+const DEFAULT_CODE_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
+const AI_DAILY_REQUEST_LIMIT = 100;
+const AI_SAFE_REQUEST_LIMIT = 90;
 
 function dayKey(date = new Date()) { return date.toISOString().slice(0, 10); }
 function aiState(env) {
@@ -33,24 +41,37 @@ function reserveAIRequest(env) {
 }
 
 function resolveModel(env, options = {}) { return options.model ?? env?.MAULI_MODEL ?? DEFAULT_MODEL; }
+function resolveCodeModel(env, options = {}) { return options.model ?? env?.MAULI_CODE_MODEL ?? DEFAULT_CODE_MODEL; }
 function getProvider(env, options = {}) { return options.provider ?? env?.MAULI_AI_PROVIDER ?? 'cloudflare'; }
 async function cloudflareGenerate(env, messages, options = {}) {
   if (!env?.AI?.run) throw new Error('Cloudflare AI binding is not configured');
-  if (!reserveAIRequest(env)) throw new Error('MAULI AI daily safety limit reached; deterministic fallback should be used');
-  const response = await env.AI.run(resolveModel(env, options), {
-    messages,
-    temperature: options.temperature ?? 0.2,
-    // The executor requests enough tokens for a complete multi-file artifact; clamping
-    // that to 1200 guaranteed truncated/invalid JSON, so every AI call was wasted and
-    // the pipeline silently fell back to templates. Honour the request up to 3000.
-    max_tokens: Math.min(3000, Math.max(900, Number(options.maxTokens ?? 900)))
-  });
-  return response?.response ?? response;
+  const model = resolveModel(env, options);
+  const fallbackModel = options.fallbackModel && options.fallbackModel !== model ? options.fallbackModel : null;
+  const run = async (modelId) => {
+    if (!reserveAIRequest(env)) throw new Error('MAULI AI daily safety limit reached; deterministic fallback should be used');
+    const response = await env.AI.run(modelId, {
+      messages,
+      temperature: options.temperature ?? 0.2,
+      // The executor requests enough tokens for a complete multi-file artifact; clamping
+      // that to 1200 guaranteed truncated/invalid JSON, so every AI call was wasted and
+      // the pipeline silently fell back to templates. Honour the request up to 3000.
+      max_tokens: Math.min(3000, Math.max(900, Number(options.maxTokens ?? 900)))
+    });
+    return response?.response ?? response;
+  };
+  try {
+    return await run(model);
+  } catch (error) {
+    // A retired, rate-limited or unavailable code model must not cost the project its app:
+    // retry once on the configured chat model before concluding that AI is unavailable.
+    if (!fallbackModel) throw error;
+    try { return await run(fallbackModel); } catch { throw error; }
+  }
 }
 export async function generateAI(env, messages, options = {}) { switch (getProvider(env, options)) { case 'cloudflare': return cloudflareGenerate(env, messages, options); default: throw new Error(`Unsupported AI provider: ${getProvider(env, options)}`); } }
 export async function generate(env, messages, options = {}) { return generateAI(env, messages, options); }
 export async function reason(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 900 }); }
-export async function code(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 1200 }); }
+export async function code(env, messages, options = {}) { return generateAI(env, messages, { ...options, model: resolveCodeModel(env, options), fallbackModel: env?.MAULI_MODEL ?? DEFAULT_MODEL, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 1200 }); }
 
 const CAPABILITIES = ['research','planning','product-planning','frontend','ui','backend','api','database','schema','sql','security','testing','verification'];
 function cleanList(value, limit = 30) { return Array.isArray(value) ? value.map(x => String(x).trim()).filter(Boolean).slice(0, limit) : []; }
@@ -77,5 +98,5 @@ export async function interpretWithAI(env, command, options = {}) {
   const raw=await reason(env,[{role:'system',content:system},{role:'user',content:String(command)}],options); const parsed=extractJson(raw);
   if(!parsed)return {objective:String(command),requirements:[],capabilities:[],risks:['AI planning response was not valid JSON'],acceptanceCriteria:[],raw}; return normalizePlan(parsed,command);
 }
-export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'deterministic-free-planner', quota:aiQuotaSnapshot(env) }; }
+export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), codeModel:resolveCodeModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'deterministic-free-planner', quota:aiQuotaSnapshot(env) }; }
 export { AI_DAILY_REQUEST_LIMIT, AI_SAFE_REQUEST_LIMIT };

@@ -47,8 +47,24 @@ export async function queueCommand(command,env={}){seedAgents();const intent=int
   // This prevents a project that only exists in the current Worker isolate from
   // disappearing on the next refresh or isolate restart.
   await store.flush();
-  if(hasD1(env)){const persisted=await env.DB.prepare('SELECT data FROM entities WHERE type=? AND id=? LIMIT 1').bind('projects',project.id).first();if(!persisted?.data)throw new Error('Project was created but could not be durably persisted to D1');}
-  if(requiresApproval(risk)){const approval=requestApproval({action:`Execute founder command: ${command}`,risk,projectId:project.id});await store.flush();return{runId,intent,aiPlan:plan,project:queuedProject,tasks:entries(plannedTasks),status:'awaiting_approval',approval};}return{runId,intent,aiPlan:plan,project:queuedProject,tasks:entries(plannedTasks),status:'queued',next:'scheduler'};}
+  // Durable-ack guarantee. The project row alone is not enough: a command whose project
+  // persisted while its task rows were still in flight left a project that could never
+  // execute — the founder's "my command was not processed". Verify the task rows too,
+  // retry the flush once, and fail loudly rather than acknowledge a phantom command.
+  if(hasD1(env)){
+    const persisted=await env.DB.prepare('SELECT data FROM entities WHERE type=? AND id=? LIMIT 1').bind('projects',project.id).first();if(!persisted?.data)throw new Error('Project was created but could not be durably persisted to D1');
+    const expected=plannedTasks.map(x=>x.task?.id).filter(Boolean);
+    const missingTasks=async()=>{const gone=[];for(const tid of expected){const row=await env.DB.prepare('SELECT data FROM entities WHERE type=? AND id=? LIMIT 1').bind('tasks',tid).first();if(!row?.data)gone.push(tid);}return gone;};
+    let gone=await missingTasks();
+    if(gone.length){await store.flush();gone=await missingTasks();}
+    if(gone.length)throw new Error('Command tasks could not be durably persisted to D1');
+  }
+  // A high-risk command must genuinely WAIT. The project was stored as 'queued', so the
+  // scheduler (which only skips 'awaiting_approval') would have started executing a
+  // command that was still waiting for the founder — and the derived project state showed
+  // it as 'active', hiding the gate on the dashboard. Park it in 'awaiting_approval' and
+  // return that state; the approval endpoint moves it back to 'queued'.
+  if(requiresApproval(risk)){const gated=store.put('projects',{...queuedProject,state:'awaiting_approval',id:queuedProject.id});const approval=requestApproval({action:`Execute founder command: ${command}`,risk,projectId:project.id});await store.flush();return{runId,intent,aiPlan:plan,project:gated,tasks:entries(plannedTasks),status:'awaiting_approval',approval};}return{runId,intent,aiPlan:plan,project:queuedProject,tasks:entries(plannedTasks),status:'queued',next:'scheduler'};}
 export async function resumeApprovedCommand(approvalId,env={}){const approval=store.get('approvals',approvalId);if(!approval||!isApprovalGranted(approvalId))return{status:'awaiting_approval',approval};const project=store.get('projects',approval.projectId);const tasks=store.list('tasks').filter(t=>t.projectId===approval.projectId);const task=tasks.filter(t=>t.state!=='completed'&&t.state!=='cancelled').sort((a,b)=>(a.sequence??0)-(b.sequence??0))[0];if(!project||!task)return{status:'error',error:'Approved project/task not found'};return executePlannedProject({project,task,selectedAgent:task.assignedAgentId?store.get('agents',task.assignedAgentId):null,env,approved:true,plannedTasks:tasks.map(t=>({task:t,selectedAgent:t.assignedAgentId?store.get('agents',t.assignedAgentId):null}))});}
 function ensureExecutablePlan(command,plan){
   const text=String(command??'').trim();

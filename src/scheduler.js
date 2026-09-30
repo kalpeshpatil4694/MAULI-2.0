@@ -27,7 +27,11 @@ const PROJECTS_PER_TICK=40;
 const CRON_TASKS_PER_PROJECT=6;
 function dependenciesReady(task){return(task?.dependsOn??[]).every(id=>store.get('tasks',id)?.state==='completed');}
 function activeRun(taskId){return store.list('runs').find(r=>r.taskId===taskId&&r.state==='running')??null;}
-function stale(run){const stamp=Date.parse(run?.heartbeatAt??run?.startedAt??'');return !Number.isFinite(stamp)||Date.now()-stamp>LEASE_MS;}
+// A future-dated stamp (clock skew, or a recovered estimate written into a timestamp
+// field) made `Date.now()-stamp` negative, so the run never looked stale and the task
+// could never be recovered: it sat "verifying"/"working" for hours while cron skipped it
+// as if a live execution were running. An implausibly future stamp is stale too.
+function stale(run,at=Date.now()){const stamp=Date.parse(run?.heartbeatAt??run?.startedAt??'');if(!Number.isFinite(stamp))return true;const age=at-stamp;return age>LEASE_MS||age<-LEASE_MS;}
 function releaseAgent(task){if(!task?.agentId&&!task?.assignedAgentId)return;const agent=store.get('agents',task.agentId??task.assignedAgentId);if(agent)updateAgent(agent.id,{state:'available',currentTaskId:null,heartbeatAt:now()});}
 function chooseAgent(task){const tools=task.requiredTools??task.toolNames??[];return selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true})[0]??selectAgents(task.requiredCapabilities??[],null,{requireAllTools:false})[0]??selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true,allowPartialCapabilities:true})[0]??null;}
 export function claimNextTask(taskId){const task=store.get('tasks',taskId);if(!task||!RUNNABLE.has(task.state)||!dependenciesReady(task))return null;const project=task.projectId?store.get('projects',task.projectId):null;if(project?.state==='awaiting_approval')return null;const existing=activeRun(task.id);if(existing&&!stale(existing))return null;// The pre-assigned agent may be a stale duplicate that is busy/offline/cooldown
@@ -68,8 +72,10 @@ export function recoverStaleTasks(){
     if(!STUCK_STATES.has(task.state))continue;
     if(liveRuns.has(task.id))continue;
     const updated=Date.parse(task.updatedAt??task.claimedAt??0);
-    if(Number.isFinite(updated)&&Date.now()-updated<ORPHAN_GRACE_MS)continue;
-    if(task.state==='assigned'){const lease=Date.parse(task.leaseUntil??'');if(Number.isFinite(lease)&&lease>Date.now())continue;}
+    const age=Date.now()-updated;
+    // A future updatedAt must be recoverable, not read as "just touched" (negative age).
+    if(Number.isFinite(updated)&&age>=0&&age<ORPHAN_GRACE_MS)continue;
+    if(task.state==='assigned'){const lease=Date.parse(task.leaseUntil??'');if(Number.isFinite(lease)&&lease>Date.now()&&lease<=Date.now()+LEASE_MS)continue;}
     requeueAfterInfraFailure(task,`Orphaned ${task.state} task with no live execution`,now());
     recovered.push(task.id);
   }
@@ -116,23 +122,46 @@ function indexTasksByProject(){const byProject=new Map();for(const task of store
 export async function schedulerTick(env={},context={}){
   const recovered=recoverStaleTasks();
   const startedAt=Date.now(),budgetMs=Number(context?.budgetMs??0);
-  // Projects whose tasks are all completed but that never got a final delivery (completed
-  // before finalizeCommand could run, or by a path that skipped delivery) get one more
-  // finalize attempt here instead of sitting "completed" with nothing to download.
+  // One task index for the whole tick: the finalize sweep and the work loop both need it,
+  // and re-scanning the full task table per project was a large slice of the free plan's
+  // CPU budget.
+  const byProject=indexTasksByProject();
+  // Projects whose tasks are ALL finished but that never reached a delivery or a terminal
+  // state get one finalize attempt here. This now includes projects left in 'active'
+  // because their last scheduler tick was cancelled before finalizeCommand ran (the old
+  // sweep only looked at projects already marked 'completed').
   for(const project of store.list('projects')){
-    if(project?.state!=='completed'||project.finalDeliveryId)continue;
-    const projectTasks=store.list('tasks').filter(t=>t.projectId===project.id);
+    if(!project||project.state==='cancelled'||project.state==='failed'||project.state==='awaiting_approval')continue;
+    if(project.state==='completed'&&project.finalDeliveryId)continue;
+    const projectTasks=byProject.get(project.id)??[];
     if(!projectTasks.length)continue;
     if(projectTasks.some(t=>['queued','assigned','working','verifying','blocked'].includes(t.state)))continue;
     const final=await finalizeCommand(project.id,env,projectTasks).catch(()=>null);
     if(final)recovered.push(project.id);
   }
-  const byProject=indexTasksByProject();
-  const ordered=[...byProject.keys()].filter(Boolean);
   const results=[];
   const drainProject=context?.projectId??null;
-  if(drainProject){const i=ordered.indexOf(drainProject);if(i>0)ordered.splice(i,1),ordered.unshift(drainProject);}
   const overBudget=()=>budgetMs>0&&Date.now()-startedAt>=budgetMs;
+  // A blind slice(0, 40) of an insertion-ordered list silently starved every project past
+  // the fortieth once the account held 80+ projects: a freshly queued command whose project
+  // sorted late was never reached by cron, so it stayed "active" with nothing running even
+  // though the scheduler was healthy. Build the work list from what actually needs a tick
+  // (runnable, stuck, or a blocked task whose dependencies are now ready), stalest first, so
+  // every project is reached over consecutive ticks and finished projects cost nothing.
+  const lastTouch=pid=>{let min=0;for(const t of byProject.get(pid)??[]){const ts=Date.parse(t.updatedAt??t.claimedAt??t.createdAt??0);if(Number.isFinite(ts)&&(!min||ts<min))min=ts;}return min;};
+  const needsTick=pid=>{const project=store.get('projects',pid);if(project?.state==='awaiting_approval'||['completed','cancelled','failed'].includes(project?.state))return false;for(const t of byProject.get(pid)??[]){if(t.state==='blocked'){if(dependenciesReady(t))return true;continue;}if(RUNNABLE.has(t.state)&&dependenciesReady(t))return true;if(STUCK_STATES.has(t.state))return true;}return false;};
+  // Two tiers: a just-queued founder command must be worked on immediately (the founder is
+  // watching it), while older unfinished projects still rotate by staleness so none is
+  // starved. The old code kept pure insertion order and sliced 40, so the newest command —
+  // the one the founder just typed — was always the first to be dropped.
+  const FRESH_MS=10*60*1000;
+  const freshProject=pid=>{const p=store.get('projects',pid);const ts=Date.parse(p?.queuedAt??p?.commandReceivedAt??p?.createdAt??0);return Number.isFinite(ts)&&(Date.now()-ts)<FRESH_MS;};
+  const ordered=[...byProject.keys()].filter(Boolean).filter(needsTick).sort((a,b)=>{
+    const fa=freshProject(a)?0:1, fb=freshProject(b)?0:1;
+    if(fa!==fb)return fa-fb;
+    return lastTouch(a)-lastTouch(b);
+  });
+  if(drainProject){const i=ordered.indexOf(drainProject);if(i>0)ordered.splice(i,1),ordered.unshift(drainProject);}
   for(const projectId of ordered.slice(0,PROJECTS_PER_TICK)){
     if(overBudget())break;
     const project=store.get('projects',projectId);
