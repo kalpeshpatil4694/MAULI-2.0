@@ -12,8 +12,29 @@ function state(env) {
   const s = env.__MAULI_D1_QUOTA;
   if (!s.bySource) s.bySource = {};
   const day = dayKey();
-  if (s.day !== day) { s.day = day; s.reads = 0; s.writes = 0; s.reserved = 0; s.bySource = {}; }
+  if (s.day !== day) { s.day = day; s.reads = 0; s.writes = 0; s.reserved = 0; s.bySource = {}; s.blocked = null; }
   return s;
+}
+
+// Cloudflare's account-level free-tier ceiling. MAULI's own counter only sees the writes
+// this isolate issued, so it happily reported "healthy, 0/100000" while D1 was rejecting
+// every single write with this error. Nothing in the product could tell the difference
+// between "no work happened" and "no work could be recorded" — the dashboard just stalled
+// and projects looked stuck. Recognising the error turns a silent stall into a visible,
+// attributable, self-clearing state.
+const ACCOUNT_WRITE_LIMIT_RE = /exceeded D1'?s free tier daily row write limit|daily row write limit/i;
+
+export function noteD1WriteBlocked(env, error) {
+  const message = error?.message ?? String(error ?? '');
+  if (!ACCOUNT_WRITE_LIMIT_RE.test(message)) return false;
+  const s = state(env);
+  if (!s.blocked) s.blocked = { reason: message.slice(0, 300), at: new Date().toISOString(), source: 'cloudflare-account' };
+  return true;
+}
+
+export function d1WriteBlockedSnapshot(env) {
+  const s = state(env);
+  return s.blocked ? { ...s.blocked, day: s.day, resetsAt: `${s.day}T24:00:00Z` } : null;
 }
 
 export function d1ReadQuotaSnapshot(env) {
@@ -35,8 +56,13 @@ export function d1QuotaSnapshot(env) {
   const used = Math.min(DAILY_ROW_WRITE_LIMIT, Math.max(0, Number(s.writes) || 0));
   const remaining = Math.max(0, DAILY_ROW_WRITE_LIMIT - used);
   const percent = Math.min(100, Number(((used / DAILY_ROW_WRITE_LIMIT) * 100).toFixed(2)));
-  const status = used >= DAILY_ROW_WRITE_LIMIT ? 'limit_reached' : used >= SHARED_SAFE_LIMIT ? 'critical' : used >= HIGH_LIMIT ? 'high' : used >= WARN_LIMIT ? 'watch' : 'healthy';
-  return { date: s.day, limit: DAILY_ROW_WRITE_LIMIT, used, remaining, percent, status, protectionMode: used >= SAFETY_LIMIT, source: 'MAULI tracked writes (not Cloudflare account meter)' };
+  const status = s.blocked ? 'account_limit_reached' : used >= DAILY_ROW_WRITE_LIMIT ? 'limit_reached' : used >= SHARED_SAFE_LIMIT ? 'critical' : used >= HIGH_LIMIT ? 'high' : used >= WARN_LIMIT ? 'watch' : 'healthy';
+  return {
+    date: s.day, limit: DAILY_ROW_WRITE_LIMIT, used, remaining, percent, status,
+    protectionMode: used >= SAFETY_LIMIT || Boolean(s.blocked),
+    blocked: s.blocked ?? null,
+    source: 'MAULI tracked writes (not Cloudflare account meter)',
+  };
 }
 
 // estimatedRows prevents a write from being started when its expected cost would cross the hard ceiling.
@@ -53,6 +79,10 @@ export async function reserveD1Rows(env, estimatedRows = 1, critical = false) {
 export function canWriteD1(env, critical = false, estimatedRows = 1) {
   const s = state(env);
   const estimate = Math.max(1, Number(estimatedRows) || 1);
+  // Once Cloudflare has rejected a write for the account-level daily ceiling, every
+  // further write is refused the same way. Stop paying for attempts that cannot land;
+  // the day rollover in state() clears this automatically at midnight UTC.
+  if (s.blocked) return false;
   if (s.writes + estimate > DAILY_ROW_WRITE_LIMIT) return false;
   // Non-critical writes must remain strictly below the safety ceiling.
   // Critical writes may continue up to the Cloudflare hard daily limit.
