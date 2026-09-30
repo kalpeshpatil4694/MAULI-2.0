@@ -221,6 +221,25 @@ test('a failed task whose dependencies are still satisfiable is retried, not ret
   assert.equal(store.get('projects', projectId).state, 'queued');
 });
 
+test('a running task in one project does not mark every other project in_progress', () => {
+  // The live-run check has to be per-project. Globalising it made any single running task
+  // excuse every project on the system, so nothing was ever diagnosed or re-queued.
+  resetStore();
+  store.put('projects', { id: 'live-project', name: 'Running', state: 'active' });
+  store.put('tasks', { id: 'live-task', projectId: 'live-project', title: 'Working', state: 'working' });
+  store.put('runs', { id: 'live-run', taskId: 'live-task', state: 'running', startedAt: new Date().toISOString(), heartbeatAt: new Date().toISOString() });
+
+  store.put('projects', { id: 'other-dead-project', name: 'Dead chain', state: 'active' });
+  store.put('tasks', { id: 'other-blocked', projectId: 'other-dead-project', title: 'Blocked step', state: 'blocked', dependsOn: ['other-done'] });
+  store.put('tasks', { id: 'other-done', projectId: 'other-dead-project', title: 'Earlier step', state: 'completed' });
+
+  const report = recoverStuckProjects();
+  assert.equal(report.reports.find(r => r.projectId === 'live-project').verdict, 'in_progress');
+  assert.equal(report.reports.find(r => r.projectId === 'other-dead-project').verdict, 'requeued',
+    'an unrelated live run must not hide a dead project');
+  assert.equal(store.get('tasks', 'other-blocked').state, 'queued');
+});
+
 test('recoverStuckProjects re-queues a dead chain and clears it from the project list', () => {
   resetStore();
   const projectId = 'stuck-requeue-project';
