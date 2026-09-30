@@ -6,7 +6,15 @@ import { generateFromTemplate } from './app-templates.js';
 const WEB_REQUIRED = ['www/index.html', 'www/app.js', 'www/styles.css'];
 const COMMON_REQUIRED = ['package.json', 'README.md'];
 
-function text(v) { return v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v); }
+// Errors are objects, so a plain JSON.stringify turned every thrown model failure into
+// "{}" — the one message an operator needs when generation falls back to a template came
+// out empty. Coerce the message first, then serialise anything genuinely structured.
+function text(v) {
+  if (v == null) return '';
+  if (v instanceof Error) return v.message || String(v);
+  if (typeof v === 'object') { try { return JSON.stringify(v) ?? ''; } catch { return String(v); } }
+  return String(v);
+}
 function filesOf(value) {
   const out = [];
   for (const f of Array.isArray(value) ? value : []) {
@@ -57,6 +65,7 @@ function resolveRuntimeEnv(env) {
 }
 
 const AI_ATTEMPT_TIMEOUT_MS = 40_000;
+const DEFAULT_CODE_MODEL_FALLBACK = '@cf/qwen/qwen3-30b-a3b-fp8';
 
 function withTimeout(promise, ms) {
   let timer;
@@ -96,6 +105,52 @@ RULES:
 2. Include proper error handling
 3. Include package.json with all dependencies
 4. Make it production-ready`;
+
+/**
+ * Run the real AI generation path and report what came back, WITHOUT persisting anything.
+ *
+ * generateFunctionalArtifact() is only reachable through the scheduler, which cannot start
+ * until the project row exists — so when D1 writes are refused (the account's daily
+ * rows_written ceiling, for example) the AI path becomes impossible to test at all: the
+ * only symptom is "completed" with a template behind it, which looks identical to the AI
+ * path working. This runs the identical prompt, parsing and validation loop against the
+ * real binding and returns the verdict, so the two can be told apart.
+ */
+export async function probeAiGeneration(objective, { env, acceptance = [] } = {}) {
+  const runtimeEnv = resolveRuntimeEnv(env);
+  if (!runtimeEnv?.AI?.run) {
+    return { available: false, reason: 'no-ai-binding', model: env?.MAULI_CODE_MODEL ?? DEFAULT_CODE_MODEL_FALLBACK };
+  }
+  const systemPrompt = WEB_TASK_PROMPT + '\n\nTask: ' + objective + '\nAcceptance criteria: ' + JSON.stringify(acceptance);
+  let lastError = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const prompt = attempt === 0 ? objective : objective + '\n\nIMPORTANT: Your previous response was invalid. Generate COMPLETE source code for all files. Each file must have full, working code. Output ONLY the JSON object.';
+      const raw = await withTimeout(code(runtimeEnv, [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt }
+      ], { maxTokens: 3000 }), AI_ATTEMPT_TIMEOUT_MS);
+      const parsed = parseModel(raw);
+      const files = filesOf(parsed?.files);
+      // Validate against a web task: this probe uses the web prompt, so it must be held to
+      // the same bar the executor applies (a real index.html plus real app.js/styles.css),
+      // or it would report success for output the executor would reject and fall back.
+      const bad = invalid(files, { title: objective });
+      if (!bad && files.length) {
+        return {
+          available: true, generated: true, attempt: attempt + 1,
+          fileCount: files.length,
+          files: files.map(f => ({ path: f.path, bytes: String(f.content ?? '').length })),
+          summary: text(parsed.summary ?? '').slice(0, 300),
+          hasPlaceholder: /AI generation unavailable|placeholder|TODO: implement/i.test(files.map(f => String(f.content)).join('\n')),
+          preview: String(files.find(f => /index\.html$/i.test(f.path))?.content ?? files[0]?.content ?? '').slice(0, 400),
+        };
+      }
+      lastError = bad ? 'output rejected: missing required files or too little code' : 'model returned no usable files';
+    } catch (error) { lastError = text(error); }
+  }
+  return { available: true, generated: false, error: text(lastError).slice(0, 400), model: env?.MAULI_CODE_MODEL ?? null };
+}
 
 async function generateFunctionalArtifact({ task, env, agentId }) {
   const runtimeEnv = resolveRuntimeEnv(env);
