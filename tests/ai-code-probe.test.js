@@ -147,3 +147,19 @@ test('includeContent returns the generated code, not just its size', async () =>
   assert.equal(without.files.find(f => f.path === 'www/index.html').content, undefined,
     'the default response stays small');
 });
+
+test('a synthesised manifest is named after the project, not the instruction', async () => {
+  // "build-a-pomodoro-timer-web-app-with-a-wo" describes the request, not the project.
+  const noManifest = JSON.stringify({
+    files: [
+      { path: 'www/index.html', content: '<!DOCTYPE html><html><head><title>t</title><link rel="stylesheet" href="styles.css"></head><body><div id="d"></div><script src="app.js"></script></body></html>' },
+      { path: 'www/app.js', content: 'x'.repeat(400) },
+      { path: 'www/styles.css', content: 'y'.repeat(300) },
+    ],
+  });
+  const result = await probeAiGeneration('Build a simple pomodoro timer web app with a session counter', { env: fakeEnv(noManifest), includeContent: true });
+  const manifest = JSON.parse(result.files.find(f => f.path === 'package.json').content);
+  assert.equal(manifest.name, 'pomodoro-timer-session', 'instruction words are dropped, the subject is kept');
+  assert.ok(!manifest.name.endsWith('-'), 'no mid-word truncation');
+  assert.match(manifest.name, /^[a-z0-9-]+$/, 'a valid npm name');
+});
