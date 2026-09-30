@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { store } from '../src/store.js';
 import { ensureBuiltinTools, listTools } from '../src/tools.js';
-import { seedAgents } from '../src/agents.js';
+import { seedAgents, updateAgent } from '../src/agents.js';
 import { pruneEvents } from '../src/db.js';
+import { markVerifying } from '../src/tasks.js';
 import { recordD1Write, d1WriteSourcesSnapshot } from '../src/d1-quota.js';
 
 // Minimal D1 double that counts rows_written, so tests can assert exactly how many
@@ -83,6 +84,29 @@ test('telemetry events whose entity already has a row stay out of D1', async () 
   store.addEvent('command.completed', { runId: 'command_1' });
   await store.flush();
   assert.equal(db.inserts.events, 2, 'lifecycle audit events are still persisted');
+});
+
+test('per-task telemetry stays out of D1 while completion audit events stay in', async () => {
+  // The task row already records every one of these transitions (state, attempts,
+  // infraRecoveries, agentId, verificationId), so persisting the matching event costs a
+  // second write for the same fact — on the free tier that was the majority of a command's
+  // daily write budget. task.completed is deliberately NOT in this set: it is the
+  // completion audit trail.
+  const db = countingD1();
+  const env = { DB: db.DB };
+  resetStore(env);
+
+  for (const type of ['task.assigned', 'task.verifying', 'scheduler.task_claimed',
+    'scheduler.task_recovered', 'verification.completed', 'agent.registered']) {
+    store.addEvent(type, { id: `${type}_1` });
+  }
+  await store.flush();
+  assert.equal(db.inserts.events, 0, 'per-task telemetry must not be persisted');
+  assert.equal(store.recentEvents(10).length, 6, 'the live in-memory feed still receives them');
+
+  store.addEvent('task.completed', { id: 'task_1' });
+  await store.flush();
+  assert.equal(db.inserts.events, 1, 'the completion audit event is still durable');
 });
 
 test('a second seedAgents inside the heartbeat window writes nothing', async () => {
@@ -168,4 +192,49 @@ test('pruneEvents stays inside its daily rows_written cap', async () => {
   assert.equal(result.pruned, 12000, 'the daily delete budget stops the run');
   assert.equal(events.length, 8000, 'the excess above keep is removed up to the cap only');
   assert.ok(result.pruned <= 12000, 'maintenance can never spend 80% of the write budget in one day');
+});
+
+test('an agent row is written at most once per window, but always when it goes idle', async () => {
+  // A task walks its agent through assigned → working → verifying → completed → available:
+  // five writes per task for a fact that only matters between isolates. The in-memory row
+  // must stay exact either way. Going idle is the exception — that is the state another
+  // isolate reads to decide whether the agent may be claimed, so it is never withheld.
+  const db = countingD1();
+  const env = { DB: db.DB };
+  resetStore(env);
+
+  const agent = store.put('agents', { id: 'agent-throttle', name: 'Throttle Agent', state: 'available', capabilities: [] });
+  await store.flush();
+  const seeded = db.inserts.entities;
+
+  updateAgent(agent.id, { state: 'assigned', currentTaskId: 'task-1' });
+  updateAgent(agent.id, { state: 'working', currentTaskId: 'task-1' });
+  updateAgent(agent.id, { state: 'verifying', currentTaskId: 'task-1' });
+  await store.flush();
+  assert.ok(db.inserts.entities - seeded <= 1, 'a burst of busy-state updates costs at most one write');
+  assert.equal(store.get('agents', agent.id).state, 'verifying', 'memory stays exact');
+
+  updateAgent(agent.id, { state: 'available', currentTaskId: null });
+  await store.flush();
+  assert.equal(db.inserts.entities - seeded, 2, 'going idle is always persisted');
+  assert.equal(store.get('agents', agent.id).state, 'available');
+});
+
+test('a task waiting on its verdict does not write D1', async () => {
+  // 'verifying' is a state the task occupies only between 'working' and the verdict. An
+  // invocation killed during verification leaves the durable row at 'working', which orphan
+  // recovery reclaims exactly the same way it reclaims a stranded 'verifying' row.
+  const db = countingD1();
+  const env = { DB: db.DB };
+  resetStore(env);
+
+  const task = store.put('tasks', { id: 'task-verifying', projectId: 'p1', title: 'Work', state: 'working' });
+  await store.flush();
+  const before = db.inserts.entities;
+
+  markVerifying(task.id, { ok: true });
+  await store.flush();
+  assert.equal(db.inserts.entities, before, 'no durable write for a transient state');
+  assert.equal(store.get('tasks', task.id).state, 'verifying', 'memory still reflects it');
+  assert.equal(store.get('tasks', task.id).result.ok, true);
 });

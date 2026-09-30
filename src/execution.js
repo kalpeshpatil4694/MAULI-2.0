@@ -41,7 +41,10 @@ export async function executeTask(task,context={}) {
     if(!executor)throw new Error(`No executor registered: ${executorName}`);
     const scope=getExecutorScope(executorName,executor.scope??'internal');if(scope==='external'&&!context.allowExternal)throw new Error('External execution permission is not granted');if((executor.risk==='critical'||task.risk==='critical')&&!context.approved)throw new Error('Critical execution requires explicit approval');
     const callTool=(name,input={})=>executeTool(name,input,{...context,agentId:run.agentId,projectId:task.projectId,approved:context.approved,approvalId:context.approvalId});
-    const requiredTools=await authorizeRequiredTools(task,{...context,agentId:run.agentId,projectId:task.projectId},callTool);heartbeatExecution(run.id);
+    const requiredTools=await authorizeRequiredTools(task,{...context,agentId:run.agentId,projectId:task.projectId},callTool);
+    // No heartbeat here: the run was written with heartbeatAt = now() a moment ago and the
+    // lease is 90s, so refreshing it can only rewrite the same fact. It was a whole extra
+    // row write per task for no decision it could ever influence.
     const result=await executor.handler({task,...context,agentId:run.agentId,callTool,requiredTools});const timestampDone=now();const completed={...store.get('runs',run.id)??run,state:'completed',result,requiredTools,completedAt:timestampDone,heartbeatAt:timestampDone,recoverable:false,id:run.id};store.put('runs',completed);persistExecution(completed);store.addEvent('execution.completed',completed);return publicExecution(completed);
   }catch(error){const timestampFailed=now();const failed={...store.get('runs',run.id)??run,state:'failed',error:error?.message??String(error),completedAt:timestampFailed,heartbeatAt:timestampFailed,recoverable:false,id:run.id};store.put('runs',failed);persistExecution(failed);store.addEvent('execution.failed',failed);return publicExecution(failed);
   } finally {
