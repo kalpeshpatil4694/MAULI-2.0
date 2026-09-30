@@ -53,6 +53,17 @@ test('further writes stop being attempted once Cloudflare has refused them', () 
   assert.equal(canWriteD1(env, true, 1), false, 'a write Cloudflare will reject must not be attempted');
 });
 
+test('a write blocked after the limit is known explains itself', async () => {
+  // "write blocked" told the founder nothing and read like a product fault. The isolate
+  // that trips the guard is the only one that knows why, so it has to say so.
+  const env = { DB: { prepare() { return { bind() { return { async run() { throw LIMIT_ERROR; } }; } }; } } };
+  await d1Put(env, 'tasks', { id: 'warm', state: 'queued' });
+  const blocked = await d1Put(env, 'tasks', { id: 'next', state: 'queued' });
+  assert.equal(blocked._d1WriteLimit, true);
+  assert.match(blocked._d1WriteError, /daily row write limit/);
+  assert.match(blocked._d1WriteError, /Writes resume after/);
+});
+
 test('a rejected entity write records the limit instead of failing silently', async () => {
   const env = envWithRejectingD1(LIMIT_ERROR);
   const result = await d1Put(env, 'tasks', { id: 't1', state: 'queued' });
