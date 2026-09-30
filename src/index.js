@@ -405,6 +405,17 @@ export default { async fetch(request, env, ctx) { try {
     // so nothing can progress and the founder needs to see that rather than a stall.
     status:blocked?'degraded':'healthy',degraded:Boolean(blocked),degradedReason:blocked?'d1-write-limit':null,persistence:hasD1(env),r2:Boolean(env?.ARTIFACTS),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,stateReads:stateDiagnostics(),time:now()});}
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
+  if(request.method==='POST'&&url.pathname==='/api/ai/code-probe'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const body=await json(request).catch(()=>({}));
+    const objective=String(body.objective??'Build a simple calculator web app').slice(0,400);
+    // Deliberately performs NO store write. The point of this route is to answer "is the
+    // AI path working?" in exactly the conditions where it is otherwise untestable — while
+    // D1 writes are refused, the command endpoint cannot get far enough to reach the AI.
+    const {probeAiGeneration}=await import('./functional-code-executor.js');
+    const probe=await probeAiGeneration(objective,{env,acceptance:Array.isArray(body.acceptance)?body.acceptance:[]}).catch(error=>({available:true,generated:false,error:String(error?.message??error)}));
+    return ok({probe:{objective,...probe}});
+  }
   if(request.method==='POST'&&url.pathname==='/api/maintenance/recover-stuck'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const report=recoverStuckProjects({dryRun:body.dryRun===true});return ok({recoverStuck:report,projects:report.reports});}
   if(request.method==='POST'&&url.pathname==='/api/reset'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const keepAgents=body.keepAgents!==false;const before={projects:store.list('projects').length,tasks:store.list('tasks').length,artifacts:store.list('artifacts').length};store.put('projects',[]);store.put('tasks',[]);store.put('artifacts',[]);store.put('builds',[]);store.put('events',[]);store.put('approvals',[]);if(!keepAgents){const agents=store.list('agents');const fresh=agents.filter(a=>a._builtin);store.put('agents',fresh);}await store.flush();if(hasD1(env)){try{await env.DB.prepare('DELETE FROM entities').run();await env.DB.prepare('DELETE FROM events').run();}catch(e){console.warn('D1 reset failed:',e.message);}}store.addEvent('system.reset',{before,keepAgents,time:now()});return ok({reset:true,before,keepAgents});}
   if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});return ok(await statePayload(env, recoveredRuns));}
