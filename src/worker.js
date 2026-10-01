@@ -4,7 +4,7 @@ export { MauliProjectExecutionCoordinator } from './execution-coordinator.js';
 // HTTP remains owned by index.js; scheduled execution is owned by the persistent scheduler.
 
 import app from './index.js';
-import { ensureSchema, pruneEvents, pruneOldResults } from './db.js';
+import { ensureSchema, pruneEvents, pruneOldResults, boundedD1 } from './db.js';
 import { dedupeAgents, runMaintenance } from './maintenance.js';
 import { store } from './store.js';
 import { ensureBuiltinTools } from './tools.js';
@@ -18,14 +18,12 @@ import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
 let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 300000; // 5 min cooldown to prevent D1 row exhaustion
 let _d1Failed = false; let _d1FailTime = 0; const D1_FAIL_COOLDOWN = 300000; // 5 min retry after D1 failure
-const _projectKickAt = new Map();
-const PROJECT_KICK_COOLDOWN = 30000;
-// A dashboard refresh is the one moment the founder is watching. If a project still has
-// unfinished work, one throttled scheduler tick here means a command cannot sit "active"
-// forever just because its command-triggered tick was cancelled or it landed outside the
-// cron window. 60s keeps a poll from turning into repeated executions.
-let _stateKickAt = 0;
-const STATE_KICK_COOLDOWN = 60000;
+// Read-only polling contract: GET /api/state and GET /api/projects/:id/detail are pure reads.
+// They must never write to D1 or start execution. Dashboard polling used to fire a throttled
+// scheduler tick, which meant a founder leaving the dashboard open could trigger writes and
+// duplicate task runs (and burn the free-tier D1 write budget). Execution is now owned
+// exclusively by the cron trigger and by explicit POSTs (/api/command, /api/approvals/:id,
+// /api/chat), which is what makes polling cheap and idempotent.
 async function hydrate(env) {
   if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
   // After a D1 failure (e.g. daily rows_read limit), retry after the cooldown so the
@@ -64,7 +62,11 @@ function injectDashboardLive(response) {
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, rawEnv, ctx) {
+    // Every D1 statement in this invocation runs under a deadline (see boundedD1), so a
+    // statement that never settles fails as an ordinary error instead of wedging the request,
+    // a scheduler tick, and the per-project execution lock.
+    const env = boundedD1(rawEnv);
     const url = new URL(request.url);
     // Light paths never block the response on hydration: they either render static HTML
     // ("/" is a pure template — dashboardHTML has no store access) or read memory-only
@@ -156,37 +158,14 @@ export default {
     }
 
     const response = await app.fetch(request, env, ctx);
-    // Dashboard poll self-heal (see STATE_KICK_COOLDOWN above).
-    if (request.method === 'GET' && url.pathname === '/api/state' && response.ok && ctx?.waitUntil && store.hydrated && env?.DB) {
-      const unfinished = store.list('tasks').some(t => ['queued','assigned','working','verifying'].includes(t.state));
-      if (unfinished && Date.now() - _stateKickAt >= STATE_KICK_COOLDOWN) {
-        _stateKickAt = Date.now();
-        ctx.waitUntil(schedulerTick(env, { trigger: 'dashboard-poll', budgetMs: 15_000 }).catch(error => {
-          store.addEvent('state.scheduler_error', { error: error?.message || 'Scheduler error from poll', at: now() });
-        }));
-      }
-    }
-    // Opening a project detail is also a safe targeted wake-up for that project. This
-    // prevents an active project from waiting for a global cron tick when a queued gate
-    // was left behind by an isolate/lease/trigger interruption. The cooldown avoids turning
-    // dashboard refreshes into repeated scheduler executions.
-    if (request.method === 'GET' && url.pathname.startsWith('/api/projects/') && url.pathname.endsWith('/detail') && response.ok && ctx?.waitUntil) {
-      const pid = url.pathname.split('/')[3];
-      const lastKick = Number(_projectKickAt.get(pid) || 0);
-      if (pid && Date.now() - lastKick >= PROJECT_KICK_COOLDOWN) {
-        _projectKickAt.set(pid, Date.now());
-        ctx.waitUntil(schedulerTick(env, { trigger: 'project-detail', projectId: pid, budgetMs: 20_000 }).catch(error => {
-          store.addEvent('project.detail_scheduler_error', { projectId: pid, error: error?.message || 'Scheduler error', at: now() });
-        }));
-      }
-    }
     // The existing dashboard remains authoritative for data/rendering; this only adds a
     // small live lifecycle layer so Founder Command never looks idle after a successful queue.
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/dashboard')) {
       return injectDashboardLive(response);
     }
     return response;
-  },  async scheduled(event, env, ctx) {
+  },  async scheduled(event, rawEnv, ctx) {
+    const env = boundedD1(rawEnv);
     // Skip hydration if store is already hydrated — avoids D1 reads every 5 min
     if (!store.hydrated) await hydrate(env);
     const run = async () => {

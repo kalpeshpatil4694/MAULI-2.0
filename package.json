@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node --test"
+    "check": "node scripts/check-syntax.mjs",
+    "test": "node --test",
+    "test:routes": "node scripts/dryrun-durable-routes.mjs",
+    "test:security": "node --test tests/founder-auth.test.js tests/tool-security.test.js test/security-governance.test.js tests/d1-write-budget.test.js tests/d1-monotonic-writes.test.js",
+    "self-test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

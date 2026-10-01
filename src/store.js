@@ -1,5 +1,36 @@
 import { id, now } from './core.js';
-import { hasD1, d1List, d1Put, d1Event, d1Events } from './db.js';
+import { hasD1, d1List, d1Put, d1Get, d1Event, d1Events } from './db.js';
+
+// The fields one write actually changes relative to the copy its writer read. A rejected
+// compare-and-set means another isolate moved the row on, so the same transition is
+// re-applied on top of THEIR row instead of being dropped.
+function changedFields(previous, item) {
+  const changed = {};
+  for (const [key, value] of Object.entries(item)) {
+    if (key === 'id' || key === 'createdAt' || key === 'updatedAt') continue;
+    if (!previous || JSON.stringify(previous[key]) !== JSON.stringify(value)) changed[key] = value;
+  }
+  return changed;
+}
+
+// d1Put rejects a write whose expectedUpdatedAt is not the row's current version. That guard
+// is right, but the rejection used to be silent: a task that completed lost its completion,
+// stayed 'assigned' in D1, was re-claimed on the next tick, and the project never converged —
+// every write lost to a concurrent isolate (a dashboard kick racing cron, say) was dropped
+// forever. Re-read the row and re-apply only this write's own changes, at most twice.
+const MAX_CAS_RETRIES = 2;
+async function persistEntity(store, type, item, previous, critical, attempt = 0, expectedUpdatedAt = null) {
+  const result = await d1Put(store.env, type, item, { critical, expectedUpdatedAt });
+  if (!result?._d1WriteStale || attempt >= MAX_CAS_RETRIES) return result;
+  const current = await d1Get(store.env, type, item.id);
+  const merged = {
+    ...(current ?? {}),
+    ...changedFields(previous, item),
+    id: item.id,
+    createdAt: current?.createdAt ?? item.createdAt
+  };
+  return persistEntity(store, type, merged, current ?? previous, critical, attempt + 1, current?.updatedAt ?? null);
+}
 
 // 'builds' belongs here: /api/build-app writes the record from one isolate and
 // /api/build-status reads it from whichever isolate answers the dashboard poll.
@@ -44,7 +75,7 @@ function comparable(value) {
 }
 
 export class MemoryStore {
-  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this.hydrateErrors=[]; this.hydrateFailures=[]; this._hydrating=null; }
+  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this.hydrateErrors=[]; this.hydrateFailures=[]; this._hydrating=null; this.versions=new Map(); }
   // Single-flight hydration: concurrent callers (worker light paths and the HTTP init
   // path) share one in-flight promise instead of each re-reading every D1 table.
   hydrateOnce() {
@@ -67,16 +98,27 @@ export class MemoryStore {
       let write;
       // Pass the version this row was read at so D1 can reject a write built on a copy
       // another isolate has since replaced (see d1Put's compare-and-set).
-      write=d1Put(this.env,type,item,{critical,expectedUpdatedAt:previous?.updatedAt??null}).then(result=>{
+      write=persistEntity(this,type,item,previous,critical,0,this.versions.get(`${type}/${item.id}`)??null).then(result=>{
         // d1Put persists the version it actually wrote, which can differ by a millisecond
         // from the one stamped above. The in-memory copy must adopt it: if it kept its own
         // timestamp, the next write's compare-and-set would compare against a version D1
-        // never had, be rejected as stale, and this isolate would silently stop persisting
-        // that row for the rest of its life.
+        // never had and be rejected as stale.
+        // Only while this exact write is still the newest one, though. Stamping an OLDER
+        // write's version onto a row that has already moved on rewinds the in-memory version
+        // to a value D1 never had, so every later write for that row was rejected — which is
+        // how a completed task kept reappearing as 'assigned'.
         const persisted=result?.updatedAt;
         const current=bucket.get(item.id);
-        if(persisted&&current&&current.updatedAt!==persisted){
+        // The compare-and-set version must be one D1 actually holds, so it is tracked
+        // separately from the row: a row created in this isolate has no confirmed version
+        // until its first write lands, and comparing against an unconfirmed in-memory
+        // timestamp rejected every write that followed it.
+        if(persisted&&!result?._d1WriteDeferred)this.versions.set(`${type}/${item.id}`,persisted);
+        if(persisted&&current&&current.updatedAt===item.updatedAt&&current.updatedAt!==persisted){
           bucket.set(item.id,{...current,updatedAt:persisted});
+        }
+        if(critical&&result?._d1WriteStale){
+          this.persistenceErrors.push(new Error(`D1 compare-and-set kept rejecting this write for ${type}/${item.id}`));
         }
         if(critical&&result?._d1WriteDeferred){
           const reason=result._d1WriteError|| (result._d1WriteLimit?'write blocked':'unknown error');
@@ -155,6 +197,9 @@ export class MemoryStore {
       const existing=this.data.get(type)??new Map();
       for(const item of rows)if(item?.id)existing.set(item.id,item);
       if(existing.size)this.data.set(type,existing);
+      // Rows that came back from D1 carry the version the database holds, so the first
+      // write from this isolate is still protected by the compare-and-set.
+      for(const item of rows)if(item?.id&&item.updatedAt)this.versions.set(`${type}/${item.id}`,item.updatedAt);
       if(type==='tasks')taskRows.push(...rows);
     }
     try{this.events=await d1Events(this.env);}

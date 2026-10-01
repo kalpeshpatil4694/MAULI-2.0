@@ -18,7 +18,7 @@ jobs:
   l1-test:
     name: L1 validation
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -27,21 +27,39 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      # Deterministic installs from the committed lockfile. A floating `npm install`
+      # re-resolved wrangler on every run, so a deploy could ship a version the tests
+      # never saw. `npm ci` also fails loudly if package.json and the lockfile diverge.
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
 
-      - name: JavaScript syntax check
-        run: node --check src/index.js && node --check src/orchestrator.js
+      - name: Syntax / lint
+        run: npm run check
 
-      - name: Run complete test suite
+      - name: Unit tests
         run: npm test
 
-      - name: Run deep self-test
-        run: node --test tests/*.test.js
+      - name: Integration tests
+        run: npm run test:routes
 
-      - name: Validate Wrangler configuration and Worker bundle
+      - name: Security + governance tests
+        run: npm run test:security
+
+      - name: Deep self-test
+        run: npm run self-test
+
+      - name: Wrangler configuration validation
         run: npx wrangler deploy --dry-run
+
+      # A dry-run bundle proves the Worker compiles and the entry module exists. The
+      # output directory is discarded; the deploy job rebuilds from the same revision.
+      - name: Build verification
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --outdir .build-check
+          test -s .build-check/worker.js
 
   deploy:
     name: Deploy tested revision
@@ -58,9 +76,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
 
       - name: Deploy Worker
         env:
@@ -80,4 +99,5 @@ jobs:
           echo "::error::Cloudflare deployment failed after 3 attempts."
           exit 1
 
-# R2 is intentionally optional; deployment must not require an R2 bucket.
+# Persistence stack is Workers + D1 + Durable Objects + Workers AI only. There is no
+# object-storage binding of any kind, so deployment and CI must never require one.

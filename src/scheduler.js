@@ -2,7 +2,7 @@
 // Scheduler owns claim/recovery/retry/dependency-release decisions.
 // It never fabricates completion and is safe to invoke repeatedly.
 
-import { now } from './core.js';
+import { now, withDeadline } from './core.js';
 import { store } from './store.js';
 import { selectAgents, updateAgent } from './agents.js';
 import { executeTask } from './execution.js';
@@ -14,6 +14,17 @@ import { ensureProjectPipeline } from './pipeline-gates.js';
 import { withProjectExecutionLock } from './execution-coordination.js';
 
 const LEASE_MS=90_000,DEFAULT_MAX_ATTEMPTS=3;
+// The per-project execution lock is renewed while the body runs, so a body that never
+// returns held the project for the whole lease — every later tick answered
+// 'coordinator-busy' and the project sat in 'active' with nothing running. The body is
+// therefore bounded as well as the individual task, and the bound is deliberately shorter
+// than the 120s lease so the lock is released before it can expire on its own.
+const DEFAULT_PROJECT_BUDGET_MS=75_000;
+function projectBudgetMs(env={},context={}){
+  const candidates=[context.projectBudgetMs,env?.MAULI_PROJECT_BUDGET_MS,DEFAULT_PROJECT_BUDGET_MS];
+  for(const candidate of candidates){const n=Number(candidate);if(Number.isFinite(n)&&n>0)return n;}
+  return DEFAULT_PROJECT_BUDGET_MS;
+}
 const RUNNABLE=new Set(['queued','assigned']);
 const TERMINAL=new Set(['completed','cancelled']);
 const STUCK_STATES=new Set(['working','assigned','verifying']);
@@ -166,7 +177,7 @@ export async function schedulerTick(env={},context={}){
     if(overBudget())break;
     const project=store.get('projects',projectId);
     if(project?.state==='awaiting_approval'||['completed','cancelled','failed'].includes(project?.state))continue;
-    const result=await withProjectExecutionLock(env,projectId,async()=>{
+    const result=await withProjectExecutionLock(env,projectId,async()=>withDeadline((async()=>{const t0=Date.now();
       const projectTasks=byProject.get(projectId)??[];
       const ensured=ensureProjectPipeline(projectId,projectTasks);
       if(ensured?.created?.length){for(const createdTask of ensured.created){if(!projectTasks.some(t=>t.id===createdTask.id))projectTasks.push(createdTask);}byProject.set(projectId,projectTasks);}
@@ -182,8 +193,11 @@ export async function schedulerTick(env={},context={}){
       const final=await finalizeCommand(projectId,env,projectTasks).catch(()=>null);
       if(final)results.push({status:final.status,runId:final.runId,projectId});
       return{status:'processed',projectId,ran};
-    },{leaseMs:120000});
-    if(result?.status==='coordinator-busy')results.push(result);
+    })(),projectBudgetMs(env,context),`project ${projectId} execution`).catch(error=>{
+      store.addEvent('scheduler.project_budget_exceeded',{projectId,error:error?.message??String(error),at:now()});
+      return{status:'budget-exceeded',projectId,error:error?.message??String(error)};
+    }),{leaseMs:120000});
+    if(result?.status==='coordinator-busy'||result?.status==='budget-exceeded')results.push(result);
   }
   return{recovered,results,at:now()};
 }

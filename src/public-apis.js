@@ -50,7 +50,6 @@ const API_CATALOG = {
     { name: 'PlanetScale', url: 'https://api.planetscale.com/v1', auth: 'API Key', free: true, category: 'Database' }
   ],
   storage: [
-    { name: 'Cloudflare R2', url: 'https://api.cloudflare.com/client/v4', auth: 'API Token', free: true, category: 'Storage' },
     { name: 'Backblaze B2', url: 'https://api.backblazeb2.com/b2api/v2', auth: 'API Key', free: true, category: 'Storage' }
   ],
   email: [

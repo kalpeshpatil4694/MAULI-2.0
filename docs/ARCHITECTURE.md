@@ -62,6 +62,30 @@ Founder command
   → memory/audit update
 ```
 
-## 5. Upgradeability
+## 5. Persistence and Delivery
+
+The entire system persists to **D1** (entities + events + command results) and coordinates
+execution through **Durable Objects**. There is no object storage: generated artifacts live
+as bounded D1 rows and are streamed to the founder as a zip by
+`GET /api/artifacts/:id/download`. Nothing in the runtime, the wrangler config, CI, or the
+deploy path depends on an R2 bucket.
+
+Delivery is gated. A project cannot be marked complete until every task is completed and the
+mandatory pipeline gates pass (`src/pipeline-gates.js`), in order:
+
+```text
+build → test → requirements → security → qa → integrity
+```
+
+Each command run upserts exactly one `command_results` row keyed by its `runId`, so a retry
+rewrites its own result and can never overwrite another run's result.
+
+### Read-only polling
+
+Dashboard polling (`GET /api/state`, `GET /api/projects/:id/detail`) performs reads only. It
+never writes to D1 and never starts execution. Execution begins from the cron trigger
+(`*/5 * * * *`) or from explicit POSTs: `/api/command`, `/api/approvals/:id`, `/api/chat`.
+
+## 6. Upgradeability
 
 New agents, departments, tools, workflows, model providers, execution runtimes, and UI clients should be addable through interfaces/contracts rather than invasive changes to the core.

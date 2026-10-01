@@ -12,11 +12,22 @@ failure names the stage that broke instead of "something did not work":
 Nothing here is a template path: the artifact metadata records which generator
 produced it, and that is asserted explicitly.
 """
-import json, subprocess, sys, time
+import json, os, subprocess, sys, time
 
-BASE = "https://mauli-2-0.kalpeshpatil4694.workers.dev"
-KEY = "Mauli123"
+# MAULI_BASE lets the same verifier run against a local `wrangler dev` worker backed by a
+# local D1, which is the only way to exercise the durable path while Cloudflare's account
+# write meter is exhausted.
+BASE = os.environ.get("MAULI_BASE", "https://mauli-2-0.kalpeshpatil4694.workers.dev").rstrip("/")
+KEY = os.environ.get("MAULI_KEY", "Mauli123")
 OBJECTIVE = sys.argv[1] if len(sys.argv) > 1 else "Build a simple calculator web app"
+
+# Local mode: `wrangler dev` does not run cron triggers on its own, so the verifier fires the
+# scheduled handler itself (that is the same entry point production's 5-minute cron uses)
+# and polls on a short interval instead of waiting for the next natural tick.
+CRON = os.environ.get("MAULI_CRON") == "1"
+SCHEDULED = "/cdn-cgi/local/scheduled"
+POLL_SECONDS = float(os.environ.get("MAULI_POLL", "3" if CRON else "25"))
+DEADLINE_SECONDS = float(os.environ.get("MAULI_DEADLINE", "1500"))
 
 
 def call(method, path, body=None, raw=False, timeout=180):
@@ -53,8 +64,10 @@ def verdict(ok, label, detail=""):
 print(f"objective: {OBJECTIVE}\n")
 
 # ---- stage 0: is the write path open at all? --------------------------------
+# POST /api/command answers 202 Accepted when the chain is queued asynchronously, so any 2xx
+# counts here — insisting on 200 reported a healthy queue as an "unexpected failure".
 status, resp = call("POST", "/api/command", {"command": OBJECTIVE})
-if status != 200 or (resp.get("data") or resp).get("result", {}).get("status") == "error":
+if not (200 <= status < 300) or (resp.get("data") or resp).get("result", {}).get("status") == "error":
     if blocked(resp):
         print(f"WRITES STILL REFUSED at {time.strftime('%H:%M:%S UTC', time.gmtime())}")
         print(json.dumps(resp)[:400])
@@ -83,10 +96,12 @@ if approval.get("id"):
                            f"project now {(body.get('project') or {}).get('state')}"))
 
 # ---- stage 2: wait for the chain to finish ---------------------------------
-deadline = time.time() + 1500
+deadline = time.time() + DEADLINE_SECONDS
 detail = {}
 while time.time() < deadline:
-    time.sleep(25)
+    if CRON:
+        call("GET", SCHEDULED, timeout=30)
+    time.sleep(POLL_SECONDS)
     st, d = call("GET", f"/api/projects/{project_id}/detail")
     detail = (d.get("data") or {}).get("detail") or {}
     tasks = detail.get("tasks") or []

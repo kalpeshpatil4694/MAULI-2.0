@@ -1,4 +1,5 @@
 import './functional-code-executor.js';
+import { withDeadline } from './core.js';
 
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 // Neuron cost is why apps arrived "built but not right". The chat model above bills
@@ -11,6 +12,11 @@ const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const DEFAULT_CODE_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
 const AI_DAILY_REQUEST_LIMIT = 100;
 const AI_SAFE_REQUEST_LIMIT = 90;
+// A model call that never settles used to hang its caller forever: the executor's await never
+// returned, the run heartbeat kept the run "live", and the project stalled with no timeout
+// and no error. Every AI call now has a deadline, after which it is an ordinary AI failure
+// and the deterministic fallback takes over.
+const DEFAULT_AI_TIMEOUT_MS = 60_000;
 
 function dayKey(date = new Date()) { return date.toISOString().slice(0, 10); }
 function aiState(env) {
@@ -43,20 +49,21 @@ function reserveAIRequest(env) {
 function resolveModel(env, options = {}) { return options.model ?? env?.MAULI_MODEL ?? DEFAULT_MODEL; }
 function resolveCodeModel(env, options = {}) { return options.model ?? env?.MAULI_CODE_MODEL ?? DEFAULT_CODE_MODEL; }
 function getProvider(env, options = {}) { return options.provider ?? env?.MAULI_AI_PROVIDER ?? 'cloudflare'; }
+function aiTimeoutMs(env, options = {}) { return Number(options.timeoutMs ?? env?.MAULI_AI_TIMEOUT_MS ?? DEFAULT_AI_TIMEOUT_MS); }
 async function cloudflareGenerate(env, messages, options = {}) {
   if (!env?.AI?.run) throw new Error('Cloudflare AI binding is not configured');
   const model = resolveModel(env, options);
   const fallbackModel = options.fallbackModel && options.fallbackModel !== model ? options.fallbackModel : null;
   const run = async (modelId) => {
     if (!reserveAIRequest(env)) throw new Error('MAULI AI daily safety limit reached; deterministic fallback should be used');
-    const response = await env.AI.run(modelId, {
+    const response = await withDeadline(env.AI.run(modelId, {
       messages,
       temperature: options.temperature ?? 0.2,
       // The executor requests enough tokens for a complete multi-file artifact; clamping
       // that to 1200 guaranteed truncated/invalid JSON, so every AI call was wasted and
       // the pipeline silently fell back to templates. Honour the request up to 3000.
       max_tokens: Math.min(3000, Math.max(900, Number(options.maxTokens ?? 900)))
-    });
+    }), aiTimeoutMs(env, options), `Workers AI (${modelId})`);
     return response?.response ?? response;
   };
   try {
