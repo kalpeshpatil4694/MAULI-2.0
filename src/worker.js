@@ -8,6 +8,7 @@ import { ensureSchema, pruneEvents, pruneOldResults, boundedD1 } from './db.js';
 import { dedupeAgents, runMaintenance } from './maintenance.js';
 import { store } from './store.js';
 import { ensureBuiltinTools } from './tools.js';
+import { PLATFORMS, normalizePlatform, resolvePlatform } from './platforms.js';
 import { seedAgents } from './agents.js';
 import { schedulerTick } from './scheduler.js';
 import { queueCommand } from './orchestrator.js';
@@ -90,12 +91,20 @@ export default {
       if (!auth.ok) return fail(auth.error, auth.status);
       const body = await json(request);
       if (!body.command) return fail('Founder command is required', 400);
+      // This handler, not the one in index.js, is what a founder's command actually hits.
+      // An unbuildable target is reported rather than quietly swapped for another one: a
+      // founder who asked for Android must never be handed a web build that reports success.
+      if (body.platform !== undefined && body.platform !== null && body.platform !== '' && !normalizePlatform(body.platform)) {
+        return fail(`Unsupported platform: ${body.platform}. Supported: ${PLATFORMS.map(p => p.id).join(', ')}`, 400);
+      }
+      const target = resolvePlatform(body.platform, body.command);
 
       try {
-        const queued = await queueCommand(body.command, env);
+        const queued = await queueCommand(body.command, env, { platform: target.platform });
         const payload = {
           runId: queued.runId,
           command: body.command,
+          platform: target.platform,
           generatedAt: now(),
           result: queued
         };
