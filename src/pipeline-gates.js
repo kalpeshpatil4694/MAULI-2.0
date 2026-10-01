@@ -52,7 +52,42 @@ export function ensureProjectPipeline(projectId, tasksArg){
   const tasks = Array.isArray(tasksArg) ? tasksArg : store.list('tasks').filter(t => t.projectId === projectId);
   const finalQa = tasks.find(t => t.finalProjectVerification);
   if(!finalQa) return null;
-  const existing = new Map(gateTasksOf(tasks).map(t => [t.gateType, t]));
+  // Historical duplicates must be collapsed, not just avoided. Before gates were created
+  // once, concurrent ticks left several rows with the same gateType; each chain pointed at
+  // the next chain's rows, so the leftovers could never settle and the project stayed
+  // "active" forever. One canonical row per gate survives: a completed one wins (its work
+  // is done), otherwise the newest. The rest are cancelled and every dependent is rewired
+  // to the survivor, so the chain has exactly one path to the delivery gate.
+  const byGateType = new Map();
+  for(const gate of gateTasksOf(tasks)){
+    if(!gate.gateType) continue;
+    const list = byGateType.get(gate.gateType) ?? [];
+    list.push(gate);
+    byGateType.set(gate.gateType, list);
+  }
+  const collapsed = [];
+  for(const [type, list] of byGateType){
+    if(list.length < 2) continue;
+    const rank = t => (t.state === 'completed' ? 0 : t.state === 'cancelled' ? 1 : 2);
+    const ordered = list.slice().sort((a, b) => rank(a) - rank(b)
+      || String(b.createdAt ?? b.updatedAt ?? '').localeCompare(String(a.createdAt ?? a.updatedAt ?? '')));
+    const [keep, ...rest] = ordered;
+    byGateType.set(type, [keep]);
+    for(const duplicate of rest){
+      for(const task of tasks){
+        const deps = task.dependsOn ?? [];
+        if(!deps.includes(duplicate.id)) continue;
+        const rewired = [...new Set(deps.map(dep => (dep === duplicate.id ? keep.id : dep)))];
+        syncTask(tasks, store.put('tasks',{...task,dependsOn:rewired,id:task.id}));
+      }
+      syncTask(tasks, store.put('tasks',{
+        ...duplicate, state:'cancelled', collapsedDuplicate:true,
+        blockedReason:`Duplicate ${type} gate collapsed into ${keep.id}`, id:duplicate.id
+      }));
+      collapsed.push(duplicate.id);
+    }
+  }
+  const existing = new Map([...byGateType].map(([type, list]) => [type, list[0]]));
   // Two scheduler ticks can run concurrently — the cron tick and an explicit trigger such
   // as a founder command or an approval — each holding a task list read at a slightly
   // different moment. Before creating a gate, re-read the project's gate rows so a
@@ -86,7 +121,8 @@ export function ensureProjectPipeline(projectId, tasksArg){
       if(existingGate.sequence !== gateSequence) existing.set(type, syncTask(tasks, store.put('tasks',{...existingGate,sequence:gateSequence,id:existingGate.id})));
       previousIds=[existing.get(type).id]; continue;
     }
-    const raced=beforeCreate().find(t => t.gateType === type);
+    const racedLive=beforeCreate().filter(t => t.gateType === type && t.state !== 'cancelled');
+    const raced=racedLive.find(t => t.state === 'completed') ?? racedLive[0];
     if(raced){ existing.set(type, syncTask(tasks, raced)); previousIds=[raced.id]; continue; }
     const agent=gateAgent(type);
     const task=addTaskToProject(projectId, {
@@ -107,7 +143,7 @@ export function ensureProjectPipeline(projectId, tasksArg){
   const qa=existing.get('qa'), integrity=existing.get('integrity');
   if(integrity && qa && !integrity.dependsOn?.includes(qa.id))
     syncTask(tasks, store.put('tasks',{...integrity,dependsOn:[qa.id],id:integrity.id}));
-  return {created,gates:gateTasksOf(tasks).map(t=>({id:t.id,type:t.gateType,state:t.state,dependsOn:t.dependsOn??[]}))};
+  return {created,collapsed,gates:gateTasksOf(tasks).map(t=>({id:t.id,type:t.gateType,state:t.state,dependsOn:t.dependsOn??[]}))};
 }
 
 function prior(projectId,type){ return store.list('tasks').find(t => t.projectId === projectId && t.pipelineGate && t.gateType === type); }

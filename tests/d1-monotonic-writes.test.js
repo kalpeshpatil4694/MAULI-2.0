@@ -122,3 +122,47 @@ test('store.put forwards the version it read so the write can be rejected', asyn
     'D1 must keep the newer state even when a stale copy is written through the store');
   store.configure(null);
 });
+
+// Dropping a stale write is right for ordinary rows, but a terminal state has no second
+// chance: production showed a project the founder was told had completed while D1 still
+// said 'active', because the completing isolate's write lost the compare-and-set and nothing
+// retried it. putDurable flushes, reads the row back, and re-applies once against the
+// version D1 actually holds.
+test('putDurable re-applies a terminal state that lost the compare-and-set', async () => {
+  const db = fakeD1();
+  store.configure({ DB: db });
+  store.data = new Map();
+  store.events = [];
+
+  const project = store.put('projects', { id: 'p-durable', state: 'active' });
+  await Promise.all([...store.pendingWrites]);
+
+  // Another isolate touches the same row while this one is finalizing the project.
+  await d1Put({ DB: db }, 'projects', { ...project, state: 'active', touchedBy: 'other-isolate' },
+    { expectedUpdatedAt: project.updatedAt });
+
+  await store.putDurable('projects', { ...project, state: 'completed', finalDeliveryId: 'artifact_1' });
+
+  const stored = JSON.parse(db.rows.get('projects::p-durable').data);
+  assert.equal(stored.state, 'completed',
+    'the terminal state must survive an intervening write from another isolate');
+  assert.equal(stored.finalDeliveryId, 'artifact_1');
+  assert.equal(store.get('projects', 'p-durable').state, 'completed');
+  store.configure(null);
+});
+
+test('putDurable is a no-op when the row already holds what it wrote', async () => {
+  const db = fakeD1();
+  store.configure({ DB: db });
+  store.data = new Map();
+  store.events = [];
+
+  await store.putDurable('projects', { id: 'p-stable', state: 'completed' });
+  const writesAfterFirst = db.calls.length;
+  await store.putDurable('projects', { id: 'p-stable', state: 'completed' });
+
+  // store.put short-circuits an unchanged row, so a settled project costs nothing.
+  assert.ok(db.calls.length <= writesAfterFirst + 1, `unexpected extra writes: ${db.calls.length - writesAfterFirst}`);
+  assert.equal(JSON.parse(db.rows.get('projects::p-stable').data).state, 'completed');
+  store.configure(null);
+});

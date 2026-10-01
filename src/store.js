@@ -136,6 +136,26 @@ export class MemoryStore {
   // durable ones: an invocation that dies mid-transition leaves the previous durable state,
   // and orphan recovery already handles that state identically, so the extra row write per
   // task buys nothing but cost.
+  // A write that must survive the request that made it. The compare-and-set in d1Put
+  // deliberately DROPS a write whose row moved on (that is what stops a stale isolate from
+  // resurrecting an old task state) — but for an irreversible state like a project reaching
+  // 'completed', being dropped means the founder is told the run finished while D1 still
+  // says 'active', and nothing ever retries it. putDurable therefore flushes, reads the
+  // row back, and re-applies once against the version D1 actually holds.
+  async putDurable(type, value) {
+    const written = this.put(type, value);
+    if (!hasD1(this.env)) return written;
+    await this.flush().catch(() => null);
+    const confirmed = await d1Get(this.env, type, written.id);
+    if (!confirmed) return written;
+    if (comparable(confirmed) === comparable(written)) return confirmed;
+    // Someone else moved the row while this write was in flight. Re-apply against the
+    // version D1 holds so the terminal state is the one that survives.
+    this.versions.set(`${type}/${written.id}`, confirmed.updatedAt);
+    const reapplied = this.put(type, { ...written, updatedAt: confirmed.updatedAt });
+    await this.flush().catch(() => null);
+    return reapplied;
+  }
   putTransient(type, value) {
     const bucket=this.data.get(type)??new Map();
     const previous=value?.id ? bucket.get(value.id) : null;
