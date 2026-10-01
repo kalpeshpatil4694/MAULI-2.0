@@ -315,6 +315,59 @@ function habitTrackerFiles(objective) {
           { path: 'www/habits.seed.json', content: '[]' }];
 }
 
+// ── Medicine timetable (doses, slots, daily adherence) ────────────────────────────
+// Added because the founder asked what happens to a brand-new domain: routing found no
+// template, the generic fallback shipped, and delivery REFUSED it (templateMatched:false).
+// That refusal is the honest answer, but the useful answer is to build the template — the
+// founder types the command, never the template.
+function medicineTrackerFiles(objective) {
+  var title = String(objective || 'Medicine Timetable').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="mauli-med-summary" class="cnt"></p></header>';
+  body += '<div class="ir"><input id="mauli-med-name" class="inp wide" placeholder="Medicine name (e.g. Metformin)" onkeydown="if(event.key===&#39;Enter&#39;)addMedicine()">';
+  body += '<input id="mauli-med-dose" class="inp" placeholder="Dose (500mg)" onkeydown="if(event.key===&#39;Enter&#39;)addMedicine()">';
+  body += '<select id="mauli-med-slot" class="inp"><option value="morning">Morning</option><option value="afternoon">Afternoon</option><option value="evening">Evening</option><option value="night">Night</option></select>';
+  body += '<button class="btn" onclick="addMedicine()">Add</button></div>';
+  body += '<p class="hint">Tick a dose when it is actually taken. Today\'s adherence and a 7-day history are kept in this browser.</p>';
+  body += '<div id="mauli-med-list" class="li"></div>';
+  body += '<div class="bar"><button class="btn bo" onclick="clearMedicines()">Clear all</button></div></div>';
+  var css = '.app{max-width:620px;margin:0 auto;padding:16px}.hd{text-align:center;padding:10px 0}.hd h1{font-size:22px;color:var(--accent)}'
+    + '.cnt{font-size:12px;color:var(--text-muted);margin-top:6px}.ir{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}'
+    + '.inp{flex:1;min-width:120px;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px}'
+    + '.wide{flex:2 1 200px}.btn{padding:11px 16px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}'
+    + '.bo{background:transparent;border:1px solid var(--border);color:var(--text)}.bar{display:flex;justify-content:center;margin-top:14px}'
+    + '.hint{font-size:11px;color:var(--text-muted);margin:0 0 10px}.li{display:flex;flex-direction:column;gap:8px}'
+    + '.med{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}'
+    + '.med-top{display:flex;align-items:center;gap:10px}.nm{font-weight:600;font-size:14px;flex:1}'
+    + '.slot{font-size:11px;color:var(--accent);border:1px solid var(--border);border-radius:999px;padding:2px 8px}'
+    + '.dose{font-size:12px;color:var(--text-muted)}.dl{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px}'
+    + '.take{margin-top:10px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);cursor:pointer}'
+    + '.hist{margin-top:8px;display:flex;gap:4px}.h{width:22px;height:22px;border-radius:6px;border:1px solid var(--border);font-size:9px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}'
+    + '.h.on{background:var(--green);border-color:var(--green);color:#04150e}.h.miss{border-color:var(--yellow);color:var(--yellow)}';
+  var js = [
+    `var MED_KEY='mauli-medicines',MEDS=[],MED_SEQ=0;`,
+    `try{MEDS=JSON.parse(localStorage.getItem(MED_KEY)||'[]')}catch(e){MEDS=[]}`,
+    // Ids must be unique even when two medicines are entered inside the same millisecond.
+    // Date.now() alone collided there, and every handler is wired by id: deleting one row
+    // silently deleted the other as well.
+    `function nextMedId(){MED_SEQ++;return Date.now()+'-'+MED_SEQ}`,
+    `function saveMeds(){try{localStorage.setItem(MED_KEY,JSON.stringify(MEDS))}catch(e){}}`,
+    `function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}`,
+    `function dayKey(d){var x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)}`,
+    `function lastDays(n){var out=[];for(var i=n-1;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i);out.push(dayKey(d))}return out}`,
+    `function findMed(id){for(var i=0;i<MEDS.length;i++){if(String(MEDS[i].id)===String(id))return MEDS[i]}return null}`,
+    `function addMedicine(){var n=document.getElementById('mauli-med-name'),d=document.getElementById('mauli-med-dose'),s=document.getElementById('mauli-med-slot');var name=n.value.trim();if(!name)return;MEDS.push({id:nextMedId(),name:name,dose:d.value.trim(),slot:s.value,days:{}});n.value='';d.value='';saveMeds();renderMeds()}`,
+    `function toggleDose(id){var m=findMed(id);if(!m)return;var k=dayKey(new Date());if(!m.days)m.days={};if(m.days[k])delete m.days[k];else m.days[k]=1;saveMeds();renderMeds()}`,
+    `function deleteMed(id){MEDS=MEDS.filter(function(m){return String(m.id)!==String(id)});saveMeds();renderMeds()}`,
+    `function clearMedicines(){MEDS=[];saveMeds();renderMeds()}`,
+    `function historyCells(m,days){var out='';for(var i=0;i<days.length;i++){var k=days[i];var cls=i===days.length-1?'':(m.days&&m.days[k]?' on':' miss');out+='<div class="h'+cls+'" title="'+k+'">'+(m.days&&m.days[k]?'&#10003;':k.slice(8))+'</div>'}return out}`,
+    `function adherence(){if(!MEDS.length)return 0;var days=lastDays(7),total=0,done=0;for(var i=0;i<MEDS.length;i++){for(var j=0;j<days.length;j++){total++;if(MEDS[i].days&&MEDS[i].days[days[j]])done++}}return total?Math.round(done*100/total):0}`,
+    `function renderMeds(){var list=document.getElementById('mauli-med-list'),days=lastDays(7),k=dayKey(new Date()),html='';for(var i=0;i<MEDS.length;i++){var m=MEDS[i],taken=Boolean(m.days&&m.days[k]);html+='<div class=med><div class=med-top><span class=nm>'+esc(m.name)+'</span><span class=slot>'+esc(m.slot)+'</span><button class=dl onclick="deleteMed('+m.id+')">&times;</button></div>';if(m.dose)html+='<div class=dose>'+esc(m.dose)+'</div>';html+='<label class=take><input type=checkbox data-taken='+(taken?'1':'0')+(taken?' checked':'')+' onchange="toggleDose('+m.id+')"> Taken today (last 7 days below)</label><div class=hist>'+historyCells(m,days)+'</div></div>'}list.innerHTML=html;document.getElementById('mauli-med-summary').innerHTML=MEDS.length?(MEDS.length+' medicine(s) &middot; '+adherence()+'% adherence over 7 days'):'No medicines yet - add the first one'}`,
+    `renderMeds()`
+  ].join('\n');
+  return [{ path: 'www/index.html', content: h(title, body, css, js) },
+          { path: 'www/medicines.seed.json', content: '[]' }];
+}
+
 // ── Reading log (book list, progress, notes) ──────────────────────────────────────
 function bookLoggerFiles(objective) {
   var title = String(objective || 'Reading Log').slice(0, 60);
@@ -478,6 +531,7 @@ var TEMPLATE_DOMAINS = {
   ecommerce: ['ecommerce', 'commerce', 'shop', 'store', 'cart', 'product', 'products', 'checkout', 'marketplace'],
   'habit-tracker': ['habit', 'habits', 'streak', 'streaks', 'checkin', 'routine', 'discipline'],
   'wifi-security': ['wifi', 'wi-fi', 'wireless', 'network', 'network security', 'router', 'ssid', 'wpa2', 'wpa3', 'wep', 'wps', 'access point', 'audit', 'auditor', 'lan'],
+  'medicine-tracker': ['medicine', 'medicines', 'medication', 'medications', 'dose', 'doses', 'tablet', 'tablets', 'pill', 'pills', 'pharmacy', 'prescription', 'timetable', 'timing of medicine'],
   'book-logger': ['book', 'books', 'reading', 'novel', 'library', 'bookshelf'],
   calculator: ['calculator', 'calc', 'arithmetic', 'expression'],
   'chat-app': ['chat', 'message', 'messages', 'conversation', 'chatbot', 'inbox'],
@@ -503,7 +557,7 @@ var WEAK_DOMAIN_WORDS = new Set(['app', 'application', 'web', 'tool', 'utility',
   'form', 'forms', 'link', 'links', 'collection', 'call', 'calls', 'read', 'reading', 'cost', 'money',
   'track', 'board', 'column', 'event', 'events', 'personal', 'site', 'mobile', 'desktop', 'online']);
 
-var ROUTING_PRIORITY = ['wifi-security', 'habit-tracker', 'book-logger', 'notes-app', 'ecommerce', 'video-recorder', 'weather-app', 'calculator', 'todo-app',
+var ROUTING_PRIORITY = ['wifi-security', 'medicine-tracker', 'habit-tracker', 'book-logger', 'notes-app', 'ecommerce', 'video-recorder', 'weather-app', 'calculator', 'todo-app',
   'chat-app', 'music-player', 'invoice-generator', 'fitness-tracker', 'recipe-app', 'survey-builder',
   'timer-app', 'bookmark-manager', 'expense-tracker', 'password-manager', 'kanban-board', 'calendar-app',
   'game-app', 'portfolio', 'web-app'];
@@ -549,6 +603,7 @@ var GENERATORS = {
   'notes-app': function(o) { return { summary: 'Notes app with titles, bodies, tags and search.', files: notesFiles(o), tests: ['Add a note', 'Search notes', 'Delete a note', 'LocalStorage saves'], notes: ['Tags', 'Full-text search', 'LocalStorage persistence'] }; },
   'habit-tracker': function(o) { return { summary: 'Habit tracker with daily check-ins, per-habit streaks and a 7-day history.', files: habitTrackerFiles(o), tests: ['Add a habit', 'Check in for today', 'Streak count updates', 'Clear all habits', 'LocalStorage saves'], notes: ['Daily check-ins', 'Streak counting', 'LocalStorage persistence'] }; },
   'wifi-security': function(o) { return { summary: 'Wireless network security auditor that scores your own Wi-Fi settings and lists hardening steps.', files: wifiAuditFiles(o), tests: ['Run a network audit', 'Score a wireless password', 'Findings render with severity', 'Audit history persists', 'LocalStorage saves'], notes: ['Audits your own network only', 'Scored findings with fixes', 'LocalStorage audit history'] }; },
+  'medicine-tracker': function(o) { return { summary: 'Medicine timetable with dose slots, a daily taken tick and 7-day adherence.', files: medicineTrackerFiles(o), tests: ['Add a medicine with a dose and slot', 'Tick a dose for today', 'Adherence percentage updates', 'Delete and clear', 'LocalStorage saves'], notes: ['Morning/afternoon/evening/night slots', '7-day adherence history', 'LocalStorage persistence'] }; },
   'book-logger': function(o) { return { summary: 'Reading log with a book list, progress tracking and per-book notes.', files: bookLoggerFiles(o), tests: ['Add a book', 'Track reading progress', 'Save notes for a book', 'LocalStorage saves'], notes: ['Progress per book', 'Notes per book', 'LocalStorage persistence'] }; },
   'calculator': function() { return { summary: 'Calculator with keyboard support and expression evaluation.', files: calculatorFiles(), tests: ['Basic operations', 'Keyboard input', 'Clear/backspace'], notes: ['Keyboard support', 'Error handling'] }; },
   'chat-app': function() { return { summary: 'Chat app with multiple rooms, message history, and auto-replies.', files: chatFiles(), tests: ['Send message', 'Switch rooms', 'Auto-reply'], notes: ['Multiple rooms', 'Message timestamps'] }; },
