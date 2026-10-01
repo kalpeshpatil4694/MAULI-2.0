@@ -195,6 +195,40 @@ easy-to-forget action. The target is now captured with the command.
   the command, and labels each project and its build button with the target it was
   commissioned for.
 
+### A refusal must not be a silent substitution
+
+A founder can ask for something MAULI should not build — tooling that attacks a network,
+account or device the founder does not own. The correct answer is a refusal, not a quieter
+version of the same thing. What MAULI does instead is deliver the legitimate half of the
+intent and say plainly what it is.
+
+"Build a Wi-Fi hacking app" therefore produces a **wireless security auditor for your own
+network**: it scores the settings of the network the user administers — encryption
+(WPA3/WPA2/WEP/open), whether the router still has its factory password, whether WPS is
+on, whether the admin panel is exposed to the internet, whether guest traffic is isolated —
+returns a 0–100 score with a grade, and lists the fixes. It also scores a candidate Wi-Fi
+password. It touches nothing but a form, and it cannot reach anyone else's network.
+
+- **Routing has to survive the hyphen.** Normalisation turned the hyphen in `Wi-Fi` into a
+  space, so the request tokenised to `wi fi`, matched neither the `wifi` nor the `wi-fi`
+  domain word, scored **zero** against the wireless template and silently fell through to
+  the generic web-app page. `scoreTemplates()` now scores a second, hyphen-collapsed view
+  of the same command alongside the spaced one. Multi-word domains (`to do`, `access point`)
+  still match the spaced view, so hyphen normalisation is additive rather than a trade.
+- **The audit template is first in `ROUTING_PRIORITY`** and owns `wifi`, `wi-fi`,
+  `wireless`, `network`, `router`, `ssid`, `wpa2/3`, `wep`, `wps`, `access point`, `audit`,
+  `auditor`. `security` is deliberately *not* a domain word: "password security app" must
+  still reach the password manager.
+- **Scores are calibrated against real configurations.** A fully hardened network has to be
+  able to reach 100 and a router still on its shipped defaults has to land in the danger
+  band — an early version of this template topped out at 35, so a perfect network was graded
+  "At risk" by the page meant to reward good settings.
+- **`tests/wifi-audit-template.test.js` locks all of it in**: the phrasing the founder
+  actually types routes to the template, neighbouring domains are not stolen, the audit
+  scores and persists, and the delivered page contains no `aircrack`, `deauth`, evil-twin,
+  handshake-capture or "hack someone else's network" tooling. The verifier runs the
+  generated page too: `functional`, 20 DOM mutations, storage written.
+
 ## 6. Upgradeability
 
 New agents, departments, tools, workflows, model providers, execution runtimes, and UI clients should be addable through interfaces/contracts rather than invasive changes to the core.
