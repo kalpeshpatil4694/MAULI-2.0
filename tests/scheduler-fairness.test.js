@@ -73,7 +73,7 @@ test('consecutive ticks drain every project instead of re-processing the same 40
   assert.equal(drained.length, 45, 'two ticks must cover all 45 projects, not stall on the same 40');
 });
 
-test('a future-dated run heartbeat cannot pin a task as live forever', () => {
+test('a future-dated run heartbeat cannot pin a task as live forever', async () => {
   store.configure(null);
   const task = store.put('tasks', {
     id: 'task-future-run', projectId: 'proj-future', title: 'Stuck verifying',
@@ -86,14 +86,14 @@ test('a future-dated run heartbeat cannot pin a task as live forever', () => {
     heartbeatAt: new Date(Date.now() + 86_400_000).toISOString(),
   });
 
-  const recovered = recoverStaleTasks();
+  const recovered = await recoverStaleTasks();
 
   assert.ok(recovered.includes(task.id), 'a future timestamp must be treated as stale, not live');
   assert.equal(store.get('runs', 'run-future').state, 'failed', 'the impossible run is closed');
   assert.equal(store.get('tasks', task.id).state, 'queued', 'the task returns to the scheduler');
 });
 
-test('a future-dated task update cannot suppress orphan recovery', () => {
+test('a future-dated task update cannot suppress orphan recovery', async () => {
   store.configure(null);
   const task = store.put('tasks', {
     id: 'task-future-updated', projectId: 'proj-future2', title: 'Orphaned verifying',
@@ -101,13 +101,13 @@ test('a future-dated task update cannot suppress orphan recovery', () => {
   });
   ageTaskTo(task.id, new Date(Date.now() + 86_400_000).toISOString());
 
-  recoverStaleTasks();
+  await recoverStaleTasks();
 
   assert.equal(store.get('tasks', task.id).state, 'queued',
     'a future updatedAt must not be read as "just touched"');
 });
 
-test('live progress counts assigned and verifying tasks as running work', () => {
+test('live progress counts assigned and verifying tasks as running work', async () => {
   store.configure(null);
   store.hydrated = true;
   const suffix = TAIL();

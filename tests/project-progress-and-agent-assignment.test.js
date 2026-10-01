@@ -19,7 +19,7 @@ import {
 
 const TAIL = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-test('every pipeline gate capability set is held by at least one built-in agent', () => {
+test('every pipeline gate capability set is held by at least one built-in agent', async () => {
   seedAgents();
   const agents = listAgents();
   const unsatisfiable = GATES.filter(
@@ -29,7 +29,7 @@ test('every pipeline gate capability set is held by at least one built-in agent'
     `these gates demand capabilities no single agent holds: ${unsatisfiable.join(', ')}`);
 });
 
-test('a task whose capability set no agent fully holds still gets assigned', () => {
+test('a task whose capability set no agent fully holds still gets assigned', async () => {
   seedAgents();
   // Exactly the combination the old security gate demanded: the Security Agent has
   // `security` only and the QA Agent has `verification` only, so strict matching scored
@@ -47,7 +47,7 @@ test('a task whose capability set no agent fully holds still gets assigned', () 
   assert.equal(assigned.blockedReason ?? null, null);
 });
 
-test('partial matching stays opt-in and never accepts zero overlap', () => {
+test('partial matching stays opt-in and never accepts zero overlap', async () => {
   seedAgents();
   const agents = listAgents();
   const holder = agents.find((a) => (a.capabilities ?? []).includes('security'));
@@ -67,7 +67,7 @@ test('partial matching stays opt-in and never accepts zero overlap', () => {
     'zero overlap is still rejected even when partial matching is allowed');
 });
 
-test('a blocked task with complete dependencies is retried by the scheduler', () => {
+test('a blocked task with complete dependencies is retried by the scheduler', async () => {
   seedAgents();
   const suffix = TAIL();
   const pid = `p-${suffix}`;
@@ -80,7 +80,7 @@ test('a blocked task with complete dependencies is retried by the scheduler', ()
     executor: 'internal.pipeline-gate',
   });
 
-  const recovered = recoverStaleTasks();
+  const recovered = await recoverStaleTasks();
   const gate = store.get('tasks', `gate-${suffix}`);
 
   assert.notEqual(gate.state, 'blocked', 'a blocked task whose dependencies are complete must be reconsidered');
@@ -88,7 +88,7 @@ test('a blocked task with complete dependencies is retried by the scheduler', ()
   assert.ok(['assigned', 'queued'].includes(gate.state));
 });
 
-test('a blocked task waiting on an incomplete dependency is left alone', () => {
+test('a blocked task waiting on an incomplete dependency is left alone', async () => {
   seedAgents();
   const suffix = TAIL();
   const pid = `p-${suffix}`;
@@ -101,13 +101,13 @@ test('a blocked task waiting on an incomplete dependency is left alone', () => {
     executor: 'internal.pipeline-gate',
   });
 
-  recoverStaleTasks();
+  await recoverStaleTasks();
 
   assert.equal(store.get('tasks', `gate-${suffix}`).state, 'blocked',
     'a task with genuinely incomplete dependencies must stay blocked');
 });
 
-test('a poisoned stored estimate is clamped instead of shown as 679h', () => {
+test('a poisoned stored estimate is clamped instead of shown as 679h', async () => {
   const enriched = enrichTaskTiming({
     id: 'poisoned-task', state: 'blocked',
     estimatedDurationMs: 2446835243,   // 679h 40m 35s as seen on the live project
@@ -119,7 +119,7 @@ test('a poisoned stored estimate is clamped instead of shown as 679h', () => {
     `a single task must never be estimated in hours: ${enriched.estimatedDurationFormatted}`);
 });
 
-test('a project estimate built from poisoned tasks stays human-sized', () => {
+test('a project estimate built from poisoned tasks stays human-sized', async () => {
   const poisoned = (id, state) => ({
     id, state, estimatedDurationMs: 2446835243,
     requiredCapabilities: state === 'completed' ? ['testing'] : ['security'],
@@ -138,7 +138,7 @@ test('a project estimate built from poisoned tasks stays human-sized', () => {
     `remaining must not report hundreds of hours: ${timing.remainingFormatted}`);
 });
 
-test('the estimator ignores recorded durations that are implausible', () => {
+test('the estimator ignores recorded durations that are implausible', async () => {
   const suffix = TAIL();
   for (const n of ['a', 'b']) {
     store.put('tasks', {
@@ -153,7 +153,7 @@ test('the estimator ignores recorded durations that are implausible', () => {
   assert.ok(estimateProjectDuration([{ estimatedDurationMs: 2446835243 }]) <= MAX_PROJECT_ESTIMATE_MS);
 });
 
-test('the detail pipeline creates gates the roster can actually staff', () => {
+test('the detail pipeline creates gates the roster can actually staff', async () => {
   seedAgents();
   const suffix = TAIL();
   const pid = `p-${suffix}`;

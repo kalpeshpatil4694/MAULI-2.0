@@ -1,5 +1,6 @@
 import './functional-code-executor.js';
 import { withDeadline } from './core.js';
+import { store } from './store.js';
 
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 // Neuron cost is why apps arrived "built but not right". The chat model above bills
@@ -69,11 +70,31 @@ async function cloudflareGenerate(env, messages, options = {}) {
   try {
     return await run(model);
   } catch (error) {
+    noteAiFailure(env, error);
     // A retired, rate-limited or unavailable code model must not cost the project its app:
     // retry once on the configured chat model before concluding that AI is unavailable.
     if (!fallbackModel) throw error;
-    try { return await run(fallbackModel); } catch { throw error; }
+    try { return await run(fallbackModel); } catch (retryError) { noteAiFailure(env, retryError); throw error; }
   }
+}
+
+// Cloudflare's free Workers AI allowance is a daily budget, and running out of it is an
+// operator-visible state, not a transient error: with the binding still present, health
+// reported "ai: true" while every generation failed with 4006 and the founder saw projects
+// that simply stopped progressing. The verdict is persisted as a small row so any isolate
+// can report it, not just the one that made the failing call.
+export function noteAiFailure(env, error) {
+  const message = String(error?.message ?? error ?? '');
+  const exhausted = /daily free allocation|neurons|Paid plan|exceeded/i.test(message);
+  const reason = exhausted
+    ? 'Workers AI daily free allocation exhausted (4006). Generation falls back to the verified templates until the allowance resets or the Workers plan is upgraded.'
+    : message.slice(0, 200);
+  try {
+    store.put('ai_status', {
+      id: 'workers-ai', available: false, exhausted, reason, at: new Date().toISOString()
+    });
+    store.addEvent('ai.unavailable', { exhausted, reason });
+  } catch (_) { /* never let diagnostics mask the real error */ }
 }
 export async function generateAI(env, messages, options = {}) { switch (getProvider(env, options)) { case 'cloudflare': return cloudflareGenerate(env, messages, options); default: throw new Error(`Unsupported AI provider: ${getProvider(env, options)}`); } }
 export async function generate(env, messages, options = {}) { return generateAI(env, messages, options); }

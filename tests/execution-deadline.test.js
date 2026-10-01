@@ -1,6 +1,6 @@
 // A hang is not a failure the scheduler can see. Before these deadlines existed, an executor
 // (or a Workers AI call) that never settled kept its `await` alive forever: the run heartbeat
-// interval kept writing, the run never went stale, recoverStaleTasks() ignored it, and the
+// interval kept writing, the run never went stale, await recoverStaleTasks() ignored it, and the
 // scheduler tick never returned — one wedged task stalled its project with no error anywhere.
 import test from 'node:test';
 import assert from 'node:assert/strict';

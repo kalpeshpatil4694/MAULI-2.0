@@ -400,9 +400,16 @@ export default { async fetch(request, env, ctx) { try {
     const avgRunDuration=completedRuns.filter(r=>r.completedAt&&r.startedAt).map(r=>Date.parse(r.completedAt)-Date.parse(r.startedAt)).reduce((a,b)=>a+b,0)/(completedRuns.length||1);
     return ok({analytics:{projects:projects.length,tasks:allTasks.length,artifacts:allArtifacts.length,runs:allRuns.length,byState,byAgent,avgRunDurationMs:Math.round(avgRunDuration),completionRate:allTasks.length?Math.round(allTasks.filter(t=>t.state==='completed').length/allTasks.length*100):0}});
   }
-  if(request.method==='GET'&&url.pathname==='/api/health'){const blocked=d1WriteBlockedSnapshot(env);return ok({service:'mauli2.0',// An account-level D1 write ceiling is not "healthy": every write is being rejected,
+  if(request.method==='GET'&&url.pathname==='/api/health'){const blocked=d1WriteBlockedSnapshot(env);
+    // The AI binding being present says nothing about whether generation still works: the
+    // free Workers AI allowance is a daily budget, and once it is spent every generation
+    // fails while `ai:true` still reports green. Surface the last recorded verdict so a
+    // stalled project is explained instead of mysterious.
+    const aiStatus=store.get('ai_status','workers-ai')??(await d1Get(env,'ai_status','workers-ai').catch(()=>null));
+    const aiAvailable=Boolean(env?.AI)&&aiStatus?.available!==false;
+    return ok({service:'mauli2.0',// An account-level D1 write ceiling is not "healthy": every write is being rejected,
     // so nothing can progress and the founder needs to see that rather than a stall.
-    status:blocked?'degraded':'healthy',degraded:Boolean(blocked),degradedReason:blocked?'d1-write-limit':null,persistence:hasD1(env),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,stateReads:stateDiagnostics(),time:now()});}
+    status:blocked?'degraded':(env?.AI&&!aiAvailable?'degraded':'healthy'),degraded:Boolean(blocked)||Boolean(env?.AI&&!aiAvailable),degradedReason:blocked?'d1-write-limit':(env?.AI&&!aiAvailable?(aiStatus?.exhausted?'workers-ai-allowance-exhausted':'workers-ai-unavailable'):null),persistence:hasD1(env),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),aiAvailable,aiReason:aiStatus?.reason??null,aiSince:aiStatus?.at??null,recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,stateReads:stateDiagnostics(),time:now()});}
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   if(request.method==='POST'&&url.pathname==='/api/ai/code-probe'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);

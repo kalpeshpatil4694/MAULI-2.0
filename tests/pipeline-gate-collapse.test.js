@@ -32,7 +32,7 @@ function seedProject(state = 'active') {
   return pid;
 }
 
-test('duplicate gate rows are collapsed into one canonical gate per type', () => {
+test('duplicate gate rows are collapsed into one canonical gate per type', async () => {
   const pid = seedProject();
   ensureProjectPipeline(pid);
   const gates = store.list('tasks').filter((t) => t.projectId === pid && t.pipelineGate);
@@ -61,7 +61,7 @@ test('duplicate gate rows are collapsed into one canonical gate per type', () =>
   assert.equal(store.get('tasks', `${pid}-security-dup`).state, 'cancelled');
 });
 
-test('a completed gate wins over an unfinished duplicate of the same type', () => {
+test('a completed gate wins over an unfinished duplicate of the same type', async () => {
   const pid = seedProject();
   ensureProjectPipeline(pid);
   const gates = store.list('tasks').filter((t) => t.projectId === pid && t.pipelineGate);
@@ -77,7 +77,7 @@ test('a completed gate wins over an unfinished duplicate of the same type', () =
   assert.equal(live[0].id, `${pid}-test-done`, 'the completed gate is the canonical one');
 });
 
-test('orphan recovery releases the agent so the re-queued task can be claimed again', () => {
+test('orphan recovery releases the agent so the re-queued task can be claimed again', async () => {
   const pid = `p-${TAIL()}`;
   store.put('projects', { id: pid, name: 'P', objective: 'Build a habit tracker', requirements: [], state: 'active' });
   const agent = store.put('agents', {
@@ -91,7 +91,7 @@ test('orphan recovery releases the agent so the re-queued task can be claimed ag
   });
   ageTask(task.id, 600_000);
 
-  assert.ok(recoverStaleTasks().includes(task.id), 'the orphaned task must be re-queued');
+  assert.ok(await (await recoverStaleTasks()).includes(task.id), 'the orphaned task must be re-queued');
 
   const requeued = store.get('tasks', task.id);
   assert.equal(requeued.state, 'queued');
@@ -129,7 +129,7 @@ test('a collapsed duplicate gate no longer blocks finalization', async () => {
 
 // The project row said 'completed'; the dashboard derives the state from the tasks, so a
 // collapsed duplicate counted as live work kept the project reading 'active' forever.
-test('a project with only collapsed duplicates reads as completed', () => {
+test('a project with only collapsed duplicates reads as completed', async () => {
   const pid = seedProject();
   ensureProjectPipeline(pid);
   for (const gate of store.list('tasks').filter((t) => t.projectId === pid && t.pipelineGate)) {

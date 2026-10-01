@@ -50,7 +50,7 @@ function seedFinishedProject(pid, { withVerificationIds = true } = {}) {
   store.put('tasks', { id: `${pid}-qa`, projectId: pid, title: 'Final project QA gate', state: 'completed', finalProjectVerification: true, pipelineGate: true, gateType: 'qa', verificationId: withVerificationIds ? 'v-qa' : undefined });
 }
 
-test('buildFinalDelivery succeeds once every gate check can pass', () => {
+test('buildFinalDelivery succeeds once every gate check can pass', async () => {
   seedAgents();
   const pid = `p-${TAIL()}`;
   seedFinishedProject(pid);

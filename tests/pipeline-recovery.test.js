@@ -12,7 +12,7 @@ function ageTask(taskId, msAgo) {
   bucket.set(taskId, { ...task, updatedAt: ago(msAgo), claimedAt: ago(msAgo) });
 }
 
-test('L1 repeated seeding is quiet: no duplicate agent events for a fresh hydrated store', () => {
+test('L1 repeated seeding is quiet: no duplicate agent events for a fresh hydrated store', async () => {
   store.configure(null);
   store.hydrated = true;
   seedAgents();
@@ -29,7 +29,7 @@ test('L1 repeated seeding is quiet: no duplicate agent events for a fresh hydrat
   );
 });
 
-test('L1 orphaned working task without a live run is requeued without burning an attempt', () => {
+test('L1 orphaned working task without a live run is requeued without burning an attempt', async () => {
   store.configure(null);
   const task = store.put('tasks', {
     id: 'task-orphan-working', projectId: 'proj-orphan', title: 'Orphaned work',
@@ -37,7 +37,7 @@ test('L1 orphaned working task without a live run is requeued without burning an
   });
   ageTask(task.id, 60_000);
 
-  const recovered = recoverStaleTasks();
+  const recovered = await recoverStaleTasks();
 
   assert.ok(recovered.includes(task.id), 'orphaned task is recovered');
   const after = store.get('tasks', task.id);
@@ -46,7 +46,7 @@ test('L1 orphaned working task without a live run is requeued without burning an
   assert.equal(after.infraRecoveries, 1);
 });
 
-test('L1 lease expiry recovers the task but keeps the real attempt budget', () => {
+test('L1 lease expiry recovers the task but keeps the real attempt budget', async () => {
   store.configure(null);
   const task = store.put('tasks', {
     id: 'task-stale-run', projectId: 'proj-stale', title: 'Stale execution',
@@ -57,7 +57,7 @@ test('L1 lease expiry recovers the task but keeps the real attempt budget', () =
     startedAt: ago(600_000), heartbeatAt: ago(600_000)
   });
 
-  recoverStaleTasks();
+  await recoverStaleTasks();
 
   const after = store.get('tasks', task.id);
   assert.equal(store.get('runs', 'run-stale').state, 'failed', 'stale run is closed');
@@ -67,7 +67,7 @@ test('L1 lease expiry recovers the task but keeps the real attempt budget', () =
   assert.equal(after.agentId, null, 'released for a fresh claim');
 });
 
-test('L1 repeated platform cancellations are still bounded', () => {
+test('L1 repeated platform cancellations are still bounded', async () => {
   store.configure(null);
   const task = store.put('tasks', {
     id: 'task-cancellation-loop', projectId: 'proj-loop', title: 'Poison task',
@@ -75,14 +75,14 @@ test('L1 repeated platform cancellations are still bounded', () => {
   });
   ageTask(task.id, 60_000);
 
-  recoverStaleTasks();
+  await recoverStaleTasks();
 
   const after = store.get('tasks', task.id);
   assert.equal(after.state, 'failed', 'infra recovery is capped so a poison task cannot churn forever');
   assert.match(String(after.error), /no live execution/);
 });
 
-test('L1 assigned task with a valid claim lease and fresh update is left alone', () => {
+test('L1 assigned task with a valid claim lease and fresh update is left alone', async () => {
   store.configure(null);
   const task = store.put('tasks', {
     id: 'task-fresh-claim', projectId: 'proj-claim', title: 'Just claimed',
@@ -90,7 +90,7 @@ test('L1 assigned task with a valid claim lease and fresh update is left alone',
   });
   ageTask(task.id, 60_000);
 
-  recoverStaleTasks();
+  await recoverStaleTasks();
 
   const after = store.get('tasks', task.id);
   assert.equal(after.state, 'assigned', 'a live claim is not stolen');

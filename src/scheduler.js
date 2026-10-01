@@ -53,31 +53,33 @@ export function claimNextTask(taskId){const task=store.get('tasks',taskId);if(!t
   if(!agent||!['available','registered'].includes(agent.state))return null;
   if(task.assignedAgentId&&task.assignedAgentId!==agent.id){const old=store.get('agents',task.assignedAgentId);if(old&&old.currentTaskId===task.id)updateAgent(old.id,{state:'available',currentTaskId:null,heartbeatAt:now()});}
   const claimedAt=now();const claimed=store.put('tasks',{...task,state:'assigned',agentId:agent.id,assignedAgentId:agent.id,claimedAt,leaseUntil:new Date(Date.now()+LEASE_MS).toISOString(),updatedAt:claimedAt,id:task.id});updateAgent(agent.id,{state:'assigned',currentTaskId:task.id,heartbeatAt:claimedAt});store.addEvent('scheduler.task_claimed',{taskId:task.id,agentId:agent.id,at:claimedAt});return claimed;}
-function requeueAfterInfraFailure(task,reason,stamp,extra={}){
+async function requeueAfterInfraFailure(task,reason,stamp,extra={}){
   const infra=Number(task.infraRecoveries??0)+1;
   if(infra>MAX_INFRA_RECOVERIES){
-    store.put('tasks',{...task,state:'failed',error:reason,updatedAt:stamp,id:task.id});
+    await store.putDurable('tasks',{...task,state:'failed',error:reason,updatedAt:stamp,id:task.id});
     releaseAgent(task);
     store.addEvent('scheduler.task_failed',{taskId:task.id,reason,infraRecoveries:infra,at:stamp});
     return 'failed';
   }
   releaseAgent(task);
-  releaseAgent(task);
   // The agent must be released when the task is requeued, not only when it fails. Leaving the
   // agent in 'assigned' while its task went back to 'queued' means claimNextTask can never
   // find a capable agent again — with a single agent per capability (Security Agent) that
   // wedges the gate permanently and the project never reaches a terminal state.
-  store.put('tasks',{...task,state:'queued',agentId:null,assignedAgentId:null,leaseUntil:null,infraRecoveries:infra,blockedReason:null,error:null,updatedAt:stamp,id:task.id});
+  // The requeue MUST survive: a recovery write that loses the compare-and-set is dropped, and a
+  // task stuck in 'assigned' with an expired lease is then never recovered again — the project
+  // sits in 'active' forever. putDurable re-applies it against the version D1 holds.
+  await store.putDurable('tasks',{...task,state:'queued',agentId:null,assignedAgentId:null,leaseUntil:null,infraRecoveries:infra,blockedReason:null,error:null,updatedAt:stamp,id:task.id});
   store.addEvent('scheduler.task_recovered',{taskId:task.id,reason,infraRecoveries:infra,nextState:'queued',at:stamp,...extra});
   return 'queued';
 }
-export function recoverStaleTasks(){
+export async function recoverStaleTasks(){
   const recovered=[],stamp=now();
   for(const run of store.list('runs').filter(r=>r.state==='running'&&stale(r))){
     store.put('runs',{...run,state:'failed',error:'Execution lease expired',recoveredAt:stamp,completedAt:stamp,id:run.id});
     const task=store.get('tasks',run.taskId);
     if(!task||TERMINAL.has(task.state))continue;
-    requeueAfterInfraFailure(task,'Execution lease expired',stamp,{runId:run.id});
+    await requeueAfterInfraFailure(task,'Execution lease expired',stamp,{runId:run.id});
     recovered.push(task.id);
   }
   // Orphan recovery: RUNNABLE only contains queued/assigned, so a task left in
@@ -92,7 +94,7 @@ export function recoverStaleTasks(){
     // A future updatedAt must be recoverable, not read as "just touched" (negative age).
     if(Number.isFinite(updated)&&age>=0&&age<ORPHAN_GRACE_MS)continue;
     if(task.state==='assigned'){const lease=Date.parse(task.leaseUntil??'');if(Number.isFinite(lease)&&lease>Date.now()&&lease<=Date.now()+LEASE_MS)continue;}
-    requeueAfterInfraFailure(task,`Orphaned ${task.state} task with no live execution`,now());
+    await requeueAfterInfraFailure(task,`Orphaned ${task.state} task with no live execution`,now());
     recovered.push(task.id);
   }
   // Blocked is not self-healing: it was only ever reconsidered when one of the task's own
@@ -136,7 +138,7 @@ async function finalizeCommand(projectId,env={},indexedTasks=null){const project
   if(repairMissingVerificationIds(tasks))tasks=store.list('tasks').filter(t=>t.projectId===projectId);const hasRunning=tasks.some(t=>['working','assigned'].includes(t.state)),hasQueued=tasks.some(t=>RUNNABLE.has(t.state)&&dependenciesReady(t)),hasFailed=tasks.some(t=>t.state==='failed'),qaTasks=tasks.filter(t=>t.finalProjectVerification),integrity=tasks.find(t=>t.pipelineGate&&t.gateType==='integrity'),qaPassed=qaTasks.length>0&&qaTasks.every(t=>t.state==='completed'&&t.verificationId),integrityPassed=Boolean(integrity&&integrity.state==='completed'&&integrity.verificationId),allCompleted=tasks.every(t=>t.state==='completed'||t.state==='cancelled');if(hasRunning||hasQueued)return null;if(allCompleted&&qaPassed&&integrityPassed){const finalDelivery=project.finalDeliveryId?store.get('artifacts',project.finalDeliveryId):buildFinalDelivery(project,{enforceGates:true}),finalProject=await store.putDurable('projects',{...project,state:'completed',finalDeliveryId:finalDelivery?.id??project.finalDeliveryId??null,completedAt:project.completedAt??now(),id:project.id}),result={status:'completed',runId,command:project.founderCommand,project:finalProject,tasks,finalDelivery};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.completed',{runId,projectId,status:'completed',at:now()});return result;}if(hasFailed&&!hasQueued&&!hasRunning){const failedProject=await store.putDurable('projects',{...project,state:'failed',failedAt:project.failedAt??now(),id:project.id}),result={status:'failed',runId,command:project.founderCommand,project:failedProject,tasks,error:'One or more tasks failed after recovery/retry limits.'};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.failed',{runId,projectId,status:'failed',at:now()});return result;}return null;}
 function indexTasksByProject(){const byProject=new Map();for(const task of store.list('tasks')){const key=task.projectId??'';let list=byProject.get(key);if(!list)byProject.set(key,list=[]);list.push(task);}return byProject;}
 export async function schedulerTick(env={},context={}){
-  const recovered=recoverStaleTasks();
+  const recovered=await recoverStaleTasks();
   const startedAt=Date.now(),budgetMs=Number(context?.budgetMs??0);
   // One task index for the whole tick: the finalize sweep and the work loop both need it,
   // and re-scanning the full task table per project was a large slice of the free plan's
