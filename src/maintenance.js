@@ -19,7 +19,7 @@ const RUNNABLE_TASK_STATES = new Set(['queued', 'assigned']);
  * Returns a per-project verdict so the founder sees *why* each project was or was not
  * touched, instead of a silent bulk mutation. Safe to call repeatedly (idempotent).
  */
-export function recoverStuckProjects({ dryRun = false } = {}) {
+export async function recoverStuckProjects({ dryRun = false } = {}) {
   const stamp = new Date().toISOString();
   const tasks = store.list('tasks');
   const byProject = new Map();
@@ -62,9 +62,9 @@ export function recoverStuckProjects({ dryRun = false } = {}) {
     // write. Completion must mean "no task failed" — buildFinalDelivery refuses a delivery
     // that has a failed task, so marking such a project completed would be a lie that the
     // very next scheduler pass contradicts with a command.failed event.
-    if (own.every(t => t.state === 'completed')) {
+    if (own.every(t => t.state === 'completed' || (t.state === 'cancelled' && t.collapsedDuplicate))) {
       if (!dryRun && project.state !== 'completed') {
-        store.put('projects', { ...project, state: 'completed', updatedAt: stamp, id: project.id });
+        await store.putDurable('projects', { ...project, state: 'completed', completedAt: project.completedAt ?? stamp, updatedAt: stamp, id: project.id });
         store.addEvent('project.recovered', { projectId: project.id, from: project.state, to: 'completed', reason: 'all tasks completed', at: stamp });
       }
       reports.push({ projectId: project.id, state: project.state, verdict: 'finalize_completed', counts });
@@ -236,7 +236,7 @@ export async function runMaintenance(env, context = {}) {
   let recovery = { scanned: 0, requeued: 0, finalized: 0, skipped: 'cooldown' };
   if (store.hydrated && Date.now() - _lastStuckRecovery > STUCK_RECOVERY_INTERVAL) {
     _lastStuckRecovery = Date.now();
-    recovery = recoverStuckProjects({ dryRun: false });
+    recovery = await recoverStuckProjects({ dryRun: false });
   }
   const scheduler = await schedulerTick(env, {
     trigger: 'cloudflare-scheduled',

@@ -104,7 +104,7 @@ test('an approved command runs its whole task chain to a final delivery', async 
   assert.ok(finalProject.finalDeliveryId, 'a completed command must produce a final delivery artifact');
 });
 
-test('approveProject re-activates a blocked gate whose dependencies are all done', () => {
+test('approveProject re-activates a blocked gate whose dependencies are all done', async () => {
   resetStore();
   const projectId = 'approve-gate-reactivation-project';
   store.put('projects', { id: projectId, name: 'Gate reactivation', state: 'awaiting_approval' });
@@ -123,7 +123,7 @@ test('approveProject re-activates a blocked gate whose dependencies are all done
   assert.equal(store.get('projects', projectId).state, 'queued');
 });
 
-test('approveProject is idempotent for a project that is not awaiting approval', () => {
+test('approveProject is idempotent for a project that is not awaiting approval', async () => {
   resetStore();
   const projectId = 'approve-idempotent-project';
   store.put('projects', { id: projectId, name: 'Already queued', state: 'queued' });
@@ -139,7 +139,7 @@ test('approveProject is idempotent for a project that is not awaiting approval',
   assert.equal(store.get('projects', projectId).state, 'queued');
 });
 
-test('recoverStuckProjects reports a verdict for every non-terminal project', () => {
+test('recoverStuckProjects reports a verdict for every non-terminal project', async () => {
   resetStore();
   const noTasks = store.put('projects', { id: 'stuck-no-tasks', name: 'No tasks', state: 'active' });
   store.put('projects', { id: 'stuck-awaiting', name: 'Awaiting founder', state: 'awaiting_approval' });
@@ -153,7 +153,7 @@ test('recoverStuckProjects reports a verdict for every non-terminal project', ()
   store.put('projects', { id: 'stuck-running', name: 'In progress', state: 'active' });
   store.put('tasks', { id: 'stuck-running-task', projectId: 'stuck-running', title: 'Working task', state: 'queued' });
 
-  const dry = recoverStuckProjects({ dryRun: true });
+  const dry = await recoverStuckProjects({ dryRun: true });
   assert.equal(dry.scanned, 5);
   assert.equal(dry.requeued, 0, 'a dry run never mutates');
   const verdicts = Object.fromEntries(dry.reports.map(r => [r.projectId, r.verdict]));
@@ -164,14 +164,14 @@ test('recoverStuckProjects reports a verdict for every non-terminal project', ()
   assert.equal(verdicts['stuck-failed-chain'], 'would_requeue');
   assert.equal(store.get('projects', done.id).state, 'active', 'dry run leaves state untouched');
 
-  const live = recoverStuckProjects();
+  const live = await recoverStuckProjects();
   assert.equal(store.get('projects', done.id).state, 'completed',
     'a project whose tasks all completed must be finalized');
   assert.equal(store.get('projects', 'stuck-failed-chain').state, 'failed',
     'a project with an unretriable failure is retired as failed, not passed off as completed');
 });
 
-test('a running task in one project does not mark every other project in_progress', () => {
+test('a running task in one project does not mark every other project in_progress', async () => {
   // The live-run check has to be per-project. Globalising it made any single running task
   // excuse every project on the system, so nothing was ever diagnosed or re-queued.
   resetStore();
@@ -183,14 +183,14 @@ test('a running task in one project does not mark every other project in_progres
   store.put('tasks', { id: 'other-blocked', projectId: 'other-dead-project', title: 'Blocked step', state: 'blocked', dependsOn: ['other-done'] });
   store.put('tasks', { id: 'other-done', projectId: 'other-dead-project', title: 'Earlier step', state: 'completed' });
 
-  const report = recoverStuckProjects();
+  const report = await recoverStuckProjects();
   assert.equal(report.reports.find(r => r.projectId === 'live-project').verdict, 'in_progress');
   assert.equal(report.reports.find(r => r.projectId === 'other-dead-project').verdict, 'requeued',
     'an unrelated live run must not hide a dead project');
   assert.equal(store.get('tasks', 'other-blocked').state, 'queued');
 });
 
-test('a project with an unretriable failure is retired as failed, not as completed', () => {
+test('a project with an unretriable failure is retired as failed, not as completed', async () => {
   // buildFinalDelivery refuses a delivery that has a failed task, so claiming completion
   // for one is a lie the next scheduler pass contradicts with command.failed. A failed task
   // is retried when its dependencies can still be satisfied; it is retired when they cannot.
@@ -201,27 +201,27 @@ test('a project with an unretriable failure is retired as failed, not as complet
   store.put('tasks', { id: 'almost-b', projectId, title: 'Security gate', state: 'completed' });
   store.put('tasks', { id: 'almost-c', projectId, title: 'Integrity', state: 'failed', dependsOn: ['task-that-never-existed'], error: 'manifest mismatch' });
 
-  const report = recoverStuckProjects();
+  const report = await recoverStuckProjects();
   const entry = report.reports.find(r => r.projectId === projectId);
   assert.equal(entry.verdict, 'failed_chain');
   assert.equal(store.get('projects', projectId).state, 'failed');
   assert.equal(report.failed, 1);
 });
 
-test('a failed task whose dependencies are still satisfiable is retried, not retired', () => {
+test('a failed task whose dependencies are still satisfiable is retried, not retired', async () => {
   resetStore();
   const projectId = 'retriable-failure';
   store.put('projects', { id: projectId, name: 'Retry me', state: 'escalated' });
   store.put('tasks', { id: 'retriable-done', projectId, title: 'Build', state: 'completed' });
   store.put('tasks', { id: 'retriable-failed', projectId, title: 'Test', state: 'failed', dependsOn: ['retriable-done'], error: 'verifier timeout' });
 
-  const report = recoverStuckProjects();
+  const report = await recoverStuckProjects();
   assert.equal(report.reports.find(r => r.projectId === projectId).verdict, 'requeued');
   assert.equal(store.get('tasks', 'retriable-failed').state, 'queued');
   assert.equal(store.get('projects', projectId).state, 'queued');
 });
 
-test('a running task in one project does not mark every other project in_progress', () => {
+test('a running task in one project does not mark every other project in_progress', async () => {
   // The live-run check has to be per-project. Globalising it made any single running task
   // excuse every project on the system, so nothing was ever diagnosed or re-queued.
   resetStore();
@@ -233,14 +233,14 @@ test('a running task in one project does not mark every other project in_progres
   store.put('tasks', { id: 'other-blocked', projectId: 'other-dead-project', title: 'Blocked step', state: 'blocked', dependsOn: ['other-done'] });
   store.put('tasks', { id: 'other-done', projectId: 'other-dead-project', title: 'Earlier step', state: 'completed' });
 
-  const report = recoverStuckProjects();
+  const report = await recoverStuckProjects();
   assert.equal(report.reports.find(r => r.projectId === 'live-project').verdict, 'in_progress');
   assert.equal(report.reports.find(r => r.projectId === 'other-dead-project').verdict, 'requeued',
     'an unrelated live run must not hide a dead project');
   assert.equal(store.get('tasks', 'other-blocked').state, 'queued');
 });
 
-test('recoverStuckProjects re-queues a dead chain and clears it from the project list', () => {
+test('recoverStuckProjects re-queues a dead chain and clears it from the project list', async () => {
   resetStore();
   const projectId = 'stuck-requeue-project';
   store.put('projects', { id: projectId, name: 'Interrupted build', state: 'active' });
@@ -248,7 +248,7 @@ test('recoverStuckProjects re-queues a dead chain and clears it from the project
   store.put('tasks', { id: 'requeue-test', projectId, title: 'Test', state: 'blocked', dependsOn: ['requeue-build'], blockedReason: 'dependencies incomplete' });
   store.put('tasks', { id: 'requeue-qa', projectId, title: 'QA', state: 'blocked', dependsOn: ['requeue-test'], blockedReason: 'dependencies incomplete' });
 
-  const report = recoverStuckProjects();
+  const report = await recoverStuckProjects();
   const entry = report.reports.find(r => r.projectId === projectId);
   assert.equal(entry.verdict, 'requeued');
   assert.equal(store.get('projects', projectId).state, 'queued');
@@ -256,6 +256,6 @@ test('recoverStuckProjects re-queues a dead chain and clears it from the project
     'a blocked task whose inputs are done must be runnable again');
 
   // Second pass must not keep re-queueing a project that now has runnable work.
-  const again = recoverStuckProjects();
+  const again = await recoverStuckProjects();
   assert.equal(again.reports.find(r => r.projectId === projectId).verdict, 'in_progress');
 });
