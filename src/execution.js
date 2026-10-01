@@ -14,6 +14,21 @@ export { registerExecutor, listExecutors, grantExecutor } from './executor-regis
 
 const EXECUTION_LEASE_MS = 90_000;
 const HEARTBEAT_INTERVAL_MS = 60_000;
+// A heartbeat may DEFER reclamation; it must never make a run immortal. Every recovery path
+// in the system asks the same question — "is this run stale?" — and stale() is a pure
+// function of heartbeatAt. So an execution whose terminal write never landed (isolate
+// killed mid-tick under ctx.waitUntil, a CAS that lost and could not be re-applied, a body
+// that never settled) is only reclaimable while its heartbeat is old. Anything that keeps
+// that heartbeat fresh made the run unreclaimable forever: claimNextTask saw a live run and
+// refused, recoverStaleTasks skipped it as "has a live run", recoverStuckProjects called
+// the project in_progress and requeued nothing. Production wedged at 0/13 tasks with a
+// single run still 'running' and no path left to reclaim it.
+//
+// startedAt is immutable, so an absolute lifetime makes the run reclaimable even while an
+// older isolate is still heartbeating it. It sits far above DEFAULT_TASK_TIMEOUT_MS (180s)
+// so a slow-but-working generation is never killed, and matches the 10-minute window
+// agents.js already uses to decide whether a run owns its agent.
+export const MAX_RUN_LIFETIME_MS = 600_000;
 // A task must finish well inside a cron window or it is not making progress. The default is
 // deliberately larger than the executor's own budget (functional-code-executor allows two
 // 40s AI attempts) so a slow-but-working generation is never killed by this, while an
@@ -34,7 +49,16 @@ function completedLifecycleResponse(task) { const execution=latestExecutionForTa
 function requiredToolNames(task) { return [...new Set((task?.toolNames??task?.requiredTools??[]).map(String).filter(Boolean))]; }
 async function authorizeRequiredTools(task,context,callTool) { const results=[]; for(const name of requiredToolNames(task)){const tool=store.list('tools').find(t=>t.name===name&&t.enabled!==false);if(!tool)throw new Error(`Required tool is not registered: ${name}`);results.push({name,authorization:await callTool(name,{...context,type:'authorization-check',taskId:task.id,projectId:task.projectId,approved:Boolean(context.approved),approvalId:context.approvalId??null,allowExternal:Boolean(context.allowExternal)})});}return results; }
 
-export function heartbeatExecution(runId) { const run=store.get('runs',runId);if(!run||run.state!=='running')return false;const timestamp=now();store.put('runs',{...run,heartbeatAt:timestamp,updatedAt:timestamp,id:run.id});return true; }
+export function runOverLifetime(run, at = Date.now()) {
+  const started = Date.parse(run?.startedAt ?? '');
+  if (!Number.isFinite(started)) return false;
+  return at - started > MAX_RUN_LIFETIME_MS;
+}
+export function heartbeatExecution(runId) { const run=store.get('runs',runId);if(!run||run.state!=='running')return false;
+  // Past the absolute lifetime the lease is no longer renewable. Returning false without a
+  // write also stops the interval from re-persisting a dead run row on every tick.
+  if (runOverLifetime(run)) return false;
+  const timestamp=now();store.put('runs',{...run,heartbeatAt:timestamp,updatedAt:timestamp,id:run.id});return true; }
 
 export async function executeTask(task,context={}) {
   const executorName=task.executor??'internal.plan'; const executor=getExecutor(executorName);
@@ -72,7 +96,7 @@ export async function executeTaskLifecycle(task,context={}) {
   await failTask(currentTask.id,execution.error??'Execution failed');return{status:'failed',task:store.get('tasks',currentTask.id),execution};
 }
 
-function isStaleRun(run,at=Date.now()){if(!run||run.state!=='running')return false;const heartbeat=Date.parse(run.heartbeatAt??run.startedAt??0);return!Number.isFinite(heartbeat)||at-heartbeat>EXECUTION_LEASE_MS;}
+export function isStaleRun(run,at=Date.now()){if(!run||run.state!=='running')return false;if(runOverLifetime(run,at))return true;const heartbeat=Date.parse(run.heartbeatAt??run.startedAt??0);return!Number.isFinite(heartbeat)||at-heartbeat>EXECUTION_LEASE_MS;}
 function recoverRun(run){const timestamp=now();const task=store.get('tasks',run.taskId);store.put('runs',{...run,state:'failed',error:'Execution lease expired; task returned to scheduler recovery.',completedAt:timestamp,recoveredAt:timestamp,recoverable:true,id:run.id});if(task&&!['completed','cancelled'].includes(task.state)){const attempts=Number(task.attempts??0);const maxAttempts=Number(task.maxAttempts??MAX_RECOVERY_ATTEMPTS);const nextState=attempts<maxAttempts?'queued':'failed';store.put('tasks',{...task,state:nextState,attempts:attempts+1,blockedReason:nextState==='queued'?'Recovered from stale execution':task.blockedReason,error:nextState==='failed'?'Execution lease expired after maximum recovery attempts':task.error,updatedAt:timestamp,id:task.id});if(task.assignedAgentId){const agent=store.get('agents',task.assignedAgentId);if(agent)store.put('agents',{...agent,state:'available',currentTaskId:null,heartbeatAt:timestamp,updatedAt:timestamp,id:agent.id});}}store.addEvent('execution.recovered',{runId:run.id,taskId:run.taskId,at:timestamp});return true;}
 export function recoverRunningExecutions(){return store.list('runs').filter(run=>run.state==='running').map(run=>({...run,status:run.state,executionId:run.id}));}
 export function recoverStaleExecutions(){const recovered=[];for(const run of store.list('runs').filter(r=>r.state==='running')){if(isStaleRun(run)){recoverRun(run);recovered.push(run);}}return recovered;}

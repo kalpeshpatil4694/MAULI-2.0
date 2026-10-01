@@ -5,7 +5,7 @@
 import { now, withDeadline } from './core.js';
 import { store } from './store.js';
 import { selectAgents, updateAgent } from './agents.js';
-import { executeTask } from './execution.js';
+import { executeTask, runOverLifetime } from './execution.js';
 import { verifyResult, retryDecision } from './verification.js';
 import { completeTask, failTask, markVerifying, assignTask } from './tasks.js';
 import { buildFinalDeliveryDurable } from './delivery.js';
@@ -42,7 +42,13 @@ function activeRun(taskId){return store.list('runs').find(r=>r.taskId===taskId&&
 // field) made `Date.now()-stamp` negative, so the run never looked stale and the task
 // could never be recovered: it sat "verifying"/"working" for hours while cron skipped it
 // as if a live execution were running. An implausibly future stamp is stale too.
-function stale(run,at=Date.now()){const stamp=Date.parse(run?.heartbeatAt??run?.startedAt??'');if(!Number.isFinite(stamp))return true;const age=at-stamp;return age>LEASE_MS||age<-LEASE_MS;}
+export function stale(run,at=Date.now()){const stamp=Date.parse(run?.heartbeatAt??run?.startedAt??'');if(!Number.isFinite(stamp))return true;const age=at-stamp;
+  // A run past its absolute lifetime is stale even when its heartbeat is fresh. Without this
+  // the heartbeat alone decided reclaimability, and a run whose terminal write never landed
+  // could be kept alive forever — which blocked claimNextTask, the orphan sweep and
+  // recoverStuckProjects at the same time, leaving the project permanently 'active' with no
+  // runnable work and nothing left to recover.
+  if(runOverLifetime(run,at))return true;return age>LEASE_MS||age<-LEASE_MS;}
 function releaseAgent(task){if(!task?.agentId&&!task?.assignedAgentId)return;const agent=store.get('agents',task.agentId??task.assignedAgentId);if(agent)updateAgent(agent.id,{state:'available',currentTaskId:null,heartbeatAt:now()});}
 function chooseAgent(task){const tools=task.requiredTools??task.toolNames??[];return selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true})[0]??selectAgents(task.requiredCapabilities??[],null,{requireAllTools:false})[0]??selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true,allowPartialCapabilities:true})[0]??null;}
 export function claimNextTask(taskId){const task=store.get('tasks',taskId);if(!task||!RUNNABLE.has(task.state)||!dependenciesReady(task))return null;const project=task.projectId?store.get('projects',task.projectId):null;if(project?.state==='awaiting_approval')return null;const existing=activeRun(task.id);if(existing&&!stale(existing))return null;// The pre-assigned agent may be a stale duplicate that is busy/offline/cooldown

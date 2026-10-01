@@ -131,6 +131,27 @@ Three rules close the gap between "code exists" and "the feature works":
      `templateMatched: false` is refused outright — MAULI says it could not build the thing
      rather than delivering something unrelated.
 
+### Liveness: a run must be reclaimable
+
+Correctness is worthless if the system can wedge. Every recovery path — `claimNextTask`, the
+orphan sweep in `recoverStaleTasks`, `recoverStaleExecutions`, and `recoverStuckProjects` —
+asks the same question: *is this execution stale?* If that answer depends only on a
+heartbeat, then an execution whose terminal write never landed (isolate killed mid-tick
+under `ctx.waitUntil`, a compare-and-set that lost and could not be re-applied, a body that
+never settles) stays reclaimable only while its heartbeat is old. Anything that keeps that
+heartbeat fresh makes the run **immortal**, and one immortal run disables all four paths at
+once: the task is never re-claimed, never swept as an orphan, and the project is reported
+`in_progress` so nothing is re-queued. Production sat at 0/13 tasks with a single run still
+`running` and no path left to recover it.
+
+The lease is therefore bounded twice: by recency (90s without a heartbeat) **and** by an
+absolute lifetime measured from the immutable `startedAt` (`MAX_RUN_LIFETIME_MS`, 10
+minutes). `heartbeatExecution()` refuses to renew past that bound, and both `stale()` and
+`isStaleRun()` treat an over-lifetime run as stale regardless of how recent its heartbeat
+is. The bound sits far above `DEFAULT_TASK_TIMEOUT_MS` (180s) so a slow-but-working
+generation is never killed, and a run that merely stops beating is still reclaimed by the
+ordinary lease rule inside its lifetime.
+
 The runtime journey the verifier performs: it loads the app, builds a DOM, executes its
 scripts (firing the `DOMContentLoaded`/`load` listeners real apps initialise in), presses
 every zero-argument handler **and replays the literal-argument calls the markup wires**
