@@ -396,6 +396,36 @@ gate that refuses correct work gets disabled:
 - **"chat" read as a real-time requirement.** A chat product is not automatically a live
   one. Treating it as one invented a requirement the founder never stated.
 
+### What the final acceptance run found
+
+Running three previously unseen founder commands through the live pipeline — rather than
+the test suite — found six defects that no test had:
+
+1. **"the counter screen updates live" was not read as a real-time requirement.** The live
+   word comes *after* the verb, and the detector only looked the other way round, so MAULI
+   planned a counter app with no live channel at all.
+2. **A domain with no catalogue entry was BLOCKED.** "A laundry pickup and drop-off app …
+   register each garment" matched no product type and no feature, because "register each" was
+   not read as a create action. A shop app with no way to register a garment is a different
+   product.
+3. **The model returned a browser-only page for a product that owed a server.** The Workers
+   AI allowance reset mid-test and produced a localStorage laundry counter: fidelity score
+   92, one warning, and it would have been merged over the correct full-stack build. Now
+   generation discards model output with no backend entry point when the specification
+   selected a Worker API, and delivery refuses a merged result that has none.
+4. **A requirement nobody can observe was scored FAIL.** "Runs on the web" has no evidence
+   vocabulary, so the runtime branch recorded its absence as a failure and downgraded a
+   complete product to REQUIREMENT NOT VERIFIED.
+5. **The D1 shim's `.first()` returned the result envelope**, so every duplicate check was
+   truthy and a brand-new address was answered `409 already registered`.
+6. **`UPDATE` bound its parameters in reverse order**, writing the id into the title column
+   and comparing `WHERE` against the timestamp — a 200 update reported as "not stored".
+
+Two more were caught by `wrangler deploy --dry-run` while every unit test passed: three
+duplicate keys in the synonym map (the later entry silently wins), and an assignment to a
+destructured `const` that would have thrown inside the Worker at exactly the moment the
+model produced a browser-only page.
+
 ## 6. Upgradeability
 
 New agents, departments, tools, workflows, model providers, execution runtimes, and UI clients should be addable through interfaces/contracts rather than invasive changes to the core.
