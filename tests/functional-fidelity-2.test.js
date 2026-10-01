@@ -292,7 +292,16 @@ test('a structural requirement is not failed by a runtime that cannot observe it
 
   const matrix = buildRequirementMatrix({
     requirements: spec.requirements, files: built.files, fidelity, architecture,
-    runtime: { executed: true, evidence: { create: true, read: true, persistence: true } }
+    // The evidence a full journey produces. A partial evidence set legitimately yields
+    // PARTIAL rows, and claiming otherwise here would be testing a fiction.
+    runtime: {
+      executed: true,
+      evidence: {
+        create: true, read: true, update: true, delete: true, persistence: true,
+        backend: true, database: true, validation: true, error_handling: true,
+        auth_register: true, auth_login: true, auth_protected: true, logout: true
+      }
+    }
   });
   const row = matrix.rows.find((r) => r.id === platform.id);
   assert.equal(row.status, 'PASS', 'a target that cannot be observed at runtime must not be scored FAIL');
