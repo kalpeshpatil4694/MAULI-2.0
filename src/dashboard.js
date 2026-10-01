@@ -208,10 +208,13 @@ select.inp{cursor:pointer}
           <div class="card stat"><div class="stat-i">📦</div><div class="stat-v" id="sArt">0</div><div class="stat-l">Artifacts</div></div>
         </div>
         <div class="card">
-          <div class="card-h"><div class="card-t">⚡ Founder Command</div><div class="card-s">Tell MAULI what to build</div></div>
-          <textarea class="inp" id="cmdIn" placeholder="Example: Build a weather app for Android with live forecasts..." rows="3"></textarea>
+          <div class="card-h"><div class="card-t">⚡ Founder Command</div><div class="card-s">Pick the platform, then tell MAULI what to build</div></div>
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Build for</div>
+          <div id="platSel" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
+          <textarea class="inp" id="cmdIn" placeholder="Example: Build a weather app with live forecasts..." rows="3"></textarea>
           <div style="display:flex;gap:6px;margin-top:10px;align-items:center">
             <button class="btn btn-p" id="cmdBtn" onclick="sendCmd()">⚡ Execute</button>
+            <span id="cmdPlatHint" style="font-size:10px;color:var(--text2)"></span>
             <div class="loading" id="cmdLoad"><div class="spinner"></div></div>
           </div>
           <pre class="card" id="cmdRes" style="display:none;margin-top:10px;font-size:11px;max-height:250px;overflow:auto;font-family:monospace;background:var(--bg1)"></pre>
@@ -219,7 +222,7 @@ select.inp{cursor:pointer}
         <div class="card">
           <div class="card-h"><div class="card-t">🚀 Quick Actions</div></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-a btn-s" onclick="qCmd('Build a weather app for Android')">🌤️ Weather</button>
+            <button class="btn btn-a btn-s" onclick="qCmd('Build a weather app with live forecasts')">🌤️ Weather</button>
             <button class="btn btn-a btn-s" onclick="qCmd('Create an e-commerce platform')">🛒 E-Commerce</button>
             <button class="btn btn-a btn-s" onclick="qCmd('Build a calculator app')">🔢 Calculator</button>
             <button class="btn btn-a btn-s" onclick="qCmd('Create a music player app')">🎵 Music</button>
@@ -797,24 +800,44 @@ function renderApprovals(){
 }
 async function decideAppr(id,ok){try{await api('/api/approvals/'+id,{method:'POST',body:JSON.stringify({approved:ok})});toast(ok?'Approved':'Rejected','ok');loadState()}catch(e){toast(e.message,'err')}}
 
+// ─── PLATFORM SELECTOR ───
+// The target platform is chosen before the command is sent, so the product is built for it
+// from the start instead of being discovered when the founder clicks a build button later.
+let PLATFORMS=[{id:'web',label:'Web',icon:'🌐'},{id:'android',label:'Android',icon:'📱'},{id:'ios',label:'iOS',icon:'🍎'},{id:'desktop',label:'Desktop',icon:'🖥️'}];
+let SEL_PLATFORM='web';
+function renderPlatforms(){
+  const box=$('platSel');if(!box)return;
+  box.innerHTML=PLATFORMS.map(p=>'<button class="btn btn-s '+(p.id===SEL_PLATFORM?'btn-p':'btn-g')+'" data-plat="'+esc(p.id)+'" onclick="selPlat(\\''+esc(p.id)+'\\')" style="display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px">'+p.icon+' '+esc(p.label)+'</button>').join('');
+  const hint=$('cmdPlatHint');const cur=PLATFORMS.find(p=>p.id===SEL_PLATFORM);
+  if(hint)hint.textContent=cur?('Building for '+cur.label):'';
+}
+function selPlat(id){SEL_PLATFORM=id;renderPlatforms()}
+async function loadPlatforms(){
+  try{const r=await api('/api/platforms');const d=r.data||r;if(Array.isArray(d.platforms)&&d.platforms.length){PLATFORMS=d.platforms;if(d.default)SEL_PLATFORM=d.default;}}catch(_){}
+  renderPlatforms();
+}
+function platLabel(id){const p=PLATFORMS.find(x=>x.id===id);return p?(p.icon+' '+p.label):'🌐 Web'}
+
 // ─── COMMAND ───
 async function sendCmd(){
   const cmd=$('cmdIn').value.trim();if(!cmd){toast('Enter a command','err');return}
   $('cmdBtn').disabled=true;$('cmdLoad').classList.add('show');$('cmdRes').style.display='none';
-  try{const r=await api('/api/command',{method:'POST',body:JSON.stringify({command:cmd})});
+  try{const r=await api('/api/command',{method:'POST',body:JSON.stringify({command:cmd,platform:SEL_PLATFORM})});
     const queued=r.result||r;const rawResult=JSON.stringify(r.result||r,null,2);
     const project=queued?.project||queued?.result?.project||null;
+    const platform=queued?.platform?.platform||queued?.result?.platform?.platform||project?.platform||SEL_PLATFORM;
     $('cmdRes').style.display='block';
     $('cmdRes').textContent=JSON.stringify({
       status:queued?.status||queued?.result?.status||'queued',
       runId:queued?.runId||queued?.result?.runId||null,
-      project:project?{id:project.id,name:project.name,objective:project.objective,state:project.state,queuedAt:project.queuedAt}:null,
+      platform:platform,
+      project:project?{id:project.id,name:project.name,objective:project.objective,state:project.state,platform:project.platform,queuedAt:project.queuedAt}:null,
       tasks:Array.isArray(queued?.tasks)?queued.tasks.map(t=>({id:t.id,title:t.title,state:t.state,executor:t.executor})):[],
-      message:project?'Project created and sent to the execution scheduler.':'Command accepted; waiting for project state.'
+      message:project?('Project created for '+platLabel(platform)+' and sent to the execution scheduler.'):'Command accepted; waiting for project state.'
     },null,2);
-    toast(project?'Project created — execution started':'Command accepted','ok');$('cmdIn').value='';await loadState();
+    toast(project?('Project created for '+platLabel(platform)):'Command accepted','ok');$('cmdIn').value='';await loadState();
     if(project?.id){
-      setTimeout(async()=>{try{const d=await api('/api/projects/'+encodeURIComponent(project.id)+'/detail');const detail=d.detail||d.data?.detail;if(detail){$('cmdRes').textContent=JSON.stringify({status:detail.project?.state,project:detail.project,summary:detail.summary,tasks:detail.tasks?.map(t=>({id:t.id,title:t.title,state:t.state,executor:t.executor,verificationId:t.verificationId})),artifacts:detail.artifacts?.map(a=>({id:a.id,type:a.type,projectId:a.projectId}))},null,2);await loadState();}}catch(_){ }},1500);
+      setTimeout(async()=>{try{const d=await api('/api/projects/'+encodeURIComponent(project.id)+'/detail');const detail=d.detail||d.data?.detail;if(detail){$('cmdRes').textContent=JSON.stringify({status:detail.project?.state,platform:detail.project?.platform,project:detail.project,summary:detail.summary,tasks:detail.tasks?.map(t=>({id:t.id,title:t.title,state:t.state,executor:t.executor,verificationId:t.verificationId})),artifacts:detail.artifacts?.map(a=>({id:a.id,type:a.type,projectId:a.projectId}))},null,2);await loadState();}}catch(_){ }},1500);
     }
   }catch(e){$('cmdRes').style.display='block';$('cmdRes').textContent='Error: '+e.message;toast('Failed','err')}
   finally{$('cmdBtn').disabled=false;$('cmdLoad').classList.remove('show')}
@@ -862,8 +885,13 @@ async function renderLearning(){try{const r=await api('/api/learning/stats');con
 
 // ─── BUILDS ───
 async function loadBuilds(){let h='';for(const p of S.projects){const hasCode=S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
-  h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(p.name||p.objective||p.id)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(p.state)+'</div></div><div style="display:flex;gap:4px">';
-  if(hasCode)h+='<button class="btn btn-g btn-s bld-btn" data-pid="'+p.id+'" data-plat="android">📱 APK</button><button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="desktop">🖥️ EXE</button>';
+  h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(p.name||p.objective||p.id)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(p.state)+' · '+esc(platLabel(p.platform))+'</div></div><div style="display:flex;gap:4px">';
+  // Build for the platform the founder commissioned, not a hard-coded pair of buttons.
+  // Android gets an APK, desktop gets an EXE, and the web has nothing to package.
+  const bplat=p.platform||'web';
+  const bicon={android:'📱 APK',ios:'📱 IPA',desktop:'🖥️ EXE'}[bplat];
+  if(hasCode&&bicon)h+='<button class="btn btn-a btn-s bld-btn" data-pid="'+p.id+'" data-plat="'+esc(bplat)+'">'+bicon+'</button>';
+  else if(hasCode)h+='<span class="badge badge-g">🌐 Web</span>';
   else h+='<span class="badge badge-y">No code</span>';
   h+='</div></div>'}
   $('buildOut').innerHTML=h||'<div style="text-align:center;padding:20px;color:var(--text2)">No projects</div>'}
@@ -886,7 +914,7 @@ async function loadMcp(){try{const r=await api('/api/mcp/servers');const srv=r.s
 
 // ─── DOWNLOADS ───
 function loadDl(){let h='';for(const p of S.projects){const hasCode=S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
-  h+='<div style="padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;align-items:center;justify-content:space-between"><div style="flex:1"><b style="font-size:13px">'+esc(p.name||p.objective||p.id)+'</b><div style="font-size:10px;color:var(--text2);margin-top:2px"><span class="badge badge-'+badge(p.state)+'">'+esc(p.state)+'</span>'+(p.taskCount?' '+p.taskCount+' tasks':'')+'</div></div>';
+  h+='<div style="padding:10px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;align-items:center;justify-content:space-between"><div style="flex:1"><b style="font-size:13px">'+esc(p.name||p.objective||p.id)+'</b><div style="font-size:10px;color:var(--text2);margin-top:2px"><span class="badge badge-'+badge(p.state)+'">'+esc(p.state)+'</span>'+(p.taskCount?' · '+p.taskCount+' tasks':'')+' · '+esc(platLabel(p.platform))+'</div></div>';
   if(hasCode)h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥 Download</button>';
   else h+='<span style="font-size:10px;color:var(--text3)">No code</span>';
   h+='</div>'}
@@ -928,6 +956,11 @@ async function heartbeat(){
 // Immediately set status to Online — heartbeat confirms it
 if($('hText'))$('hText').textContent='System Online';
 if($('hDot'))$('hDot').classList.remove('off');
+
+// Paint the platform selector immediately, then reconcile it with the server's list so
+// the founder can pick a target before typing anything.
+renderPlatforms();
+loadPlatforms();
 
 // Fire-and-forget API calls
 fetch('/api/heartbeat',{cache:'no-store'}).then(r=>r.json()).then(j=>{

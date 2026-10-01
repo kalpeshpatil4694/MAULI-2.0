@@ -25,8 +25,11 @@ function projectStateFromTasks(project) {
   return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
 }
 
-export function createProject({ name, objective, founderCommand = '', requirements = [], priority = 'normal', commandRunId = null, commandReceivedAt = null }) {
-  const project = store.put('projects', { id: id('project'), name, objective, founderCommand, requirements, priority, state: 'planning', milestones: [], commandRunId, commandReceivedAt:commandReceivedAt||now(), commandStartedAt:commandReceivedAt||now(), createdAt: commandReceivedAt||now() });
+export function createProject({ name, objective, founderCommand = '', requirements = [], priority = 'normal', commandRunId = null, commandReceivedAt = null, platform = null }) {
+  // The target platform is part of the command, not a build-time afterthought: it is
+  // recorded with the project so every later step — planning, generation, packaging and
+  // the delivery manifest — builds for what the founder actually asked for.
+  const project = store.put('projects', { id: id('project'), name, objective, founderCommand, requirements, priority, platform: platform ?? null, state: 'planning', milestones: [], commandRunId, commandReceivedAt:commandReceivedAt||now(), commandStartedAt:commandReceivedAt||now(), createdAt: commandReceivedAt||now() });
   store.addEvent('project.created', project); return project;
 }
 
