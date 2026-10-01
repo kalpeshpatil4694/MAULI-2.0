@@ -261,9 +261,15 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
   const literalCalls = [];
   const seenCalls = new Set();
   const collectHandlers = (markup) => {
-    for (const m of String(markup ?? '').matchAll(/\son[a-z]+\s*=\s*["']([^"']*)["']/gi)) {
-      for (const call of m[1].matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) refs.add(call[1]);
-      for (const call of m[1].matchAll(LITERAL_CALL)) {
+    // Capture the attribute value using its OWN quote character as the terminator. A
+    // character class of [^"'] stopped at the first quote of the argument, so
+    // onclick="appendValue('7')" yielded the body "appendValue(" — truncated, unparseable,
+    // and the literal-argument replay silently never ran. A delivered calculator pressed no
+    // keys at all and was reported as a product with nothing that works.
+    for (const m of String(markup ?? '').matchAll(/\son[a-z]+\s*=\s*(["'])([\s\S]*?)\1/gi)) {
+      const body = m[2];
+      for (const call of body.matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) refs.add(call[1]);
+      for (const call of body.matchAll(LITERAL_CALL)) {
         const args = (call[2] ?? '').trim();
         if (!args || !LITERAL_ARGS.test(args) || JS_KEYWORDS.has(call[1])) continue;
         const key = call[1] + '(' + args + ')';
@@ -394,6 +400,25 @@ export function runSelfTest() {
   ];
   const domResult = verifyGeneratedApp(domApi, { objective: 'Build a list app', requirements: ['Add items to a list'] });
   check(domResult.verdict === 'functional', 'an appendChild-rendered app is not mistaken for a dead page', `verdict=${domResult.verdict}, mutations=${domResult.mutatedElements}`);
+
+  // A working app whose controls take a quoted argument in the markup, as calculators and
+  // boards do: onclick="appendValue('7')". The attribute scanner used [^"']*, so it stopped
+  // at the argument's own quote, produced the unparseable body "appendValue(", and never
+  // replayed a single key. A delivered calculator reported 0 mutations and was called
+  // "not a working product" while pressing its digits worked perfectly.
+  const keypad = [
+    {
+      path: 'www/index.html',
+      content: '<!DOCTYPE html><html><body><div id="display">0</div><button onclick="appendValue(\'7\')">7</button><button onclick="clearDisplay()">C</button><script src="app.js"></script></body></html>'
+    },
+    {
+      path: 'www/app.js',
+      content: 'var v="0";function updateDisplay(){document.getElementById("display").textContent=v;}function appendValue(d){if(v==="0"){v=d}else{v=v+d}updateDisplay();}function clearDisplay(){v="0";updateDisplay();}'
+    },
+    { path: 'package.json', content: '{"name":"calc","version":"1.0.0"}' }
+  ];
+  const keypadResult = verifyGeneratedApp(keypad, { objective: 'Build a calculator', requirements: ['Press digits'] });
+  check(keypadResult.verdict === 'functional', 'a quoted-argument control is actually pressed', `verdict=${keypadResult.verdict}, mutations=${keypadResult.mutatedElements}`);
 
   // A truly broken app: the markup calls a handler that was never defined.
   const broken = [{ path: 'www/index.html', content: '<!DOCTYPE html><html><body><button onclick="saveItem()">Save</button></body></html>' }];
