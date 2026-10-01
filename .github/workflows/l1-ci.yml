@@ -49,6 +49,13 @@ jobs:
       - name: Generated-app runtime verification
         run: npm run test:runtime
 
+      # Executes a generated product end to end: its Worker runs against a real D1 binding,
+      # its session is enforced, its data survives a refresh and its live channel carries a
+      # write to another client. Also proves the journey CATCHES a backend that fakes
+      # success — "the backend is executed, not scanned".
+      - name: Founder user journey (real backend execution)
+        run: npm run verify:journey
+
       - name: Security + governance tests
         run: npm run test:security
 
