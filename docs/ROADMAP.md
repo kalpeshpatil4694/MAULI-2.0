@@ -85,7 +85,7 @@ This is a single-system build roadmap, not a user-facing batch process. Componen
 ## Deployment and Hardening
 
 - Cloudflare backend integration
-- Vercel UI deployment
+- Cloudflare Workers dashboard (served by the Worker itself; no separate UI host)
 - environment configuration
 - CI checks
 - integration tests

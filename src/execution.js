@@ -1,7 +1,7 @@
 // MAULI 2.0 — execution lifecycle primitives.
 // Candidate discovery and stale-run recovery are intentionally separate.
 
-import { id, now } from './core.js';
+import { id, now, withDeadline } from './core.js';
 import { store } from './store.js';
 import { executeTool } from './tools.js';
 import { startTask, markVerifying, completeTask, failTask } from './tasks.js';
@@ -14,6 +14,16 @@ export { registerExecutor, listExecutors, grantExecutor } from './executor-regis
 
 const EXECUTION_LEASE_MS = 90_000;
 const HEARTBEAT_INTERVAL_MS = 60_000;
+// A task must finish well inside a cron window or it is not making progress. The default is
+// deliberately larger than the executor's own budget (functional-code-executor allows two
+// 40s AI attempts) so a slow-but-working generation is never killed by this, while an
+// executor that never settles is still converted into an ordinary failure.
+const DEFAULT_TASK_TIMEOUT_MS = 180_000;
+// Operators (and the local durable-path harness) need to be able to shorten this to see a
+// wedged execution fail fast instead of waiting out the full budget.
+function taskTimeoutMs(context = {}) {
+  return Number(context.taskTimeoutMs ?? context.env?.MAULI_TASK_TIMEOUT_MS ?? DEFAULT_TASK_TIMEOUT_MS);
+}
 const MAX_RECOVERY_ATTEMPTS = 3;
 
 function persistExecution(record) { store.put('executions', { ...record, status:record.state, executionId:record.id }); return record; }
@@ -41,11 +51,13 @@ export async function executeTask(task,context={}) {
     if(!executor)throw new Error(`No executor registered: ${executorName}`);
     const scope=getExecutorScope(executorName,executor.scope??'internal');if(scope==='external'&&!context.allowExternal)throw new Error('External execution permission is not granted');if((executor.risk==='critical'||task.risk==='critical')&&!context.approved)throw new Error('Critical execution requires explicit approval');
     const callTool=(name,input={})=>executeTool(name,input,{...context,agentId:run.agentId,projectId:task.projectId,approved:context.approved,approvalId:context.approvalId});
-    const requiredTools=await authorizeRequiredTools(task,{...context,agentId:run.agentId,projectId:task.projectId},callTool);
+    // The deadline covers tool authorization as well as the executor. A tool that awaits a
+    // socket was the other way a tick could stop returning, and it happens before the
+    // executor is ever reached.
     // No heartbeat here: the run was written with heartbeatAt = now() a moment ago and the
     // lease is 90s, so refreshing it can only rewrite the same fact. It was a whole extra
     // row write per task for no decision it could ever influence.
-    const result=await executor.handler({task,...context,agentId:run.agentId,callTool,requiredTools});const timestampDone=now();const completed={...store.get('runs',run.id)??run,state:'completed',result,requiredTools,completedAt:timestampDone,heartbeatAt:timestampDone,recoverable:false,id:run.id};store.put('runs',completed);persistExecution(completed);store.addEvent('execution.completed',completed);return publicExecution(completed);
+    const {result,requiredTools}=await withDeadline((async()=>{const authorized=await authorizeRequiredTools(task,{...context,agentId:run.agentId,projectId:task.projectId},callTool);const value=await executor.handler({task,...context,agentId:run.agentId,callTool,requiredTools:authorized});return{result:value,requiredTools:authorized};})(),taskTimeoutMs(context),`task ${executorName}`);const timestampDone=now();const completed={...store.get('runs',run.id)??run,state:'completed',result,requiredTools,completedAt:timestampDone,heartbeatAt:timestampDone,recoverable:false,id:run.id};store.put('runs',completed);persistExecution(completed);store.addEvent('execution.completed',completed);return publicExecution(completed);
   }catch(error){const timestampFailed=now();const failed={...store.get('runs',run.id)??run,state:'failed',error:error?.message??String(error),completedAt:timestampFailed,heartbeatAt:timestampFailed,recoverable:false,id:run.id};store.put('runs',failed);persistExecution(failed);store.addEvent('execution.failed',failed);return publicExecution(failed);
   } finally {
     clearInterval(heartbeatTimer);

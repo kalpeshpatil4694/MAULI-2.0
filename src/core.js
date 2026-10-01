@@ -71,3 +71,21 @@ export function route(path, method, expectedPath, expectedMethod = 'GET') {
 }
 
 export const capability = (name, description, tools = []) => ({ name, description, tools });
+
+// Reject a promise that has not settled within `ms`.
+//
+// Nothing on the execution path used to bound an outbound call. A Workers AI call (or any
+// executor/tool awaiting a socket) that never settled held its `await` forever: the run
+// heartbeat interval kept writing, so the run never looked stale, so recoverStaleTasks()
+// never requeued the task, and the scheduler tick never returned — one wedged call could
+// stall its project permanently. A deadline turns that hang into an ordinary failure the
+// existing retry/recovery path already knows how to handle.
+export function withDeadline(promise, ms, label = 'operation') {
+  const limit = Number(ms);
+  if (!Number.isFinite(limit) || limit <= 0) return Promise.resolve(promise);
+  let timer;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${limit}ms`)), limit);
+  });
+  return Promise.race([Promise.resolve(promise), guard]).finally(() => clearTimeout(timer));
+}

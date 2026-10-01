@@ -31,7 +31,6 @@ const FREE_SERVICES = {
     { name: 'Ollama', url: 'https://ollama.com', tier: 'Unlimited (local)', category: 'LLM', best: true }
   ],
   storage: [
-    { name: 'Cloudflare R2', url: 'https://r2.cloudflare.com', tier: '10GB free', category: 'Object Storage', best: true },
     { name: 'Backblaze B2', url: 'https://backblaze.com', tier: '10GB free', category: 'Object Storage' },
     { name: 'Cloudinary', url: 'https://cloudinary.com', tier: '25GB', category: 'Image/Video' },
     { name: 'ImgBB', url: 'https://imgbb.com', tier: 'Unlimited', category: 'Image Hosting' }

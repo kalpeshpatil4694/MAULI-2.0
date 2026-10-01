@@ -1,7 +1,54 @@
 import { canWriteD1, reserveD1Rows, recordD1Write, recordD1Read, noteD1WriteBlocked, d1WriteBlockedSnapshot } from './d1-quota.js';
 import { queueQuotaSnapshot } from './queue-quota.js';
+import { withDeadline } from './core.js';
 
 export function hasD1(env) { return Boolean(env?.DB && typeof env.DB.prepare === 'function'); }
+
+// A D1 statement that never settles is the one failure mode nothing downstream could survive:
+// store.flush() awaited it forever, so the scheduler tick never returned, so the per-project
+// execution lock was never released and every later tick saw "coordinator-busy" for the whole
+// lease — the project sat in "active" with tasks assigned and nothing running. Every statement
+// therefore runs under a deadline and surfaces as an ordinary error the caller already handles.
+const DEFAULT_D1_TIMEOUT_MS = 15_000;
+export function d1TimeoutMs(env) {
+  const configured = Number(env?.MAULI_D1_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_D1_TIMEOUT_MS;
+}
+
+// Returns an env whose DB binding executes every statement under d1TimeoutMs. Applied once per
+// invocation in worker.js so persistence, maintenance and the scheduler are all covered without
+// threading a wrapper through every call site.
+export function boundedD1(env) {
+  if (!hasD1(env) || env.__mauliD1Bounded) return env;
+  const limit = d1TimeoutMs(env);
+  const db = env.DB;
+  const statementProxy = (statement, sql) => new Proxy(statement, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property !== 'run' && property !== 'first' && property !== 'all') {
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+      return (...args) => withDeadline(
+        Reflect.apply(value, target, args),
+        limit,
+        `d1 ${String(property)}: ${String(sql).slice(0, 80)}`
+      );
+    }
+  });
+  const dbProxy = new Proxy(db, {
+    get(target, property) {
+      if (property === 'prepare') {
+        return (sql) => statementProxy(Reflect.apply(target.prepare, target, [sql]), sql);
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+  });
+  const copy = Object.create(Object.getPrototypeOf(env) ?? Object.prototype, Object.getOwnPropertyDescriptors(env));
+  Object.defineProperty(copy, 'DB', { value: dbProxy, enumerable: true, configurable: true, writable: true });
+  copy.__mauliD1Bounded = true;
+  return copy;
+}
 
 export async function ensureSchema(env) {
   if (!hasD1(env)) return false;
@@ -185,9 +232,6 @@ const FREE_LIMITS = {
   // code generation runs on the cheap code model (~85 neurons per app) so the 10,000 free
   // neurons a day now cover ~115 generations instead of ~17 on the 70B chat model.
   workersAiSafeRequestsPerDay: 90,
-  r2StorageGBMonth: 10,
-  r2ClassAOperationsMonth: 1000000,
-  r2ClassBOperationsMonth: 10000000,
   queuesOperationsPerDay: 10000,
   hyperdriveQueriesPerDay: 100000
 };
@@ -319,7 +363,7 @@ export async function getD1Usage(env) {
 export async function getUsageReport(env) {
   const d1=await getD1Usage(env);const limits=FREE_LIMITS;const usedMB=parseFloat(d1.totalMB??'0');
   const queues=queueQuotaSnapshot(env);
-  return {limits,d1:{connected:hasD1(env),usedMB,limitMB:limits.d1DatabaseMB,remainingMB:Math.max(0,limits.d1DatabaseMB-usedMB).toFixed(2),pct:Math.min(100,(usedMB/limits.d1DatabaseMB)*100).toFixed(1),rows:d1.totalRows,events:d1.events,breakdown:d1.types},workers:{requestsPerDay:limits.workersRequestsPerDay,safeRequestsPerDay:limits.workersSafeRequestsPerDay,cpuMs:limits.workersCpuMs,memoryMB:limits.workersMemoryMB,subrequests:limits.workersSubrequests,configuredSubrequests:limits.workersConfiguredSubrequests,sizeMB:limits.workersSizeMB,cronTriggers:limits.cronTriggersPerAccount},d1Free:{rowsReadPerDay:limits.d1RowsReadPerDay,rowsWrittenPerDay:limits.d1RowsWrittenPerDay,queriesPerInvocation:limits.d1QueriesPerInvocation},kv:{readsPerDay:limits.kvReadsPerDay,writesPerDay:limits.kvWritesPerDay,deletesPerDay:limits.kvDeletesPerDay,listRequestsPerDay:limits.kvListRequestsPerDay,storageMB:limits.kvStorageMB},workersAI:{freeNeuronsPerDay:limits.workersAiNeuronsPerDay,safeRequestsPerDay:limits.workersAiSafeRequestsPerDay},r2:{storageGBMonth:limits.r2StorageGBMonth,classAOperationsMonth:limits.r2ClassAOperationsMonth,classBOperationsMonth:limits.r2ClassBOperationsMonth},queues:{operationsPerDay:limits.queuesOperationsPerDay,safeOperationsPerDay:queues.safeLimit,used:queues.used,remaining:queues.remaining,pct:queues.percent,status:queues.status,protectionMode:queues.protectionMode},hyperdrive:{queriesPerDay:limits.hyperdriveQueriesPerDay},account:{d1StorageMB:limits.d1AccountMB,d1Databases:10}};
+  return {limits,d1:{connected:hasD1(env),usedMB,limitMB:limits.d1DatabaseMB,remainingMB:Math.max(0,limits.d1DatabaseMB-usedMB).toFixed(2),pct:Math.min(100,(usedMB/limits.d1DatabaseMB)*100).toFixed(1),rows:d1.totalRows,events:d1.events,breakdown:d1.types},workers:{requestsPerDay:limits.workersRequestsPerDay,safeRequestsPerDay:limits.workersSafeRequestsPerDay,cpuMs:limits.workersCpuMs,memoryMB:limits.workersMemoryMB,subrequests:limits.workersSubrequests,configuredSubrequests:limits.workersConfiguredSubrequests,sizeMB:limits.workersSizeMB,cronTriggers:limits.cronTriggersPerAccount},d1Free:{rowsReadPerDay:limits.d1RowsReadPerDay,rowsWrittenPerDay:limits.d1RowsWrittenPerDay,queriesPerInvocation:limits.d1QueriesPerInvocation},kv:{readsPerDay:limits.kvReadsPerDay,writesPerDay:limits.kvWritesPerDay,deletesPerDay:limits.kvDeletesPerDay,listRequestsPerDay:limits.kvListRequestsPerDay,storageMB:limits.kvStorageMB},workersAI:{freeNeuronsPerDay:limits.workersAiNeuronsPerDay,safeRequestsPerDay:limits.workersAiSafeRequestsPerDay},queues:{operationsPerDay:limits.queuesOperationsPerDay,safeOperationsPerDay:queues.safeLimit,used:queues.used,remaining:queues.remaining,pct:queues.percent,status:queues.status,protectionMode:queues.protectionMode},hyperdrive:{queriesPerDay:limits.hyperdriveQueriesPerDay},account:{d1StorageMB:limits.d1AccountMB,d1Databases:10}};
 }
 
 export async function cleanupD1(env, options = {}) {
