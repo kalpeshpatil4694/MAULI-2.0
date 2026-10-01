@@ -1,6 +1,7 @@
 import { now } from './core.js';
 import { store } from './store.js';
 import { registerArtifact } from './artifacts.js';
+import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
 
 const REQUIRED_GATES=['build','test','requirements','security','qa','integrity'];
 
@@ -13,6 +14,25 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
   const failed = tasks.filter(t => t.state === 'failed');
   const finalQa = tasks.filter(t => t.finalProjectVerification);
   const codeArtifacts = artifacts.filter(a => a.type === 'code-workspace');
+
+  // "ZIP creation is not delivery success." The delivered code is the union of every
+  // agent's artifact, judged by the same fidelity gate the QA pipeline ran: a project
+  // whose app is a demo, a placeholder or a dead button must never produce a
+  // final-delivery artifact, even on the legacy path that does not enforce gates.
+  const mergedFiles=[];
+  const seenPaths=new Set();
+  for(const a of codeArtifacts){
+    for(const f of (a.content?.files??[])){
+      if(!f||typeof f.path!=='string'||typeof f.content!=='string'||seenPaths.has(f.path)) continue;
+      seenPaths.add(f.path); mergedFiles.push({path:f.path,content:f.content});
+    }
+  }
+  const fidelity=mergedFiles.length
+    ? analyzeGeneratedApp(mergedFiles,{objective:project.objective??'',requirements:project.requirements??[]})
+    : null;
+  if(fidelity&&!fidelity.passed){
+    throw new Error('Delivery blocked: generated app fails functional fidelity ('+fidelity.violations.map(v=>v.code).join(', ')+')');
+  }
   const gates = new Map(tasks.filter(t => t.pipelineGate && t.gateType).map(t => [t.gateType,t]));
 
   if (!tasks.length) throw new Error('Delivery blocked: project has no tasks');
@@ -56,6 +76,22 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
       })),
       passed:true
     },
+    // Requirement coverage the founder asked for. The Worker's honest statuses are
+    // keyword evidence ('IMPLEMENTED') or its absence ('FAILED'); the Node runtime
+    // verifier (scripts/verify-generated-app.mjs, run in CI) upgrades evidence to
+    // executed proof and BLOCKED covers projects whose code agents never ran.
+    requirementCoverage:{
+      basis:'static fidelity gate over executed source (HTML/JS/CSS); runtime proof via npm run test:runtime in CI',
+      statuses:(mergedFiles.length
+        ? evaluateRequirementCoverage(project.requirements??[],mergedFiles).map(c=>({requirement:c.requirement,status:c.status==='IMPLEMENTED'?'IMPLEMENTED':'FAILED',matched:c.matched}))
+        : (project.requirements??[]).map(r=>({requirement:String(r),status:'BLOCKED',matched:[]})))
+    },
+    functionalFidelity:fidelity?{
+      passed:fidelity.passed,
+      score:fidelity.score,
+      violations:fidelity.violations.map(v=>v.code),
+      filesAnalyzed:mergedFiles.length
+    }:null,
     summary: {
       totalTasks: tasks.length,
       completedTasks: completed.length,

@@ -15,6 +15,8 @@
 //   node scripts/verify-generated-app.mjs --self-test      # proves the verifier works
 import vm from 'node:vm';
 import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { JS_KEYWORDS } from '../src/generated-app-quality.js';
 import { analyzeGeneratedApp } from '../src/generated-app-quality.js';
 
 const SCRIPT_TIMEOUT_MS = 500;
@@ -108,7 +110,9 @@ function splitScripts(files) {
     html += String(f.content ?? '');
     for (const m of String(f.content ?? '').matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) inline.push(m[1]);
   }
-  const external = files.filter((f) => /\.(m?js)$/i.test(f.path)).map((f) => String(f.content ?? ''));
+  // server.js / node scripts are not part of the browser app; executing them in the DOM
+  // shim only produces false "broken" verdicts, so they are skipped.
+  const external = files.filter((f) => /\.(m?js)$/i.test(f.path) && !/^server\.[cm]?js$/i.test(f.path)).map((f) => String(f.content ?? ''));
   return { inline, external, html };
 }
 
@@ -127,13 +131,18 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
   const storage = new Map();
   const errors = [];
   const timers = [];
+  // Window/document listeners are collected and fired after the scripts run, the way a
+  // browser fires DOMContentLoaded/load. Lots of real apps initialise inside a listener;
+  // never firing it made a working app look dead.
+  const lifecycleListeners = {};
+  const onLifecycle = (type, fn) => { if (typeof fn === 'function') (lifecycleListeners[String(type)] ||= []).push(fn); };
   const document = {
     getElementById: (id) => elements.get(String(id)) ?? null,
     querySelector: (sel) => (typeof sel === 'string' && sel.startsWith('#') ? elements.get(sel.slice(1)) ?? null : null),
     querySelectorAll: () => [],
     createElement: (tag) => makeElement(tag),
     createTextNode: (t) => ({ textContent: t }),
-    addEventListener: () => {},
+    addEventListener: onLifecycle,
     removeEventListener: () => {},
     body: makeElement('body'),
     head: makeElement('head'),
@@ -167,7 +176,14 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
     CustomEvent: class CustomEvent { constructor(type, init) { this.type = type; this.detail = init?.detail; } },
     Math, JSON, Date, Array, Object, String, Number, Boolean, RegExp, Error, Map, Set, Promise, Intl, isNaN, parseInt, parseFloat, encodeURIComponent, decodeURIComponent
   };
+  // window must exist AND be the same object as globalThis — code like
+  // `window.addEventListener('load', ...)` or `window.onload = fn` is normal browser
+  // practice, not an execution failure.
   sandbox.window = sandbox;
+  sandbox.addEventListener = onLifecycle;
+  sandbox.removeEventListener = () => {};
+  sandbox.dispatchEvent = () => true;
+  sandbox.onload = null;
   sandbox.globalThis = sandbox;
   sandbox.self = sandbox;
 
@@ -185,33 +201,96 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
     }
   }
 
-  // Which functions does the app expose, and which does its markup call?
+  // Fire the lifecycle events a browser would fire, in order.
+  for (const type of ['DOMContentLoaded', 'load']) {
+    for (const fn of lifecycleListeners[type] || []) {
+      try { fn({ type, target: sandbox }); } catch (error) {
+        errors.push({ stage: 'event', type, message: String(error?.message ?? error).slice(0, 300) });
+      }
+    }
+  }
+
+  // Which functions does the app expose, and which does its markup call? Boards, lists
+  // and calculators build their controls in JavaScript (`innerHTML` with `onclick="tap(3)"`),
+  // so the rendered markup is scanned too — otherwise those apps look like dead pages.
   const ctxFns = Object.keys(ctx).filter((k) => typeof ctx[k] === 'function');
   const refs = new Set();
-  for (const m of html.matchAll(/\son[a-z]+\s*=\s*["']([^"']*)["']/gi)) {
-    for (const call of m[1].matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) refs.add(call[1]);
-  }
-  const missingHandlers = [...refs].filter((name) => typeof ctx[name] !== 'function');
+  const LITERAL_CALL = /([A-Za-z_$][\w$]*)\s*\(([^()]*)\)/g;
+  const LITERAL_ARGS = /^\s*(?:'[^']*'|"[^"]*"|-?\d+(?:\.\d+)?|true|false|null)(?:\s*,\s*(?:'[^']*'|"[^"]*"|-?\d+(?:\.\d+)?|true|false|null))*\s*$/;
+  // Literal-argument calls the markup actually wires: `onclick="tap(5)"`,
+  // `onclick="ins('7')"`. A journey that only presses zero-argument functions cannot tell
+  // a chess board or a calculator from a dead page, because their real entry points take
+  // an argument. These are replayed exactly as written (never evaluated as expressions).
+  const literalCalls = [];
+  const seenCalls = new Set();
+  const collectHandlers = (markup) => {
+    for (const m of String(markup ?? '').matchAll(/\son[a-z]+\s*=\s*["']([^"']*)["']/gi)) {
+      for (const call of m[1].matchAll(/([A-Za-z_$][\w$]*)\s*\(/g)) refs.add(call[1]);
+      for (const call of m[1].matchAll(LITERAL_CALL)) {
+        const args = (call[2] ?? '').trim();
+        if (!args || !LITERAL_ARGS.test(args) || JS_KEYWORDS.has(call[1])) continue;
+        const key = call[1] + '(' + args + ')';
+        // Generous bound: a chess board wires 64 squares, and only the later ones hold the
+        // pieces that are actually movable at the start position.
+        if (seenCalls.has(key) || literalCalls.length >= 160) continue;
+        seenCalls.add(key);
+        literalCalls.push({ name: call[1], args });
+      }
+    }
+  };
+  collectHandlers(html);
+  // Boards, lists and calculators build their controls in JavaScript (`innerHTML` with
+  // `onclick="tap(3)"`), so the rendered markup is scanned too — otherwise those apps look
+  // like dead pages to the journey.
+  for (const [, el] of elements) if (el.innerHTML) collectHandlers(el.innerHTML);
+  // Inline handlers like `onkeydown="if(event.key==='Enter')go()"` legitimately contain
+  // control-flow keywords; only real identifiers can be missing handler functions.
+  const missingHandlers = [...refs].filter((name) => !JS_KEYWORDS.has(name) && typeof ctx[name] !== 'function');
 
   // Invoke every zero-argument handler the markup references and see whether anything
   // observably changes. A handler that throws, or that changes nothing at all, is not a
-  // working feature.
+  // working feature. Two passes: first with the form as it loads (the app's validation /
+  // error path), then with text inputs filled — the "user typed something" path. An
+  // add() that refuses an empty input is correct behaviour, not a dead button, so the
+  // happy path must be simulated before calling the app static.
   const before = snapshot(elements, storage);
   const invoked = [];
   let mutatedElements = 0;
-  for (const name of refs) {
-    if (missingHandlers.includes(name)) continue;
-    const arity = ctx[name].length;
-    if (arity > 0) { invoked.push({ name, status: 'skipped-args' }); continue; }
-    try {
-      new vm.Script(`${name}()`, { filename: `invoke-${name}.js` }).runInContext(ctx, { timeout: timeoutMs });
-      const after = snapshot(elements, storage);
-      const mutations = diffCount(before, after);
-      mutatedElements += mutations;
-      for (const [id, v] of after) before.set(id, v);
-      invoked.push({ name, status: mutations > 0 ? 'mutated' : 'no-op', mutations });
-    } catch (error) {
-      invoked.push({ name, status: 'threw', message: String(error?.message ?? error).slice(0, 200) });
+  for (const fillInputs of [false, true]) {
+    if (fillInputs) {
+      for (const [, el] of elements) {
+        const tag = String(el.tagName).toLowerCase();
+        if ((tag === 'input' || tag === 'textarea') && !el.value) el.value = 'mauli-verify';
+      }
+    }
+    for (const name of refs) {
+      if (missingHandlers.includes(name)) continue;
+      if (typeof ctx[name] !== 'function') continue; // control-flow keywords (if/for…) are not invokable handlers
+      const arity = ctx[name].length;
+      if (arity > 0) { invoked.push({ name, status: 'skipped-args' }); continue; }
+      try {
+        new vm.Script(`${name}()`, { filename: `invoke-${name}.js` }).runInContext(ctx, { timeout: timeoutMs });
+        const after = snapshot(elements, storage);
+        const mutations = diffCount(before, after);
+        mutatedElements += mutations;
+        for (const [id, v] of after) before.set(id, v);
+        invoked.push({ name, status: mutations > 0 ? 'mutated' : 'no-op', mutations });
+      } catch (error) {
+        invoked.push({ name, status: 'threw', message: String(error?.message ?? error).slice(0, 200) });
+      }
+    }
+    for (const call of literalCalls) {
+      if (typeof ctx[call.name] !== 'function' || missingHandlers.includes(call.name)) continue;
+      try {
+        new vm.Script(`${call.name}(${call.args})`, { filename: `invoke-${call.name}.js` }).runInContext(ctx, { timeout: timeoutMs });
+        const after = snapshot(elements, storage);
+        const mutations = diffCount(before, after);
+        mutatedElements += mutations;
+        for (const [id, v] of after) before.set(id, v);
+        invoked.push({ name: call.name, args: call.args, status: mutations > 0 ? 'mutated' : 'no-op', mutations });
+      } catch (error) {
+        invoked.push({ name: call.name, args: call.args, status: 'threw', message: String(error?.message ?? error).slice(0, 200) });
+      }
     }
   }
 
@@ -274,11 +353,36 @@ export function runSelfTest() {
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (invokedDirectly) {
+if (invokedDirectly && !process.argv.includes('--verify')) {
   if (process.argv.includes('--self-test')) {
     runSelfTest();
   } else {
     console.log('Usage: node scripts/verify-generated-app.mjs --self-test');
     console.log('(Runtime verification of a live project runs from CI or the durability harness.)');
   }
+}
+
+// --verify <jsonPath>: the founder-driven end-to-end journey check. Loads a code
+// workspace exported from a real command run ({files,objective,requirements}), executes
+// it, presses every button, and demands the acceptance criterion: the app must actually
+// DO something and persist its state. Exits non-zero otherwise, so CI can gate on it.
+if (process.argv.includes('--verify')) {
+  const idx = process.argv.indexOf('--verify');
+  const file = process.argv[idx + 1];
+  if (!file) { console.error('--verify requires a JSON file path'); process.exit(2); }
+  const workspace = JSON.parse(readFileSync(file, 'utf8'));
+  const result = verifyGeneratedApp(workspace.files ?? [], {
+    objective: workspace.objective ?? '',
+    requirements: workspace.requirements ?? [],
+    timeoutMs: 800
+  });
+  console.log('objective :', workspace.objective ?? '(none)');
+  console.log('static    :', result.quality.passed ? 'PASS' : 'FAIL', result.quality.violations.map(v => v.code).join(', ') || '(no violations)');
+  console.log('coverage  :', result.quality.coverage.map(c => c.status + ': ' + c.requirement).join(' | ') || '(no requirements)');
+  console.log('runtime   :', result.verdict, '| handlers:', result.handlers, '| mutations:', result.mutatedElements, '| storage:', result.storageChanged);
+  console.log('journey   :', result.invoked.map(i => i.name + ':' + i.status).join(', ') || '(no handlers invoked)');
+  const journeyOk = result.invoked.some(i => i.status === 'mutated') || result.storageChanged;
+  const ok = result.quality.passed && result.verdict === 'functional' && journeyOk;
+  console.log(ok ? 'ACCEPTANCE: PASS — the generated app actually works' : 'ACCEPTANCE: FAIL — this is not a working product yet');
+  process.exitCode = ok ? 0 : 1;
 }

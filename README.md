@@ -78,6 +78,18 @@ Founder command (POST /api/command)
 Dashboard polling (`GET /api/state`, `GET /api/projects/:id/detail`) is strictly read-only:
 it never writes to D1 and never starts execution.
 
+### A working product, not a demo
+
+"Generated code is not proof of functionality." Generation runs a bounded repair loop
+(Detect → Diagnose → Fix → Rebuild → Retest) against the functional fidelity gate, the QA
+gate judges the merged code of every agent, and final delivery refuses an app that is only a
+demo — reporting per-requirement coverage statuses instead of claiming success. Verify any
+downloaded code workspace on demand:
+
+```bash
+node scripts/verify-generated-app.mjs --verify workspace.json   # exits non-zero if it does not work
+```
+
 ## CI/CD
 
 The pipeline in `.github/workflows/l1-ci.yml` runs, in order:

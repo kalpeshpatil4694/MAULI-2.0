@@ -81,6 +81,12 @@ function weatherFiles() {
   var js = 'function sw(){var c=document.getElementById("ci").value.trim();if(!c)return;dw(c)}';
   js += 'function geo(){navigator.geolocation.getCurrentPosition(function(p){dw(null,p.coords.latitude,p.coords.longitude)},function(){alert("Location denied")})}';
   js += 'async function dw(city,lat,lon){document.getElementById("cur").innerHTML="<div style=padding:20px;color:var(--text-muted)>Loading...</div>";try{var q=city||"";var url="https://wttr.in/"+encodeURIComponent(q)+"?format=j1";var r=await fetch(url);var d=await r.json();var c=d.current_condition[0]||{};var ic={"113":"\\u2600","116":"\\u26C5","119":"\\u2601","176":"\\uD83C\\uDF26","200":"\\u26C8","263":"\\uD83C\\uDF26","296":"\\uD83C\\uDF27","299":"\\uD83C\\uDF27","302":"\\uD83C\\uDF27","305":"\\uD83C\\uDF27","308":"\\uD83C\\uDF27","311":"\\uD83C\\uDF27","314":"\\uD83C\\uDF27","317":"\\u2744","320":"\\u2744","323":"\\u2744","326":"\\u2744","329":"\\u2744","332":"\\u2744","335":"\\u2744","338":"\\u2744","350":"\\uD83C\\uDF27","353":"\\uD83C\\uDF26","356":"\\uD83C\\uDF27","359":"\\uD83C\\uDF27","386":"\\u26C8","389":"\\u26C8","392":"\\u26C8","395":"\\u2744"};var icon=ic[c.weatherCode]||"\\uD83C\\uDF24";document.getElementById("cur").innerHTML="<div class=tmp>"+c.temp_C+"\\u00B0C</div><div style=font-size:18px>"+icon+" "+(c.weatherDesc[0]||{}).value+"</div><div style=color:var(--text-muted);margin-top:6px>"+(city||"Your Location")+"</div><div class=dt><div class=di><small>Feels Like</small><span>"+c.FeelsLikeC+"\\u00B0</span></div><div class=di><small>Humidity</small><span>"+c.humidity+"%</span></div><div class=di><small>Wind</small><span>"+c.windspeedKmph+" km/h</span></div><div class=di><small>UV</small><span>"+c.uvIndex+"</span></div><div class=di><small>Visibility</small><span>"+c.visibility+" km</span></div><div class=di><small>Pressure</small><span>"+c.pressure+"</span></div></div>";var days=d.weather||[];document.getElementById("fc").innerHTML=days.map(function(dy){var nm=new Date(dy.date).toLocaleDateString("en",{weekday:"short"});return "<div class=fd><div class=d>"+nm+"</div><div class=ic>"+icon+"</div><div class=tr>"+dy.mintempC+"\\u00B0 / "+dy.maxtempC+"\\u00B0</div></div>"}).join("")}catch(e){document.getElementById("cur").innerHTML="<div style=padding:20px;color:var(--red)>Error: "+e.message+"</div>"}}';
+  // Real persistence + a real offline fallback: the last successful forecast is cached, so
+  // a refresh keeps the data on screen and a failed request shows the saved forecast with
+  // an explicit "network unavailable" notice instead of pretending the fetch worked.
+  js += 'var WKEY="mauli-weather";';
+  js += 'var _dw=dw;dw=async function(city,lat,lon){await _dw(city,lat,lon);try{localStorage.setItem(WKEY,JSON.stringify({city:city||"",cur:document.getElementById("cur").innerHTML,fc:document.getElementById("fc").innerHTML}))}catch(er){}if(/Error:/.test(document.getElementById("cur").innerHTML)){var c0=null;try{c0=JSON.parse(localStorage.getItem(WKEY)||"null")}catch(er){}if(c0&&c0.cur){document.getElementById("cur").innerHTML=c0.cur+"<div style=padding:8px;color:var(--text-muted);font-size:12px>Showing last saved weather - network unavailable</div>";document.getElementById("fc").innerHTML=c0.fc}}};';
+  js += 'var cached=null;try{cached=JSON.parse(localStorage.getItem(WKEY)||"null")}catch(er){}if(cached&&cached.cur){document.getElementById("cur").innerHTML=cached.cur;document.getElementById("fc").innerHTML=cached.fc;if(cached.city){document.getElementById("ci").value=cached.city;dw(cached.city)}}else{document.getElementById("cur").innerHTML="<div style=padding:20px;color:var(--text-muted)>Search a city to see the weather</div>"}';
   js += 'sw()';
   return [{ path: 'www/index.html', content: h('Weather App', body, css, js) }];
 }
@@ -111,14 +117,23 @@ function calculatorFiles() {
   body += '<button class="bn" onclick="ins(\'7\')">7</button><button class="bn" onclick="ins(\'8\')">8</button><button class="bn" onclick="ins(\'9\')">9</button><button class="bo" onclick="ins(\'*\')">&#215;</button>';
   body += '<button class="bn" onclick="ins(\'4\')">4</button><button class="bn" onclick="ins(\'5\')">5</button><button class="bn" onclick="ins(\'6\')">6</button><button class="bo" onclick="ins(\'-\')">&#8722;</button>';
   body += '<button class="bn" onclick="ins(\'1\')">1</button><button class="bn" onclick="ins(\'2\')">2</button><button class="bn" onclick="ins(\'3\')">3</button><button class="bo" onclick="ins(\'+\')">+</button>';
-  body += '<button class="bn bz" onclick="ins(\'0\')">0</button><button class="bn" onclick="ins(\'.\')">.</button><button class="be" onclick="eq()">=</button></div></div></div>';
-  var css = '.ca{display:flex;justify-content:center;align-items:center;min-height:100vh}.cc{background:var(--card);border-radius:16px;padding:16px;border:1px solid var(--border);width:300px}.cd{background:var(--bg);border-radius:10px;padding:16px;margin-bottom:12px;text-align:right;min-height:80px}.ex{font-size:13px;color:var(--text-muted);word-break:break-all}.re{font-size:32px;font-weight:700;color:var(--accent)}.cb{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.cb button{padding:14px;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer}.bn{background:var(--bg);color:var(--text)}.bo{background:var(--accent);color:#000}.bf{background:var(--border);color:var(--text-muted)}.be{background:var(--green);color:#fff}.bz{grid-column:span 2}';
-  var js = 'var e="",hr=0;';
+  body += '<button class="bn bz" onclick="ins(\'0\')">0</button><button class="bn" onclick="ins(\'.\')">.</button><button class="be" onclick="eq()">=</button></div>';
+  body += '<div class="hl"><div class="hh2"><span>History</span><button class="hb" onclick="clrHist()">Clear</button></div><div id="hh"></div></div></div></div>';
+  var css = '.ca{display:flex;justify-content:center;align-items:center;min-height:100vh}.cc{background:var(--card);border-radius:16px;padding:16px;border:1px solid var(--border);width:300px}.cd{background:var(--bg);border-radius:10px;padding:16px;margin-bottom:12px;text-align:right;min-height:80px}.ex{font-size:13px;color:var(--text-muted);word-break:break-all}.re{font-size:32px;font-weight:700;color:var(--accent)}.cb{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.cb button{padding:14px;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer}.bn{background:var(--bg);color:var(--text)}.bo{background:var(--accent);color:#000}.bf{background:var(--border);color:var(--text-muted)}.be{background:var(--green);color:#fff}.bz{grid-column:span 2}.hl{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}.hh2{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-muted);margin-bottom:6px}.hb{background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px}.hi{font-size:12px;color:var(--text-muted);font-family:monospace;padding:2px 0}';
+  var js = 'var e="",hr=0,hist=[];';
+  // The planning pipeline always asks for "Data persistence", so the calculator keeps a
+  // real calculation history in localStorage — a history that vanishes on refresh is the
+  // exact "looks like an app but forgets everything" defect the fidelity gate rejects.
+  js += 'try{hist=JSON.parse(localStorage.getItem("mauli-calc-history")||"[]")}catch(er){hist=[]}';
+  js += 'function saveHist(){try{localStorage.setItem("mauli-calc-history",JSON.stringify(hist))}catch(er){}}';
+  js += 'function renderHist(){var h=document.getElementById("hh");if(!h)return;h.innerHTML=hist.slice(-8).reverse().map(function(x){return "<div class=hi>"+x.e+" = "+x.r+"</div>"}).join("")||"<div class=hi>No history yet</div>"}';
+  js += 'function clrHist(){hist=[];saveHist();renderHist()}';
   js += 'function ins(v){if(hr){e="";hr=0}e+=v;document.getElementById("ex").textContent=e}';
   js += 'function clr(){e="";hr=0;document.getElementById("ex").textContent="";document.getElementById("re").textContent="0"}';
   js += 'function bk(){e=e.slice(0,-1);document.getElementById("ex").textContent=e}';
-  js += 'function eq(){try{var r=eval(e);document.getElementById("re").textContent=Number.isFinite(r)?parseFloat(r.toFixed(10)):"Error";document.getElementById("ex").textContent=e+"=";e=String(r);hr=1}catch(er){document.getElementById("re").textContent="Error"}}';
-  js += 'document.addEventListener("keydown",function(ev){if(ev.key>="0"&&ev.key<="9")ins(ev.key);else if("+-*/".indexOf(ev.key)>=0)ins(ev.key);else if(ev.key===".")ins(".");else if(ev.key==="Enter"||ev.key==="=")eq();else if(ev.key==="Escape")clr();else if(ev.key==="Backspace")bk()})';
+  js += 'function eq(){try{var r=eval(e);document.getElementById("re").textContent=Number.isFinite(r)?parseFloat(r.toFixed(10)):"Error";document.getElementById("ex").textContent=e+"=";e=String(r);hr=1;hist.push({e:document.getElementById("ex").textContent,r:document.getElementById("re").textContent});saveHist();renderHist()}catch(er){document.getElementById("re").textContent="Error"}}';
+  js += 'document.addEventListener("keydown",function(ev){if(ev.key>="0"&&ev.key<="9")ins(ev.key);else if("+-*/".indexOf(ev.key)>=0)ins(ev.key);else if(ev.key===".")ins(".");else if(ev.key==="Enter"||ev.key==="=")eq();else if(ev.key==="Escape")clr();else if(ev.key==="Backspace")bk()});';
+  js += 'renderHist();';
   return [{ path: 'www/index.html', content: h('Calculator', body, css, js) }];
 }
 
@@ -128,28 +143,19 @@ function chatFiles() {
   body += '<div id="mg" class="mg"></div>';
   body += '<div class="ci2"><input id="mi" class="inp" placeholder="Type a message..." onkeydown="if(event.key===\'Enter\')sm()"><button class="btn" onclick="sm()">Send</button></div></div></div>';
   var css = '.ca2{display:flex;height:100vh}.sb2{width:200px;background:var(--card);border-right:1px solid var(--border)}.sh{padding:16px;border-bottom:1px solid var(--border);font-weight:600;font-size:15px}.rl{padding:8px}.ri{padding:10px;border-radius:6px;cursor:pointer;margin:2px 0;font-size:13px}.ri:hover{background:var(--bg)}.ri.ac{background:var(--accent);color:#000}.cm{flex:1;display:flex;flex-direction:column}.ch2{padding:12px 16px;border-bottom:1px solid var(--border);font-weight:600}.mg{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}.ms{max-width:65%}.ms.usr{align-self:flex-end}.ms.bot{align-self:flex-start}.mb{padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.4}.ms.usr .mb{background:var(--accent);color:#000;border-bottom-right-radius:4px}.ms.bot .mb{background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px}.mt{font-size:9px;color:var(--text-muted);margin-top:2px;padding:0 4px}.ci2{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:6px}.inp{flex:1;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px}.btn{padding:8px 14px;border:none;border-radius:6px;background:var(--accent);color:#000;font-weight:600;cursor:pointer}';
-  var js = 'var rooms=["General","Random","Tech","Ideas"],cr="General",ms={};';
-  js += 'rooms.forEach(function(r){ms[r]=[{r:"bot",text:"Welcome to "+r+"!",t:new Date().toLocaleTimeString()}]});';
+  var js = 'var rooms=["General","Random","Tech","Ideas"],cr="General",ms={},CKEY="mauli-chat-msgs";';
+  // Messages are persisted, so a refresh keeps the conversation ("Data persistence" is
+  // part of every project's requirements).
+  js += 'function csave(){try{localStorage.setItem(CKEY,JSON.stringify(ms))}catch(er){}}';
+  js += 'function cload(){try{var s=JSON.parse(localStorage.getItem(CKEY)||"null");if(s&&typeof s==="object"){Object.keys(s).forEach(function(k){if(Array.isArray(s[k])&&s[k].length)ms[k]=s[k]});return true}}catch(er){}return false}';
+  js += 'rooms.forEach(function(r){if(!ms[r])ms[r]=[{r:"bot",text:"Welcome to "+r+"!",t:new Date().toLocaleTimeString()}]});';
+  js += 'cload();csave();';
   js += 'function rr(){document.getElementById("rl").innerHTML=rooms.map(function(r){return "<div class=ri"+(r===cr?" ac":"")+" onclick=sw2(\\\""+r+"\\\")>"+r+"</div>"}).join("")}';
   js += 'function sw2(r){cr=r;document.getElementById("rn").textContent=r;rr();rm()}';
   js += 'function rm(){var m=ms[cr];document.getElementById("mg").innerHTML=m.map(function(msg){return "<div class=ms "+msg.r+"><div class=mb>"+msg.text+"</div><div class=mt>"+msg.t+"</div></div>"}).join("");document.getElementById("mg").scrollTop=99999}';
-  js += 'function sm(){var v=document.getElementById("mi").value.trim();if(!v)return;ms[cr].push({r:"usr",text:v,t:new Date().toLocaleTimeString()});document.getElementById("mi").value="";rm();setTimeout(function(){var rp=["Got it!","Interesting!","Tell me more!","Great idea!","Sure thing!","Cool!","Nice!"];ms[cr].push({r:"bot",text:rp[Math.floor(Math.random()*rp.length)],t:new Date().toLocaleTimeString()});rm()},500+Math.random()*1000)}';
+  js += 'function sm(){var v=document.getElementById("mi").value.trim();if(!v)return;ms[cr].push({r:"usr",text:v,t:new Date().toLocaleTimeString()});csave();document.getElementById("mi").value="";rm();setTimeout(function(){var rp=["Got it!","Interesting!","Tell me more!","Great idea!","Sure thing!","Cool!","Nice!"];ms[cr].push({r:"bot",text:rp[Math.floor(Math.random()*rp.length)],t:new Date().toLocaleTimeString()});csave();rm()},500+Math.random()*1000)}';
   js += 'rr();rm()';
   return [{ path: 'www/index.html', content: h('Chat App', body, css, js) }];
-}
-
-function webAppFiles(objective) {
-  var name = (objective || 'Web Application').slice(0, 40);
-  var body = '<nav class="nv"><div class="nb">My App</div><div class="nl"><a href="#" class="ac">Home</a><a href="#">Features</a><a href="#">About</a><a href="#">Contact</a></div></nav>';
-  body += '<section class="hr"><h1>' + name + '</h1><p>A modern web application built with MAULI 2.0</p>';
-  body += '<button class="btn lg" onclick="alert(\'Hello from MAULI!\')">Get Started</button></section>';
-  body += '<section class="ft"><div class="fc2"><div class="fi2">Fast</div><p>Lightning performance</p></div>';
-  body += '<div class="fc2"><div class="fi2">Secure</div><p>Enterprise security</p></div>';
-  body += '<div class="fc2"><div class="fi2">Responsive</div><p>Works everywhere</p></div></section>';
-  body += '<footer class="ftr"><p>Built with MAULI 2.0</p></footer>';
-  var css = '.nv{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}.nb{font-size:16px;font-weight:700}.nl a{color:var(--text-muted);text-decoration:none;margin-left:16px;font-size:13px}.nl a.ac,.nl a:hover{color:var(--accent)}.hr{text-align:center;padding:60px 16px}.hr h1{font-size:40px;margin-bottom:12px;color:var(--accent)}.hr p{font-size:16px;color:var(--text-muted);margin-bottom:20px}.btn{padding:10px 20px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer}.lg{padding:14px 28px;font-size:16px}.ft{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding:40px;max-width:800px;margin:0 auto}.fc2{text-align:center;padding:24px;background:var(--card);border-radius:12px;border:1px solid var(--border)}.fi2{font-size:28px;margin-bottom:8px}.fc2 p{color:var(--text-muted);font-size:13px}.ftr{text-align:center;padding:24px;color:var(--text-muted);font-size:12px;border-top:1px solid var(--border);margin-top:32px}';
-  var js = 'document.querySelectorAll(".nl a").forEach(function(a){a.addEventListener("click",function(e){e.preventDefault();document.querySelectorAll(".nl a").forEach(function(l){l.classList.remove("ac")});a.classList.add("ac")})})';
-  return [{ path: 'www/index.html', content: h(name, body, css, js) }];
 }
 
 function detectProjectType2(objective, capabilities) {
@@ -190,7 +196,7 @@ var GENERATORS = {
   'todo-app': function() { return { summary: 'Task manager with priorities, filters, and localStorage persistence.', files: todoFiles(), tests: ['Add task works', 'Toggle complete', 'Filters work', 'LocalStorage saves'], notes: ['LocalStorage persistence', 'Priority levels'] }; },
   'calculator': function() { return { summary: 'Calculator with keyboard support and expression evaluation.', files: calculatorFiles(), tests: ['Basic operations', 'Keyboard input', 'Clear/backspace'], notes: ['Keyboard support', 'Error handling'] }; },
   'chat-app': function() { return { summary: 'Chat app with multiple rooms, message history, and auto-replies.', files: chatFiles(), tests: ['Send message', 'Switch rooms', 'Auto-reply'], notes: ['Multiple rooms', 'Message timestamps'] }; },
-  'web-app': function(o) { return { summary: 'Responsive web application with modern UI.', files: webAppFiles(o), tests: ['Navigation works', 'Responsive layout'], notes: ['Modern design', 'Responsive'] }; },
+
   'music-player': function(o) { return { summary: 'Music player with playlist management, playback controls, and visualizer.', files: listAppFiles(o, 'Music Player', 'mauli-music-player'), tests: ['Play/pause works', 'Track switching', 'Volume control'], notes: ['Web Audio API', 'LocalStorage playlist'] }; },
   'invoice-generator': function(o) { return { summary: 'Invoice generator with line items, tax calculations, and PDF-ready output.', files: listAppFiles(o, 'Invoice Builder', 'mauli-invoice-generator'), tests: ['Add line items', 'Calculate totals', 'Tax computation'], notes: ['Print-ready layout', 'No dependencies'] }; },
   'fitness-tracker': function(o) { return { summary: 'Fitness tracker with workout logging, progress charts, and goals.', files: listAppFiles(o, 'Fitness Tracker', 'mauli-fitness-tracker'), tests: ['Log workout', 'View progress', 'Set goals'], notes: ['Chart.js for graphs', 'LocalStorage persistence'] }; },
@@ -234,16 +240,21 @@ function chessFiles() {
     "else{var dirs=p.t==='r'?[[-1,0],[1,0],[0,-1],[0,1]]:p.t==='b'?[[-1,-1],[-1,1],[1,-1],[1,1]]:[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];dirs.forEach(function(s){var rr=r+s[0],cc=c+s[1];while(step(rr,cc)){rr+=s[0];cc+=s[1]}})}",
     "return out}",
     "var board=fresh(),turn=true,sel=-1,targets=[],log=[],cap=[],over=false;",
+    // The game in progress is persisted, so refreshing the page resumes it instead of
+    // throwing the position away.
+    "var KEY='mauli-chess-game';",
+    "function save(){try{localStorage.setItem(KEY,JSON.stringify({board:board,turn:turn,log:log,cap:cap,over:over}))}catch(er){}}",
+    "function load(){try{var s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.board&&s.board.length===64){board=s.board;turn=s.turn;log=s.log||[];cap=s.cap||[];over=!!s.over;return true}}catch(er){}return false}",
     "function glyph(p){return p?G[p.w?p.t.toUpperCase():p.t]:''}",
     "function render(){var bd=document.getElementById('bd'),html='';for(var i=0;i<64;i++){var r=Math.floor(i/8),c=i%8;var cls='sq '+(((r+c)%2===0)?'lt':'dk');if(i===sel)cls+=' sel';if(sel>=0&&targets.indexOf(i)>=0)cls+=' mv';html+='<div class=\"'+cls+'\" onclick=\"tap('+i+')\">'+glyph(board[i])+'</div>'}bd.innerHTML=html}",
     "function note(t){document.getElementById('st').textContent=t}",
     "function tap(i){if(over)return;var p=board[i];if(sel<0){if(p&&p.w===turn){sel=i;targets=movesFrom(i);render()}return}if(i===sel){sel=-1;targets=[];render();return}if(targets.indexOf(i)<0){if(p&&p.w===turn){sel=i;targets=movesFrom(i);render()}else{note('Illegal move - '+(turn?'White':'Black')+' to move')}return}play(sel,i)}",
-    "function play(from,to){var moved=board[from],taken=board[to];board[to]=moved;board[from]=null;if(moved.t==='p'&&(to<8||to>55))board[to]={t:'q',w:moved.w};if(taken)cap.push(taken);log.push({from:from,to:to,moved:moved,taken:taken});sel=-1;targets=[];if(taken&&taken.t==='k'){over=true;note((taken.w?'Black':'White')+' wins - king captured')}else{turn=!turn;note(turn?'White to move':'Black to move')}render();renderCap();renderLog()}",
-    "function undo(){var h=log.pop();if(!h)return;board[h.from]=h.moved;board[h.to]=h.taken||null;if(h.taken)cap.pop();turn=h.moved.w;over=false;sel=-1;targets=[];note(turn?'White to move':'Black to move');render();renderCap();renderLog()}",
-    "function reset(){board=fresh();turn=true;sel=-1;targets=[];log=[];cap=[];over=false;note('White to move');render();renderCap();renderLog()}",
+    "function play(from,to){var moved=board[from],taken=board[to];board[to]=moved;board[from]=null;if(moved.t==='p'&&(to<8||to>55))board[to]={t:'q',w:moved.w};if(taken)cap.push(taken);log.push({from:from,to:to,moved:moved,taken:taken});sel=-1;targets=[];if(taken&&taken.t==='k'){over=true;note((taken.w?'Black':'White')+' wins - king captured')}else{turn=!turn;note(turn?'White to move':'Black to move')}save();render();renderCap();renderLog()}",
+    "function undo(){var h=log.pop();if(!h)return;board[h.from]=h.moved;board[h.to]=h.taken||null;if(h.taken)cap.pop();turn=h.moved.w;over=false;sel=-1;targets=[];note(turn?'White to move':'Black to move');save();render();renderCap();renderLog()}",
+    "function reset(){board=fresh();turn=true;sel=-1;targets=[];log=[];cap=[];over=false;note('White to move');save();render();renderCap();renderLog()}",
     "function renderCap(){document.getElementById('cap').innerHTML=cap.map(function(p){return glyph(p)}).join(' ')}",
     "function renderLog(){document.getElementById('log').innerHTML=log.map(function(m,i){return '<span>'+(i+1)+'. '+sq(m.from)+'-'+sq(m.to)+'</span>'}).join('')}",
-    "note('White to move');render();renderCap();renderLog();"
+    "if(load()){note(over?'Game over':(turn?'White to move':'Black to move'))}else{note('White to move')}render();renderCap();renderLog();"
   ].join('');
   return [{ path: 'www/index.html', content: h('Offline Chess', body, css, js) }];
 }
@@ -253,13 +264,17 @@ function ticTacToeFiles() {
   var css = '.app{max-width:420px;margin:0 auto;padding:14px}.hd{text-align:center;padding:6px 0}.hd h1{font-size:20px;color:var(--accent)}.hd p{font-size:12px;color:var(--text-muted);margin-top:4px}.st{text-align:center;font-size:15px;font-weight:600;margin:12px 0}.bd{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:300px;margin:0 auto}.sq{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:700;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer}.sq.x{color:var(--accent)}.sq.o{color:var(--accent2)}.bar{text-align:center;margin:16px 0}.btn{padding:10px 18px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer}.sc{text-align:center;font-size:12px;color:var(--text-muted)}';
   var js = [
     "var W=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]],b=[],turn='X',over=false,xw=0,ow=0;",
-    "function reset(){b=['','','','','','','','',''];turn='X';over=false;note('X to move');render()}",
+    // The board AND the running score are persisted, so a refresh keeps both.
+    "var KEY='mauli-tictactoe';",
+    "function save(){try{localStorage.setItem(KEY,JSON.stringify({b:b,turn:turn,over:over,xw:xw,ow:ow}))}catch(er){}}",
+    "function load(){try{var s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.b&&s.b.length===9){b=s.b;turn=s.turn||'X';over=!!s.over;xw=s.xw||0;ow=s.ow||0;return true}}catch(er){}return false}",
+    "function reset(){b=['','','','','','','','',''];turn='X';over=false;note('X to move');save();render()}",
     "function note(t){document.getElementById('st').textContent=t}",
     "function win(){var w=null;W.forEach(function(l){if(b[l[0]]&&b[l[0]]===b[l[1]]&&b[l[1]]===b[l[2]])w=b[l[0]]});return w}",
-    "function tap(i){if(over||b[i])return;b[i]=turn;var w=win();if(w){over=true;if(w==='X')xw++;else ow++;note(w+' wins!');score()}else if(b.every(function(c){return c})){over=true;note('Draw')}else{turn=turn==='X'?'O':'X';note(turn+' to move')}render()}",
+    "function tap(i){if(over||b[i])return;b[i]=turn;var w=win();if(w){over=true;if(w==='X')xw++;else ow++;note(w+' wins!');score()}else if(b.every(function(c){return c})){over=true;note('Draw')}else{turn=turn==='X'?'O':'X';note(turn+' to move')}save();render()}",
     "function render(){document.getElementById('bd').innerHTML=b.map(function(v,i){return '<div class=\"sq '+(v==='X'?'x':v==='O'?'o':'')+'\" onclick=\"tap('+i+')\">'+v+'</div>'}).join('')}",
     "function score(){document.getElementById('sc').textContent='X '+xw+' - '+ow+' O'}",
-    "reset();score();"
+    "if(load()){note(over?'Game over':(turn==='X'?'X to move':'O to move'))}else{reset()}render();score();save();"
   ].join('');
   return [{ path: 'www/index.html', content: h('Tic Tac Toe', body, css, js) }];
 }

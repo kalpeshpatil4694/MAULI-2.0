@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { analyzeGeneratedApp } from '../src/generated-app-quality.js';
-import { generateFromTemplate } from '../src/app-templates.js';
+import { generateFromTemplate, getAvailableTemplates } from '../src/app-templates.js';
 import { verifyGeneratedApp } from '../scripts/verify-generated-app.mjs';
 
 const workingApp = [
@@ -94,6 +94,49 @@ test('every template route ships a functional app, never a demo', () => {
     const report = analyzeGeneratedApp(template.files, { objective });
     assert.equal(report.passed, true, `${objective} (${template.projectType}) failed: ${report.violations.map((v) => v.code).join(', ')}`);
     assert.doesNotMatch(String(template.files[0].content), /alert\(|Get Started/, `${objective} must not ship a fake action`);
+  }
+});
+
+// Every template route must survive BOTH gates: the static fidelity check the Worker runs
+// and the runtime journey the verifier performs. The journey presses zero-argument
+// handlers AND replays literal-argument calls the markup wires (`tap(48)`, `ins('7')`),
+// including controls the app renders into innerHTML, so a chess board, calculator or
+// tic-tac-toe board is exercised instead of looking like a dead page.
+const DEFAULT_REQUIREMENTS = ['User interface', 'Application/API structure', 'Data persistence', 'Security review', 'Testing and verification'];
+const TEMPLATE_OBJECTIVES = {
+  calculator: 'Build a simple calculator web app',
+  portfolio: 'Build a personal portfolio website',
+  'todo-app': 'Build a todo list app',
+  ecommerce: 'Build an online store',
+  'weather-app': 'Build a weather app',
+  'chat-app': 'Build a chat app',
+  'notes-app': 'Build a notes app',
+  'music-player': 'Build a music player',
+  'invoice-generator': 'Build an invoice generator',
+  'fitness-tracker': 'Build a fitness tracker',
+  'recipe-app': 'Build a recipe app',
+  'survey-builder': 'Build a survey form',
+  'timer-app': 'Build a pomodoro timer',
+  'bookmark-manager': 'Build a bookmark manager',
+  'expense-tracker': 'Build an expense tracker',
+  'password-manager': 'Build a password manager',
+  'kanban-board': 'Build a kanban board',
+  'calendar-app': 'Build a calendar app',
+  'game-app': 'Build a puzzle game',
+  'video-recorder': 'Build a video call recorder'
+};
+
+test('every template route is runtime-verified, not only statically valid', () => {
+  for (const type of getAvailableTemplates()) {
+    const objective = TEMPLATE_OBJECTIVES[type] ?? ('Build ' + type);
+    const template = generateFromTemplate({ objective, capabilities: ['frontend'] });
+    const staticReport = analyzeGeneratedApp(template.files, { objective, requirements: DEFAULT_REQUIREMENTS });
+    assert.equal(staticReport.passed, true, `${type} failed the static gate: ${staticReport.violations.map((v) => v.code).join(', ')}`);
+    assert.equal(staticReport.stats.hasPersistence, true, `${type} must really persist or call a real API`);
+    const runtime = verifyGeneratedApp(template.files, { objective, requirements: DEFAULT_REQUIREMENTS });
+    assert.deepEqual(runtime.errors, [], `${type} threw while running`);
+    assert.deepEqual(runtime.missingHandlers, [], `${type} has unbound handlers`);
+    assert.equal(runtime.verdict, 'functional', `${type} did not perform a working journey: ${JSON.stringify(runtime.invoked.slice(0, 8))}`);
   }
 });
 

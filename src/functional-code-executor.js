@@ -2,6 +2,7 @@ import { code } from './ai.js';
 import { registerArtifact } from './artifacts.js';
 import { registerExecutor, grantExecutor } from './executor-registry.js';
 import { generateFromTemplate } from './app-templates.js';
+import { analyzeGeneratedApp } from './generated-app-quality.js';
 
 const WEB_REQUIRED = ['www/index.html', 'www/app.js', 'www/styles.css'];
 const COMMON_REQUIRED = ['package.json', 'README.md'];
@@ -101,6 +102,79 @@ function ensurePackageJson(files, objective) {
 
 const DEFAULT_CODE_MODEL_FALLBACK = '@cf/qwen/qwen3-30b-a3b-fp8';
 
+// The bounded repair loop: Detect → Diagnose → Fix → Rebuild → Retest.
+// "Detect" is the static fidelity gate run on the model's own output. "Diagnose" turns
+// the violation codes into a repair instruction. "Fix/Rebuild" is one more AI attempt
+// whose prompt carries the diagnosis. "Retest" re-runs the same gate. Bounded to one
+// repair per generation attempt, so a persistently bad model cannot spin forever — the
+// bounded attempts + template fallback below remain the outer safety net.
+const MAX_REPAIR_ATTEMPTS = 1;
+
+function repairInstruction(violationCodes) {
+  const lines = {
+    'no-persistence': 'The app never stores data. In the handler that adds or changes data, call localStorage.setItem with the full updated state, and load it back with localStorage.getItem on startup so it survives a refresh.',
+    'no-requirement-evidence': 'None of the founder\'s requirements are visible in the code. Implement every listed requirement for real — no prose, working features only.',
+    'unbound-handler': 'The HTML references handler functions that are never defined. Define every onclick/onchange handler the markup calls, with working bodies.',
+    'noop-handler': 'Some handlers do nothing (log/alert only). Give every handler a real body that updates state, the DOM, or storage.',
+    'no-interaction': 'The page has no working controls. Add bound, functioning controls for the app\'s core feature.',
+    'mocked-api': 'An API is faked with a literal resolved response. Call the real backend, or persist locally with localStorage — never fake success.',
+    'demo-marker': 'Remove demo wording — this must be a working product.',
+    'coming-soon': 'Remove "coming soon" wording — this must be a working product.',
+    'todo-marker': 'Remove TODO/FIXME markers and implement the feature.',
+    'placeholder': 'Remove placeholder implementations and write the real logic.',
+    'not-implemented': 'Implement the feature the "not implemented" marker stands in for.',
+    'lorem-ipsum': 'Replace lorem ipsum with the real UI and data.',
+    'ai-unavailable-stub': 'Remove the stub page and generate the real app.',
+    'mock-disclaimer': 'Remove the mock/simulation disclaimer and implement the real behavior.',
+    'fake-async': 'Timers are used as a substitute for real state changes. Make every timer-driven update change real state.',
+    'realtime-not-implemented': 'Real-time was requested. Implement it for real (WebSocket, SSE, or a bounded polling loop against a real endpoint).'
+  };
+  return violationCodes
+    .map((code) => lines[code] ?? ('Fix the '+code+' problem.'))
+    .map((s) => '- '+s)
+    .join('\n');
+}
+
+/**
+ * Run the model once, parse, validate structurally, then run the fidelity gate on the
+ * result; on gate failure spend at most MAX_REPAIR_ATTEMPTS extra model calls whose
+ * prompt names exactly what the gate found. Returns the best valid files or null.
+ */
+async function generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task, attempts = MAX_REPAIR_ATTEMPTS + 1 }) {
+  let lastError = '';
+  let bestValid = null, bestQuality = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const gate = attempt > 0;
+    const prompt = gate
+      ? objective + '\n\nYour previous code failed the functional review: it looked like an app but parts did not actually work. Fix EXACTLY these problems and return the COMPLETE fixed app as JSON:\n' + repairInstruction(lastError.split(',').map(s => s.trim()).filter(Boolean))
+      : objective;
+    try {
+      const raw = await withTimeout(code(runtimeEnv, [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt }
+      ], { maxTokens: 3000 }), AI_ATTEMPT_TIMEOUT_MS);
+      const parsed = parseModel(raw);
+      const files = ensurePackageJson(filesOf(parsed?.files), objective);
+      if (!parsed || invalid(files, task)) { lastError = 'invalid output (missing required files or too little code)'; continue; }
+      // Detect + Retest: the same static gate the QA pipeline enforces, run eagerly so
+      // the fix happens inside this task instead of failing six gates later.
+      const quality = analyzeGeneratedApp(files, { objective, requirements: task?.requirements ?? [] });
+      if (!quality.passed) {
+        // Keep the best structurally-valid output; if even the repair cannot pass the
+        // gate it is still registered with its violations recorded and the QA gate
+        // remains the hard bar that blocks delivery.
+        if (!bestValid) { bestValid = files; bestQuality = quality; }
+        lastError = quality.violations.map(v => v.code).join(',');
+        continue;
+      }
+      return { files, parsed, quality };
+    } catch (e) { lastError = text(e); }
+  }
+  return bestValid
+    ? { files: bestValid, parsed: null, quality: bestQuality }
+    : { files: null, parsed: null, quality: null, error: lastError };
+}
+
 function withTimeout(promise, ms) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -124,7 +198,7 @@ CRITICAL RULES:
 6. Include proper error handling and user feedback
 7. Make it visually polished with good colors, spacing, and typography
 8. Include ALL features mentioned in the task description
-9. Use localStorage for data persistence when needed
+9. Persist data with localStorage so it survives refresh — a tracker/list/history/note app MUST call localStorage.setItem (or fetch to a real API) from the handler that adds/changes data, and MUST reload persisted data on startup
 10. NO placeholders, NO "TODO", NO incomplete code
 
 EXAMPLE FOR A TODO APP:
@@ -172,8 +246,12 @@ export async function probeAiGeneration(objective, { env, acceptance = [], inclu
       // or it would report success for output the executor would reject and fall back.
       const bad = invalid(files, { title: objective });
       if (!bad && files.length) {
+        // Structural validity is not functionality: report the fidelity gate's verdict too,
+        // so the probe route cannot suggest an app is deliverable when it is a demo.
+        const quality = analyzeGeneratedApp(files, { objective });
         return {
           available: true, generated: true, attempt: attempt + 1,
+          fidelity: { passed: quality.passed, score: quality.score, violations: quality.violations.map(v => v.code) },
           fileCount: files.length,
           files: includeContent
             ? files.map(f => ({ path: f.path, bytes: String(f.content ?? '').length, content: String(f.content ?? '') }))
@@ -231,30 +309,31 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   const basePrompt = webTask ? WEB_TASK_PROMPT : BACKEND_PROMPT;
   const systemPrompt = basePrompt + '\n\nTask: ' + objective + '\nAcceptance criteria: ' + JSON.stringify(acceptance);
 
-  let parsed = null, lastError = '';
-  // Two attempts (not three): each attempt is a Workers AI request, and a hung or slow
-  // generation must not outlive the invocation window — after the timeout we fall back
-  // to templates so the task still completes instead of dying with an expired lease.
-  for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
-    try {
-      const prompt = attempt === 0 ? objective : objective + '\n\nIMPORTANT: Your previous response was invalid. Generate COMPLETE source code for all files. Each file must have full, working code. Output ONLY the JSON object.';
-      parsed = parseModel(await withTimeout(code(runtimeEnv, [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt }
-      ], { maxTokens: 3000 }), AI_ATTEMPT_TIMEOUT_MS));
-      if (!parsed || invalid(filesOf(parsed.files), task)) { parsed = null; }
-    } catch (e) { lastError = text(e); parsed = null; }
-  }
+  let lastError = '';
+  // Bounded generation + repair: up to MAX_REPAIR_ATTEMPTS+1 model calls. A failed repair
+  // prompt names exactly what the fidelity gate found (Detect → Diagnose → Fix → Retest).
+  // After the loop we fall back to templates so the task still completes inside its lease
+  // instead of dying when the invocation window expires.
+  const { files, parsed, quality, error } = await generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task });
+  lastError = error ?? '';
 
-  // If AI succeeded, use its output
-  const files = ensurePackageJson(filesOf(parsed?.files), objective);
-  if (!invalid(files, task)) {
-    const tests = Array.isArray(parsed.tests) ? parsed.tests.map(text).filter(Boolean).slice(0, 20) : [];
-    const notes = Array.isArray(parsed.notes) ? parsed.notes.map(text).filter(Boolean).slice(0, 20) : [];
+  // If AI produced code that ALSO passed the fidelity gate, ship it. When even the repair
+  // could not pass, the AI output is a demo by the founder's own definition — it must not
+  // be registered as the requested product. Fall through to the deterministic template,
+  // which is itself fidelity-gated, and record why the AI output was refused.
+  if (files && quality && !quality.passed) {
+    lastError = 'functional fidelity failed: ' + quality.violations.map(v => v.code).join(', ');
+  }
+  if (files && (!quality || quality.passed)) {
+    const tests = Array.isArray(parsed?.tests) ? parsed.tests.map(text).filter(Boolean).slice(0, 20) : [];
+    const notes = Array.isArray(parsed?.notes) ? parsed.notes.map(text).filter(Boolean).slice(0, 20) : [];
     const artifact = registerArtifact({
       projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
-      content: { summary: text(parsed.summary || 'AI-generated implementation for ' + objective), files, tests, notes },
-      metadata: { generatedBy: 'functional-code-executor', aiGenerated: true, fileCount: files.length, taskType: webTask ? 'web-ui' : 'backend' }
+      content: { summary: text(parsed?.summary || 'AI-generated implementation for ' + objective), files, tests, notes },
+      metadata: {
+        generatedBy: 'functional-code-executor', aiGenerated: true, fileCount: files.length, taskType: webTask ? 'web-ui' : 'backend',
+        fidelity: quality ? { passed: quality.passed, score: quality.score, violations: quality.violations.map(v => v.code) } : null
+      }
     });
     return { type: 'code', artifactId: artifact.id, summary: artifact.content.summary, files, tests, notes, acceptance };
   }

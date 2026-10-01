@@ -94,7 +94,37 @@ Code existing is not proof that a feature works. Two layers enforce this:
 
 The template engine never returns a non-functional template: `generateFromTemplate()` runs
 the static gate on its own output and falls back to a known-working app instead of shipping
-a demo. Running generated code inside a production Worker is intentionally out of scope —
+a demo. Every template route is also runtime-verified in CI, and each one persists its data
+(`localStorage`), so a refresh keeps the user's work.
+
+Three rules close the gap between "code exists" and "the feature works":
+
+1. **The gate judges the merged project.** A project's code is the union of every agent's
+   `code-workspace` artifact (the frontend agent ships `www/`, the backend agent ships
+   `server.js`, the database agent ships the schema). QA fidelity runs over that union —
+   judging only the newest artifact is what once let a project ship without the persistence
+   another agent had written.
+2. **Generation repairs itself.** `internal.code` runs Detect → Diagnose → Fix → Rebuild →
+   Retest: the model's own output goes through the fidelity gate, and a failure earns one
+   bounded repair call whose prompt names the violation codes (`no-persistence`,
+   `noop-handler`, `unbound-handler`, …). If the repair still fails the gate, the demo is
+   **not** registered as the product — the fidelity-gated template takes over and the
+   refusal is recorded on the artifact metadata (`aiFailed`, `aiError`).
+3. **Delivery reports requirement statuses.** `buildFinalDelivery()` refuses to emit a
+   `final-delivery` artifact for a non-functional app and records per-requirement
+   `requirementCoverage` (IMPLEMENTED / FAILED / BLOCKED) plus the fidelity score and
+   violations. The Worker's honest status is keyword evidence in executed source — never
+   prose, since a README that repeats the founder's own words proves nothing.
+
+The runtime journey the verifier performs: it loads the app, builds a DOM, executes its
+scripts (firing the `DOMContentLoaded`/`load` listeners real apps initialise in), presses
+every zero-argument handler **and replays the literal-argument calls the markup wires**
+(`tap(48)`, `ins('7')`) — including controls the app renders into `innerHTML` — then checks
+whether the DOM or `localStorage` actually changed. Node-only entry points (`server.js`) are
+never executed as browser code. `node scripts/verify-generated-app.mjs --verify <file.json>`
+runs that journey against a downloaded artifact and exits non-zero when the app does not work.
+
+Running generated code inside a production Worker is intentionally out of scope —
 the free tier's CPU budget and the sandbox boundary mean runtime execution needs a separate
 sandbox/runner.
 

@@ -3,7 +3,7 @@ import { store } from './store.js';
 import { addTaskToProject } from './projects.js';
 import { selectAgents, seedAgents } from './agents.js';
 import { listProjectArtifacts } from './artifacts.js';
-import { analyzeGeneratedApp } from './generated-app-quality.js';
+import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
 import { now } from './core.js';
 
 export const GATES = ['build','test','requirements','security','qa','integrity'];
@@ -23,6 +23,21 @@ function validFiles(projectId){
 }
 function latestCodeArtifact(projectId){
   return codeArtifacts(projectId).sort((a,b)=>String(b.createdAt??'').localeCompare(String(a.createdAt??'')))[0]??null;
+}
+// A project's code is the UNION of its code-workspace artifacts: the frontend agent ships
+// www/, the backend agent ships server.js, the database agent ships the schema. Fidelity
+// judged against only the newest artifact missed what the other agents wired in — the
+// exact gap that let a persistence-free app pass because the persistence lived in an
+// artifact the gate never looked at.
+function mergedCodeArtifacts(projectId){
+  const seen=new Set(); const merged=[];
+  for(const a of codeArtifacts(projectId)){
+    for(const f of (a.content?.files??[])){
+      if(!f||typeof f.path!=='string'||typeof f.content!=='string'||seen.has(f.path)) continue;
+      seen.add(f.path); merged.push({path:f.path,content:f.content});
+    }
+  }
+  return merged;
 }
 function gateTasksOf(tasks){ return tasks.filter(t => t.pipelineGate); }
 function syncTask(list, updated){ const index = list.findIndex(t => t.id === updated.id); if(index >= 0) list[index] = updated; else list.push(updated); return updated; }
@@ -117,6 +132,23 @@ async function gateResult(task){
   const pid=task.projectId, type=task.gateType, arts=artifacts(pid), code=codeArtifacts(pid);
   let passed=true, checks=[];
   const check=(name,value,reason)=>{ checks.push({name,passed:Boolean(value),...(value?{}:{reason})}); if(!value) passed=false; };
+  // The founder asked for per-requirement statuses (IMPLEMENTED / INTEGRATED /
+  // RUNTIME VERIFIED / FAILED / BLOCKED). The Worker cannot execute the generated app,
+  // so its honest statuses are keyword evidence ('IMPLEMENTED') or the absence of it
+  // ('FAILED'); the Node verifier upgrades INTEGRATED/RUNTIME VERIFIED and CI publishes
+  // the full matrix. BLOCKED covers generation infrastructure that never ran.
+  const requirementStatuses=()=>{
+    const project=store.get('projects',pid);
+    const requirements=Array.isArray(project?.requirements)?project.requirements:[];
+    if(!requirements.length) return [];
+    const coverage=evaluateRequirementCoverage(requirements,mergedCodeArtifacts(pid));
+    return coverage.map(c=>({
+      requirement:c.requirement,
+      status:c.status==='IMPLEMENTED'?'IMPLEMENTED':'FAILED',
+      matched:c.matched,
+      evidence:'static fidelity gate (executed source: HTML/JS/CSS)'
+    }));
+  };
 
   if(type==='build'){
     const latest=latestCodeArtifact(pid), files=latest?.content?.files??[], pkg=parsePackage(files);
@@ -151,10 +183,15 @@ async function gateResult(task){
     // "Code exists" is not "the feature works". A generated app that is only markup, a
     // demo, a placeholder or a dead button must never reach delivery. The runtime proof is
     // produced by scripts/verify-generated-app.mjs; this is the static gate the Worker can
-    // always run.
+    // always run. Fidelity and coverage judge the MERGED code of every agent, and the
+    // per-requirement statuses are recorded as gate evidence.
     const project=store.get('projects',pid);
-    const fidelity=analyzeGeneratedApp((latestCodeArtifact(pid)?.content?.files)??[],{objective:project?.objective??'',requirements:project?.requirements??[]});
+    const merged=mergedCodeArtifacts(pid);
+    const fidelity=analyzeGeneratedApp(merged,{objective:project?.objective??'',requirements:project?.requirements??[]});
     check('functional_fidelity',fidelity.passed,fidelity.passed?'Generated app passed functional fidelity checks':('Not a working app: '+fidelity.violations.map(v=>v.code).join(', ')));
+    const coverage=evaluateRequirementCoverage(project?.requirements??[],merged);
+    const unmet=coverage.filter(c=>c.status==='MISSING');
+    check('requirement_evidence',unmet.length===0,unmet.length?('No source evidence for: '+unmet.slice(0,5).map(c=>c.requirement).join(' | ')):'Every requirement has evidence in the executed source');
   } else if(type==='integrity'){
     const q=prior(pid,'qa'), ids=arts.map(a=>a.id);
     const files=code.flatMap(a=>(a.content?.files??[]).map(f=>({artifactId:a.id,path:f.path,content:f.content})));
@@ -164,9 +201,9 @@ async function gateResult(task){
     check('artifact_ids_unique',new Set(ids).size===ids.length,'Duplicate artifact IDs detected');
     check('artifact_metadata_valid',arts.every(a=>a.projectId===pid&&a.type&&a.createdAt),'Artifact metadata is incomplete');
     check('file_manifest_valid',manifest.length>0&&manifest.every(x=>x.path&&/^[a-f0-9]{64}$/.test(x.sha256)),'Artifact file manifest could not be generated');
-    return {type:'plan',taskId:task.id,gate:type,passed,checks,verifiedAt:now(),manifest,summary:passed?`${type} gate passed.`:`${type} gate failed.`};
+    return {type:'plan',taskId:task.id,gate:type,passed,checks,requirementStatuses:requirementStatuses(),verifiedAt:now(),manifest,summary:passed?`${type} gate passed.`:`${type} gate failed.`};
   }
-  return {type:'plan',taskId:task.id,gate:type,passed,checks,verifiedAt:now(),summary:passed?`${type} gate passed.`:`${type} gate failed.`};
+  return {type:'plan',taskId:task.id,gate:type,passed,checks,requirementStatuses:requirementStatuses(),verifiedAt:now(),summary:passed?`${type} gate passed.`:`${type} gate failed.`};
 }
 
 registerExecutor('internal.pipeline-gate', async ({task}) => gateResult(task), {

@@ -12,6 +12,10 @@
 // cannot execute untrusted code (the free tier's CPU budget and the sandbox boundary),
 // so it catches the unambiguous "this is a demo" signals and lets the Node runtime
 // verifier (scripts/verify-generated-app.mjs) prove the rest by actually running the app.
+//
+// Requirement coverage is evaluated against EXECUTED source only (HTML + JS + CSS).
+// A README that repeats the founder's own words would otherwise make every requirement
+// look "implemented" — documentation is evidence of intent, not of a working feature.
 
 const SEVERITY = { CRITICAL: 'critical', WARNING: 'warning' };
 
@@ -76,7 +80,7 @@ function definedNames(js) {
 
 // Control-flow keywords appear inside inline handlers (`onkeydown="if(x)go()"`), so a
 // naive call scan reports `if` as an unbound handler. Only real identifiers count.
-const JS_KEYWORDS = new Set(['if', 'else', 'for', 'while', 'do', 'switch', 'case', 'return', 'function', 'new', 'typeof', 'instanceof', 'void', 'delete', 'in', 'of', 'try', 'catch', 'throw', 'await', 'async', 'yield', 'this', 'super', 'class', 'const', 'let', 'var']);
+export const JS_KEYWORDS = new Set(['if', 'else', 'for', 'while', 'do', 'switch', 'case', 'return', 'function', 'new', 'typeof', 'instanceof', 'void', 'delete', 'in', 'of', 'try', 'catch', 'throw', 'await', 'async', 'yield', 'this', 'super', 'class', 'const', 'let', 'var']);
 
 // `onclick="doThing()"` / `onclick='doThing(...)'` — the classic dead button.
 function inlineHandlerRefs(html) {
@@ -119,6 +123,21 @@ function requirementCoverage(requirements, haystack) {
     const status = words.length === 0 ? 'UNKNOWN' : (hits.length > 0 ? 'IMPLEMENTED' : 'MISSING');
     return { requirement, status, matched: hits.slice(0, 6), keywords: words.length };
   });
+}
+
+/**
+ * Per-requirement coverage against the app's EXECUTED source (HTML + JS + CSS).
+ * Exported so the delivery manifest can report the same statuses the QA gate judged.
+ * Statuses: IMPLEMENTED (keyword evidence in executed source) | MISSING | UNKNOWN (no
+ * significant keywords to match). A status here is keyword evidence, not a runtime
+ * proof — runtime proof comes from the Node verifier and the founder's own use.
+ */
+export function evaluateRequirementCoverage(requirements, sourceFiles) {
+  const executed = (Array.isArray(sourceFiles) ? sourceFiles : [])
+    .filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string')
+    .filter((f) => !/^package\.json$/i.test(f.path) && !/(^|\/)README(\.md|\.txt)?$/i.test(f.path) && !/\.(json|lock|ya?ml|toml)$/i.test(f.path))
+    .map((f) => String(f.content ?? ''));
+  return requirementCoverage(requirements, executed.join('\n'));
 }
 
 /**
@@ -181,10 +200,18 @@ export function analyzeGeneratedApp(files, { objective = '', requirements = [] }
     push('realtime-not-implemented', SEVERITY.WARNING, 'real-time was requested but no WebSocket/SSE/subscription exists');
   }
 
-  const haystack = allText;
-  const coverage = requirementCoverage(requirements, haystack);
+  // Coverage reads executed source only — see evaluateRequirementCoverage(). The
+  // allText scan above stays for placeholder wording, which is a red flag wherever it
+  // ships, including docs.
+  const coverage = evaluateRequirementCoverage(requirements, list);
   const allMissing = coverage.length > 0 && coverage.every((c) => c.status === 'MISSING');
-  if (allMissing) push('no-requirement-evidence', SEVERITY.CRITICAL, 'no requirement keyword appears anywhere in the generated source');
+  // WARNING, not CRITICAL: a requirement is often a process/quality statement ("security
+  // review", "testing and verification") that no product source would ever name, so the
+  // absence of its keywords is not proof the app is a demo. The unambiguous demo signals —
+  // placeholder wording, dead buttons, no-op handlers, no interaction, missing persistence —
+  // still fail the app, and the per-requirement statuses are reported as gate/delivery
+  // evidence so a MISSING requirement is always visible to the founder.
+  if (allMissing) push('no-requirement-evidence', SEVERITY.WARNING, 'no requirement keyword appears in the executed source; per-requirement statuses are reported as evidence');
 
   const critical = violations.filter((v) => v.severity === SEVERITY.CRITICAL);
   const score = Math.max(0, 100 - critical.length * 25 - (violations.length - critical.length) * 8);

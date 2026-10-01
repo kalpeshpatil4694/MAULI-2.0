@@ -12,7 +12,10 @@ function functionalResponse() {
     summary: 'Runnable e-commerce functional fixture',
     files: [
       { path: 'www/index.html', content: '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="styles.css"></head><body><h1>Store</h1><button id="cart">Add to cart</button><p id="status"></p><script src="app.js"></script></body></html>' },
-      { path: 'www/app.js', content: 'const cart=document.getElementById("cart"); const status=document.getElementById("status"); function add(){ status.textContent="Added to cart"; } cart.addEventListener("click",add); export { add }; // functional fixture interaction\n' },
+      // The delivered app must be genuinely functional, not just interactive: a shopping
+      // cart that forgets everything on refresh is exactly what the fidelity gate now
+      // refuses, so the fixture persists the cart like the real store would.
+      { path: 'www/app.js', content: 'const cart=document.getElementById("cart"); const status=document.getElementById("status"); let items=JSON.parse(localStorage.getItem("cart")||"[]"); function render(){ status.textContent=items.length ? ("Cart: "+items.length+" item(s)") : "Catalog ready"; localStorage.setItem("cart",JSON.stringify(items)); } function add(){ items.push({sku:"sku-"+items.length}); render(); } cart.addEventListener("click",add); render(); export { add }; // functional fixture interaction\n' },
       { path: 'www/styles.css', content: 'body { font-family: sans-serif; padding: 24px; } button { padding: 12px; } #status { margin-top: 16px; }' },
       { path: 'package.json', content: '{"name":"mauli-ecommerce-test","version":"1.0.0","private":true}' },
       { path: 'capacitor.config.json', content: '{"appId":"com.mauli.ecommerce.test","appName":"MAULI E-commerce Test","webDir":"www"}' },
