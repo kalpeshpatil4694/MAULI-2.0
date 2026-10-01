@@ -374,7 +374,7 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   // prompt names exactly what the fidelity gate found (Detect → Diagnose → Fix → Retest).
   // After the loop we fall back to templates so the task still completes inside its lease
   // instead of dying when the invocation window expires.
-  const { files, parsed, quality, error } = await generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task });
+  let { files, parsed, quality, error } = await generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task });
   lastError = error ?? '';
 
   // If AI produced code that ALSO passed the fidelity gate, ship it. When even the repair

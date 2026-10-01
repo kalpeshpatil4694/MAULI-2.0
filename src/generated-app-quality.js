@@ -144,7 +144,7 @@ const REQUIREMENT_SYNONYMS = {
   expenses: ['expense', 'spending', 'budget'],
   budget: ['expense', 'spending'],
   invoice: ['receipt', 'billing', 'total', 'line'],
-  recipe: ['recipes', 'ingredients', 'cooking'],
+  recipe: ['recipes', 'ingredients', 'cooking', 'cook', 'bake'],
   workout: ['workouts', 'exercise', 'fitness', 'training'],
   workoutlog: ['workout', 'exercise'],
   book: ['books', 'reading', 'title', 'author'],
@@ -185,19 +185,14 @@ const REQUIREMENT_SYNONYMS = {
   school: ['student', 'course', 'class'],
   library: ['book', 'borrow', 'isbn'],
   garden: ['plant', 'water', 'seed'],
-  recipe: ['cook', 'bake', 'ingredients'],
   travel: ['trip', 'booking', 'destination'],
-  crypto: ['wallet', 'coin', 'block'],
   fitness: ['workout', 'exercise', 'training'],
-  budget: ['expense', 'spending', 'cost'],
-  invoice: ['receipt', 'billing', 'total'],
   quote: ['estimate', 'price', 'total'],
   fleet: ['vehicle', 'driver', 'route'],
   inventory: ['stock', 'item', 'sku'],
   booking: ['appointment', 'slot', 'reservation'],
   payroll: ['salary', 'employee', 'pay'],
   warehouse: ['stock', 'shelf', 'item'],
-  project: ['task', 'milestone', 'board'],
   meeting: ['agenda', 'minutes', 'attendee']
 };
 
