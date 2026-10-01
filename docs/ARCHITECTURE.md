@@ -195,6 +195,28 @@ easy-to-forget action. The target is now captured with the command.
   the command, and labels each project and its build button with the target it was
   commissioned for.
 
+### The founder types a command, not a template
+
+The question behind a new commission is always the same: *do I have to build a template and
+a system first?* No. The founder types one command; MAULI decides between two routes and
+either way the founder receives a working product:
+
+- **An existing template matches.** Routing is scored over 25 templates (each declaring its
+  own domain vocabulary), so `Build an app for my mother daily medicine timetable with
+  doses` scores 3 (`medicine`, `doses`, `timetable`) and lands on `medicine-tracker`.
+- **Nothing matches.** The router reports `templateMatched: false` and **delivery refuses**
+  rather than shipping an unrelated page with a perfect score. While the Workers AI
+  allowance is exhausted that refusal is the honest end state, and the useful answer is for
+  MAULI to *write the template* — which is the agent's job, done here for
+  `medicine-tracker`: doses with morning/afternoon/evening/night slots, a daily taken tick,
+  a 7-day adherence percentage, and persistence. Three tests plus the runtime journey keep
+  it honest.
+
+Writing the template surfaced the same class of bug as the Wi-Fi audit scores: two
+medicines entered inside the same millisecond received the same `Date.now()` id, and since
+every handler is wired by id, deleting one row deleted the other. `nextMedId()` pairs the
+timestamp with a counter.
+
 ### A refusal must not be a silent substitution
 
 A founder can ask for something MAULI should not build — tooling that attacks a network,
