@@ -88,6 +88,19 @@ function elementsFromHtml(html) {
   return elements;
 }
 
+// A MediaStream stand-in: getTracks() must be iterable because apps stop tracks when a
+// recording ends, and some call track.stop() or .readyState.
+function makeFakeStream() {
+  const track = { kind: 'video', readyState: 'live', stop() { track.readyState = 'ended'; }, getSettings: () => ({ width: 1280, height: 720 }) };
+  return {
+    active: true,
+    getTracks: () => [track],
+    getVideoTracks: () => [track],
+    getAudioTracks: () => [],
+    addTrack() {},
+    removeTrack() {}
+  };
+}
 function snapshot(elements, storage) {
   const out = new Map();
   for (const [id, el] of elements) {
@@ -166,7 +179,17 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
     clearInterval: () => {},
     requestAnimationFrame: (fn) => { timers.push(fn); return timers.length; },
     alert() {}, confirm: () => true, prompt: () => null,
-    navigator: { geolocation: { getCurrentPosition: () => {} }, mediaDevices: {}, userAgent: 'mauli-verify' },
+    navigator: {
+      geolocation: { getCurrentPosition: (ok) => { if (typeof ok === 'function') ok({ coords: { latitude: 0, longitude: 0 } }); } },
+      // Media capture exists in every browser. Without it a working recorder was
+      // reported broken because startRec() threw on a missing API.
+      mediaDevices: {
+        getDisplayMedia: () => Promise.resolve(makeFakeStream()),
+        getUserMedia: () => Promise.resolve(makeFakeStream()),
+        enumerateDevices: () => Promise.resolve([])
+      },
+      userAgent: 'mauli-verify'
+    },
     location: { href: 'https://app.local/', reload() {}, assign() {} },
     fetch: () => Promise.reject(new Error('network-disabled-during-verification')),
     URL: { createObjectURL: () => 'blob:verify', revokeObjectURL() {} },

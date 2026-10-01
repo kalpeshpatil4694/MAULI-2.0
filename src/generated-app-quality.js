@@ -118,6 +118,54 @@ function significantWords(text) {
     .filter((w) => w.length >= 4 && !['with', 'that', 'from', 'this', 'will', 'must', 'should', 'make', 'build', 'create', 'using', 'able', 'user'].includes(w));
 }
 
+// A requirement and a working app often use different words for the same thing
+// ("to-do list" vs a page titled "Task Manager"). Expanding the requirement keeps the
+// evidence honest without pretending the literal string is present.
+const REQUIREMENT_SYNONYMS = {
+  catalog: ['product', 'products', 'store', 'shop', 'inventory', 'listing'],
+  todo: ['task', 'tasks', 'checklist', 'backlog'],
+  list: ['task', 'todo', 'item', 'items', 'entry'],
+  tasks: ['task', 'todo', 'checklist'],
+  checklist: ['task', 'todo'],
+  calculator: ['calc', 'calculation', 'sum', 'arithmetic', 'display'],
+  calculate: ['calc', 'calculator'],
+  weather: ['forecast', 'temperature', 'city'],
+  expense: ['expenses', 'spending', 'budget', 'cost'],
+  expenses: ['expense', 'spending', 'budget'],
+  budget: ['expense', 'spending'],
+  invoice: ['receipt', 'billing', 'total', 'line'],
+  recipe: ['recipes', 'ingredients', 'cooking'],
+  workout: ['workouts', 'exercise', 'fitness', 'training'],
+  workoutlog: ['workout', 'exercise'],
+  book: ['books', 'reading', 'title', 'author'],
+  reading: ['book', 'notes', 'progress'],
+  habit: ['habits', 'streak', 'checkin', 'daily'],
+  habits: ['habit', 'streak', 'daily'],
+  streak: ['habit', 'streaks', 'consecutive'],
+  bookmark: ['bookmarks', 'link', 'url'],
+  password: ['passwords', 'vault', 'credential', 'credentials'],
+  survey: ['surveys', 'question', 'response', 'quiz'],
+  timer: ['stopwatch', 'pomodoro', 'interval', 'countdown'],
+  calendar: ['event', 'events', 'schedule', 'booking'],
+  kanban: ['board', 'column', 'card'],
+  portfolio: ['resume', 'cv', 'about', 'work'],
+  resume: ['portfolio', 'cv'],
+  music: ['song', 'playlist', 'player', 'audio'],
+  chat: ['message', 'messages', 'conversation', 'room'],
+  message: ['chat', 'messages', 'send'],
+  recording: ['recordings', 'recorder', 'clip'],
+  game: ['score', 'play', 'player', 'board'],
+  chess: ['game', 'board', 'move', 'piece'],
+  app: ['application'],
+  application: ['app']
+};
+
+function expandWords(words) {
+  const out = new Set(words);
+  for (const w of words) for (const alt of (REQUIREMENT_SYNONYMS[w] ?? [])) out.add(alt);
+  return [...out];
+}
+
 function requirementCoverage(requirements, haystack) {
   const code = haystack.toLowerCase();
   return (Array.isArray(requirements) ? requirements : []).map((raw) => {
@@ -139,9 +187,58 @@ function requirementCoverage(requirements, haystack) {
 export function evaluateRequirementCoverage(requirements, sourceFiles) {
   const executed = (Array.isArray(sourceFiles) ? sourceFiles : [])
     .filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string')
-    .filter((f) => !/^package\.json$/i.test(f.path) && !/(^|\/)README(\.md|\.txt)?$/i.test(f.path) && !/\.(json|lock|ya?ml|toml)$/i.test(f.path))
-    .map((f) => String(f.content ?? ''));
-  return requirementCoverage(requirements, executed.join('\n'));
+    .filter((f) => !/^package\.json$/i.test(f.path) && !/(^|\/)README(\.md|\.txt)?$/i.test(f.path) && !/\.(json|lock|ya?ml|toml)$/i.test(f.path));
+  const markup = executed.filter((f) => /\.html?$/i.test(f.path)).map((f) => String(f.content ?? '')).join('\n');
+  // Inline scripts count as behaviour: most templates ship one html file with the app
+  // inline, so a corpus built only from external .js files was empty for them.
+  const inline = [...markup.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).join('\n');
+  const js = executed.filter((f) => /\.(m?js)$/i.test(f.path)).map((f) => String(f.content ?? '')).join('\n') + '\n' + inline;
+
+  // Evidence must be BEHAVIOURAL, not prose. Production delivered a contact/message form for
+  // "build a personal habit tracker with streaks": its <title> and hero simply repeated the
+  // founder's command, so every keyword matched, the fidelity score was 100 and the
+  // requirement was reported IMPLEMENTED — for an app that sends messages. A requirement is
+  // evidenced only by the domain words the app actually uses: its JavaScript and the DOM
+  // identifiers it binds (id/class/data-*/name/aria-label) and its field labels. Visible copy,
+  // titles and meta text are excluded on purpose.
+  const structural = [
+    js,
+    ...markup.matchAll(/\b(?:id|class|data-[\w-]+|name|aria-label|role)\s*=\s*["']([^"']*)["']/gi),
+    ...markup.matchAll(/<label[^>]*>([\s\S]{0,120}?)<\/label>/gi)
+  ].map((part) => (typeof part === 'string' ? part : (part[1] ?? ''))).join(' ');
+
+  return (Array.isArray(requirements) ? requirements : []).map((raw) => {
+    const requirement = String(raw ?? '').slice(0, 200);
+    const words = significantWords(requirement);
+    const behavioural = structural.toLowerCase();
+    const prose = visibleText(markup).toLowerCase();
+    const all = expandWords(words);
+    const hits = all.filter((w) => behavioural.includes(w));
+    const proseHits = all.filter((w) => prose.includes(w));
+    const evidence = hits.length > 0 ? 'behavioural' : (proseHits.length > 0 ? 'prose' : 'none');
+    return {
+      requirement,
+      status: words.length === 0 ? 'UNKNOWN' : (evidence === 'none' ? 'MISSING' : 'IMPLEMENTED'),
+      evidence,
+      matched: (hits.length ? hits : proseHits).slice(0, 6),
+      proseOnly: hits.length === 0 && proseHits.length > 0,
+      keywords: words.length
+    };
+  });
+}
+
+// The app's own visible text: headings, buttons, labels and list items. Scripts, styles,
+// the document head and the <title> are removed — a title that merely repeats the founder's
+// command is not evidence that the app does what was asked.
+function visibleText(markup) {
+  return String(markup ?? '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+    .replace(/<title[\s\S]*?<\/title>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&middot;|&amp;|&lt;|&gt;|&nbsp;/g, ' ');
 }
 
 /**

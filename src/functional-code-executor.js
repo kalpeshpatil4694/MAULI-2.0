@@ -285,7 +285,7 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
       const artifact = registerArtifact({
         projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
         content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: templateResult.notes || [] },
-        metadata: { generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length }
+        metadata: { generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length, templateMatched: templateResult.templateMatched === true }
       });
       return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: templateResult.notes || [], acceptance };
     }
@@ -346,7 +346,7 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
     const artifact = registerArtifact({
       projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
       content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), 'Template fallback used'] },
-      metadata: { generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length, aiFailed: true, aiError: lastError }
+      metadata: { generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length, aiFailed: true, aiError: lastError, templateMatched: templateResult.templateMatched === true }
     });
     return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: templateResult.notes || [], acceptance };
   }

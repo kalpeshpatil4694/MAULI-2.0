@@ -115,6 +115,21 @@ Three rules close the gap between "code exists" and "the feature works":
    `requirementCoverage` (IMPLEMENTED / FAILED / BLOCKED) plus the fidelity score and
    violations. The Worker's honest status is keyword evidence in executed source — never
    prose, since a README that repeats the founder's own words proves nothing.
+4. **A working app is not automatically the right app.** Production shipped a contact form
+   for "build a personal habit tracker with streaks" and scored it 100, because template
+   routing matched the single word "personal" to the portfolio template and the coverage
+   check counted the page's own copy as evidence. Three rules close this:
+   - **Routing is scored, not first-match.** Every template declares its own domain
+     vocabulary; generic words (`app`, `web`, `personal`, `track`) can never outrank a real
+     domain match, and domain words match on word boundaries so "bookmark" is not "book".
+   - **Requirement evidence has two honest levels.** Behavioural evidence (the app's own
+     JavaScript, storage keys, ids, classes, data attributes and field labels) is the
+     strong signal; visible copy counts too but is reported as `evidence: 'prose'`.
+     A requirement with no evidence at all is `MISSING`.
+   - **Delivery refuses the wrong product.** A project whose app has no evidence for the
+     founder's own command is refused, and a template that the router reported as
+     `templateMatched: false` is refused outright — MAULI says it could not build the thing
+     rather than delivering something unrelated.
 
 The runtime journey the verifier performs: it loads the app, builds a DOM, executes its
 scripts (firing the `DOMContentLoaded`/`load` listeners real apps initialise in), presses

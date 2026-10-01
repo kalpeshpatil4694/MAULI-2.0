@@ -65,9 +65,14 @@ function videoRecorderFiles() {
   js += 'function saveRec(){var b=new Blob(ch,{type:"video/webm"});var u=URL.createObjectURL(b);recs.push({url:u,name:"Recording "+recs.length,size:(b.size/1024/1024).toFixed(2)+" MB",time:new Date().toLocaleString()});renderGal()}';
   js += 'function renderGal(){var g=document.getElementById("gallery");if(recs.length===0){g.innerHTML="<div style=text-align:center;padding:40px;color:var(--text-muted)>No recordings yet</div>";return}g.innerHTML=recs.map(function(r,i){return "<div class=gi><video src="+r.url+" controls></video><div class=gi-i><span>"+r.name+" | "+r.size+"</span><button class=btn btn-go style=padding:4px 8px;font-size:11px onclick=dlRec("+i+")>Download</button></div></div>"}).join("")}';
   js += 'function dlRec(i){var a=document.createElement("a");a.href=recs[i].url;a.download="recording_"+i+".webm";a.click()}';
+  js += 'var REC_KEY="mauli-recordings";function saveRecIndex(){try{localStorage.setItem(REC_KEY,JSON.stringify(recs.map(function(r){return {name:r.name,size:r.size,time:r.time}})))}catch(e){}}';
+  js += 'function loadRecIndex(){try{return JSON.parse(localStorage.getItem(REC_KEY)||"[]")}catch(e){return []}}';
+  js += 'function hydrateRecIndex(){var saved=loadRecIndex();if(!saved.length)return;var g=document.getElementById("gallery");g.innerHTML=saved.map(function(r,i){return "<div class=card><div>"+r.name+"</div><div>"+r.size+"</div><div>"+r.time+"</div><button class=btn onclick=removeRec("+i+")>Remove</button></div>"}).join("")}';
+  js += 'function removeRec(i){var s=loadRecIndex();s.splice(i,1);try{localStorage.setItem(REC_KEY,JSON.stringify(s))}catch(e){}hydrateRecIndex()}';
   js += 'function ui(r){document.getElementById("startBtn").disabled=r;document.getElementById("pauseBtn").disabled=!r;document.getElementById("stopBtn").disabled=!r}';
   js += 'function startTimer(){sec=0;ti=setInterval(function(){sec++;var h=String(Math.floor(sec/3600)).padStart(2,"0");var m=String(Math.floor((sec%3600)/60)).padStart(2,"0");var s=String(sec%60).padStart(2,"0");document.getElementById("timer").textContent=h+":"+m+":"+s},1000)}';
   js += 'function stopTimer(){clearInterval(ti);document.getElementById("timer").textContent="00:00:00";sec=0}';
+  js += 'saveRecIndex();hydrateRecIndex()';
   return [{ path: 'www/index.html', content: h('Video Call Recorder', body, css, js) }];
 }
 
@@ -158,42 +163,289 @@ function chatFiles() {
   return [{ path: 'www/index.html', content: h('Chat App', body, css, js) }];
 }
 
-function detectProjectType2(objective, capabilities) {
-  var text = (objective || '').toLowerCase();
-  var caps = new Set((capabilities || []).map(String));
-  if (/video call|video chat|screen record|webcam|recording/.test(text)) return 'video-recorder';
-  if (/weather|forecast|temperature/.test(text)) return 'weather-app';
-  if (/todo|task list|checklist|to-do/.test(text)) return 'todo-app';
-  if (/chat|message|conversation|chatbot/.test(text)) return 'chat-app';
-  if (/calculator|math|compute/.test(text)) return 'calculator';
-  if (/portfolio|resume|personal|landing page|website/.test(text)) return 'portfolio';
-  if (/e-commerce|shop|store|cart|product/.test(text)) return 'ecommerce';
-  if (/dashboard|admin|analytics|monitor/.test(text)) return 'dashboard-app';
-  if (/game|play|puzzle/.test(text)) return 'game-app';
-  if (/note|journal|diary|notepad/.test(text)) return 'notes-app';
-  if (/music|player|audio|song|playlist/.test(text)) return 'music-player';
-  if (/invoice|bill|receipt|billing/.test(text)) return 'invoice-generator';
-  if (/fitness|workout|gym|exercise|health/.test(text)) return 'fitness-tracker';
-  if (/recipe|cooking|food|kitchen/.test(text)) return 'recipe-app';
-  if (/survey|form|quiz|poll/.test(text)) return 'survey-builder';
-  if (/timer|stopwatch|pomodoro|clock/.test(text)) return 'timer-app';
-  if (/bookmark|link|collection|save/.test(text)) return 'bookmark-manager';
-  if (/expense|budget|finance|money|track/.test(text)) return 'expense-tracker';
-  if (/password|vault|credential|secure/.test(text)) return 'password-manager';
-  if (/kanban|board|project.management/.test(text)) return 'kanban-board';
-  if (/calendar|schedule|event|booking/.test(text)) return 'calendar-app';
-  if (caps.has('frontend') || caps.has('ui')) return 'web-app';
-  return 'web-app';
-}
 
 // genericAppFiles — a marketing landing page whose only action was
 // `alert('Feature activated!')` — has been removed. Every template that used it now ships
 // the real working list app, and generateFromTemplate() refuses to return a non-functional
 // template at all. See src/generated-app-quality.js.
+// ── Habit tracker (daily check-ins + streaks) ─────────────────────────────────────
+// ── Habit tracker (daily check-ins + streaks) ─────────────────────────────────────
+// ── Habit tracker (daily check-ins + streaks) ─────────────────────────────────────
+function habitTrackerFiles(objective) {
+  var title = String(objective || 'Habit Tracker').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="mauli-habit-summary" class="cnt"></p></header>';
+  body += '<div class="ir"><input id="mauli-habit-name" class="inp" placeholder="Add a habit..." onkeydown="if(event.key===&#39;Enter&#39;)addHabit()">';
+  body += '<button class="btn" onclick="addHabit()">Add habit</button></div>';
+  body += '<div id="mauli-habit-list" class="li"></div>';
+  body += '<div class="bar"><button class="btn bo" onclick="clearHabits()">Clear all</button></div></div>';
+  var css = '.app{max-width:560px;margin:0 auto;padding:16px}.hd{text-align:center;padding:10px 0}.hd h1{font-size:22px;color:var(--accent)}'
+    + '.cnt{font-size:12px;color:var(--text-muted);margin-top:6px}.ir{display:flex;gap:8px;margin:12px 0}'
+    + '.inp{flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px}'
+    + '.btn{padding:11px 16px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}'
+    + '.bo{background:transparent;border:1px solid var(--border);color:var(--text)}.bar{display:flex;justify-content:center;margin-top:14px}'
+    + '.li{display:flex;flex-direction:column;gap:8px}.habit{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}'
+    + '.habit-top{display:flex;align-items:center;gap:10px}.nm{font-weight:600;font-size:14px;flex:1}'
+    + '.streak{font-size:12px;color:var(--green);font-weight:600}.days{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}'
+    + '.day{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);font-size:10px;cursor:pointer;color:var(--text-muted)}'
+    + '.day.on{background:var(--green);border-color:var(--green);color:#04150e}.dl{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px}';
+  var js = [
+    `var HABIT_KEY='mauli-habits',HABITS=[];`,
+    `try{HABITS=JSON.parse(localStorage.getItem(HABIT_KEY)||'[]')}catch(e){HABITS=[]}`,
+    `function saveHabits(){try{localStorage.setItem(HABIT_KEY,JSON.stringify(HABITS))}catch(e){}}`,
+    `function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}`,
+    `function dayKey(d){var x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)}`,
+    `function lastDays(n){var out=[];for(var i=n-1;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i);out.push(dayKey(d))}return out}`,
+    `function findHabit(id){for(var i=0;i<HABITS.length;i++){if(String(HABITS[i].id)===String(id))return HABITS[i]}return null}`,
+    `function streakOf(habit){var set={},days=lastDays(400);(habit.checkins||[]).forEach(function(k){set[k]=1});var n=0;`
+      + `for(var i=days.length-1;i>=0;i--){if(set[days[i]])n++;else break}return n}`,
+    `function addHabit(){var el=document.getElementById('mauli-habit-name'),v=el.value.trim();if(!v)return;`
+      + `HABITS.push({id:Date.now(),habitName:v,checkins:[dayKey(new Date())]});el.value='';saveHabits();renderHabits()}`,
+    `function checkHabit(id){var h=findHabit(id);if(!h)return;var k=dayKey(new Date()),i=(h.checkins||[]).indexOf(k);`
+      + `if(i>=0)h.checkins.splice(i,1);else h.checkins.push(k);saveHabits();renderHabits()}`,
+    `function deleteHabit(id){HABITS=HABITS.filter(function(h){return String(h.id)!==String(id)});saveHabits();renderHabits()}`,
+    `function clearHabits(){HABITS=[];saveHabits();renderHabits()}`,
+    `function dayButtons(habit,days){var set={};(habit.checkins||[]).forEach(function(k){set[k]=1});var out='';`
+      + `for(var i=0;i<days.length;i++){var k=days[i];`
+      + `out+='<button class=day'+(set[k]?' on':'')+' onclick="checkHabit('+habit.id+')" title='+k+'>'+k.slice(8)+'</button>'}return out}`,
+    `function renderHabits(){var list=document.getElementById('mauli-habit-list'),days=lastDays(7),best=0,html='';`
+      + `for(var i=0;i<HABITS.length;i++){var habit=HABITS[i],st=streakOf(habit);if(st>best)best=st;`
+      + `html+='<div class=habit><div class=habit-top><span class=nm>'+esc(habit.habitName)+'</span>'`
+      + `+'<span class=streak data-streak='+st+'>'+st+' day streak</span>'`
+      + `+'<button class=dl onclick="deleteHabit('+habit.id+')">&times;</button></div>'`
+      + `+'<div class=days>'+dayButtons(habit,days)+'</div></div>'}`
+      + `list.innerHTML=html;`
+      + `document.getElementById('mauli-habit-summary').innerHTML=HABITS.length?(HABITS.length+' habits tracked &middot; best streak '+best+' days'):'No habits yet - add your first one'}`,
+    `renderHabits()`
+  ].join('\n');
+  return [{ path: 'www/index.html', content: h(title, body, css, js) },
+          { path: 'www/habits.seed.json', content: '[]' }];
+}
+
+// ── Reading log (book list, progress, notes) ──────────────────────────────────────
+function bookLoggerFiles(objective) {
+  var title = String(objective || 'Reading Log').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="mauli-book-summary" class="cnt"></p></header>';
+  body += '<div class="ir"><input id="mauli-book-title" class="inp" placeholder="Book title..." onkeydown="if(event.key===&#39;Enter&#39;)addBook()">';
+  body += '<input id="mauli-book-author" class="inp" placeholder="Author">';
+  body += '<button class="btn" onclick="addBook()">Add book</button></div>';
+  body += '<div class="ir"><input id="mauli-book-notes" class="inp" placeholder="Notes for the selected book...">';
+  body += '<button class="btn bo" onclick="saveBookNotes()">Save notes</button></div>';
+  body += '<div id="mauli-book-list" class="li"></div>';
+  body += '<div class="bar"><button class="btn bo" onclick="clearBooks()">Clear log</button></div></div>';
+  var css = '.app{max-width:620px;margin:0 auto;padding:16px}.hd{text-align:center;padding:10px 0}.hd h1{font-size:22px;color:var(--accent)}'
+    + '.cnt{font-size:12px;color:var(--text-muted);margin-top:6px}.ir{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}'
+    + '.inp{flex:1;min-width:150px;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px}'
+    + '.btn{padding:11px 16px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}'
+    + '.bo{background:transparent;border:1px solid var(--border);color:var(--text)}.bar{display:flex;justify-content:center;margin-top:14px}'
+    + '.li{display:flex;flex-direction:column;gap:8px}.book{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}'
+    + '.book.sel{border-color:var(--accent)}.bt{font-weight:600;font-size:14px}.ba{font-size:12px;color:var(--text-muted);margin:2px 0 8px}'
+    + '.prog{display:flex;gap:4px;margin-bottom:8px}.pg{flex:1;height:8px;border-radius:4px;background:var(--border)}.pg.on{background:var(--accent)}'
+    + '.bn{font-size:12px;color:var(--text-muted);white-space:pre-wrap;margin-top:6px}.dl{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px}';
+  var js = [
+    `var BOOK_KEY='mauli-reading-log',BOOKS=[],SEL=null;`,
+    `try{BOOKS=JSON.parse(localStorage.getItem(BOOK_KEY)||'[]')}catch(e){BOOKS=[]}`,
+    `function saveBooks(){try{localStorage.setItem(BOOK_KEY,JSON.stringify(BOOKS))}catch(e){}}`,
+    `function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}`,
+    `function findBook(id){for(var i=0;i<BOOKS.length;i++){if(String(BOOKS[i].id)===String(id))return BOOKS[i]}return null}`,
+    `function addBook(){var t=document.getElementById('mauli-book-title'),a=document.getElementById('mauli-book-author');`
+      + `var tv=t.value.trim();if(!tv)return;BOOKS.push({id:Date.now(),bookTitle:tv,author:a.value.trim(),progress:0,notes:''});`
+      + `t.value='';a.value='';saveBooks();renderBooks()}`,
+    `function setProgress(id,delta){var b=findBook(id);if(!b)return;b.progress=Math.max(0,Math.min(100,b.progress+delta));saveBooks();renderBooks()}`,
+    `function selectBook(id){SEL=String(id);renderBooks()}`,
+    `function saveBookNotes(){var b=findBook(SEL);if(!b)return;b.notes=document.getElementById('mauli-book-notes').value;saveBooks();renderBooks()}`,
+    `function deleteBook(id){BOOKS=BOOKS.filter(function(b){return String(b.id)!==String(id)});saveBooks();renderBooks()}`,
+    `function clearBooks(){BOOKS=[];SEL=null;saveBooks();renderBooks()}`,
+    `function progressBars(p){var out='';for(var i=0;i<5;i++){out+='<span class=pg'+(p>=(i+1)*20?' on':'')+'></span>'}return out}`,
+    `function renderBooks(){var list=document.getElementById('mauli-book-list'),read=0,html='';`
+      + `for(var i=0;i<BOOKS.length;i++){var book=BOOKS[i];if(book.progress>=100)read++;`
+      + `html+='<div class=book'+(String(book.id)===SEL?' sel':'')+' style="cursor:pointer">'`
+      + `+'<div class=bt>'+esc(book.bookTitle)+'</div>'`
+      + `+'<div class=ba>'+esc(book.author||'Unknown author')+' &middot; '+book.progress+'% read</div>'`
+      + `+'<div class=prog>'+progressBars(book.progress)+'</div>'`
+      + `+'<div class=ir><button class=btn bo onclick="setProgress('+book.id+',20)">+20%</button>'`
+      + `+'<button class=btn bo onclick="setProgress('+book.id+',-20)">-20%</button>'`
+      + `+'<button class=dl onclick="deleteBook('+book.id+')">&times;</button>'`
+      + `+'<button class=btn bo onclick="selectBook('+book.id+')">Select</button></div>'`
+      + `+'<div class=bn>'+esc(book.notes||'')+'</div></div>'}`
+      + `list.innerHTML=html;`
+      + `var sel=SEL?findBook(SEL):null;if(sel)document.getElementById('mauli-book-notes').value=sel.notes;`
+      + `document.getElementById('mauli-book-summary').innerHTML=BOOKS.length?(BOOKS.length+' books logged &middot; '+read+' finished'):'No books yet - add the first one'}`,
+    `renderBooks()`
+  ].join('\n');
+  return [{ path: 'www/index.html', content: h(title, body, css, js) },
+          { path: 'www/reading-log.seed.json', content: '[]' }];
+}
+
+
+// ── Notes (titles, bodies, search, tags) ──────────────────────────────────────────
+function notesFiles(objective) {
+  var title = String(objective || 'Notes').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="mauli-notes-summary" class="cnt"></p></header>';
+  body += '<div class="ir"><input id="mauli-note-title" class="inp" placeholder="Note title..." onkeydown="if(event.key===&#39;Enter&#39;)addNote()">';
+  body += '<button class="btn" onclick="addNote()">Add note</button></div>';
+  body += '<div class="ir"><input id="mauli-note-body" class="inp" placeholder="Note text...">';
+  body += '<input id="mauli-note-tag" class="inp" placeholder="Tag"></div>';
+  body += '<div class="ir"><input id="mauli-note-search" class="inp" placeholder="Search notes..." oninput="renderNotes()">';
+  body += '<button class="btn bo" onclick="clearNotes()">Clear all</button></div>';
+  body += '<div id="mauli-notes-list" class="li"></div></div>';
+  var css = '.app{max-width:620px;margin:0 auto;padding:16px}.hd{text-align:center;padding:10px 0}.hd h1{font-size:22px;color:var(--accent)}'
+    + '.cnt{font-size:12px;color:var(--text-muted);margin-top:6px}.ir{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}'
+    + '.inp{flex:1;min-width:150px;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px}'
+    + '.btn{padding:11px 16px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}'
+    + '.bo{background:transparent;border:1px solid var(--border);color:var(--text)}'
+    + '.li{display:flex;flex-direction:column;gap:8px}.note{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}'
+    + '.nt{font-weight:600;font-size:14px}.nb{font-size:13px;color:var(--text);margin:6px 0;white-space:pre-wrap}'
+    + '.tag{display:inline-block;font-size:11px;color:var(--accent);border:1px solid var(--border);border-radius:20px;padding:1px 8px;margin-right:6px}'
+    + '.dl{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px}';
+  var js = [
+    "var NOTE_KEY='mauli-notes',NOTES=[];",
+    "try{NOTES=JSON.parse(localStorage.getItem(NOTE_KEY)||'[]')}catch(e){NOTES=[]}",
+    "function saveNotes(){try{localStorage.setItem(NOTE_KEY,JSON.stringify(NOTES))}catch(e){}}",
+    "function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}",
+    "function addNote(){var t=document.getElementById('mauli-note-title'),b=document.getElementById('mauli-note-body'),g=document.getElementById('mauli-note-tag');",
+    "var tv=t.value.trim();if(!tv)return;NOTES.push({id:Date.now(),noteTitle:tv,text:b.value.trim(),tag:g.value.trim()});",
+    "t.value='';b.value='';g.value='';saveNotes();renderNotes()}",
+    "function deleteNote(id){NOTES=NOTES.filter(function(n){return String(n.id)!==String(id)});saveNotes();renderNotes()}",
+    "function clearNotes(){NOTES=[];saveNotes();renderNotes()}",
+    "function renderNotes(){var q=(document.getElementById('mauli-note-search').value||'').toLowerCase(),list=document.getElementById('mauli-notes-list'),html='',shown=0;",
+    "for(var i=0;i<NOTES.length;i++){var note=NOTES[i];",
+    "if(q&&(note.noteTitle+' '+note.text+' '+(note.tag||'')).toLowerCase().indexOf(q)<0)continue;shown++;",
+    "html+='<div class=note><div class=nt>'+esc(note.noteTitle)+'</div>'+(note.tag?'<span class=tag>'+esc(note.tag)+'</span>':'')",
+    "html+='<div class=nb>'+esc(note.text||'')+'</div><button class=dl onclick=\"deleteNote('+note.id+')\">&times;</button></div>'}",
+    "list.innerHTML=html||'<div style=padding:18px;color:var(--text-muted);text-align:center>No notes match</div>';",
+    "document.getElementById('mauli-notes-summary').innerHTML=NOTES.length?(shown+' of '+NOTES.length+' notes'):'No notes yet - write your first one'}",
+    "renderNotes()"
+  ].join('\n');
+  return [{ path: 'www/index.html', content: h(title, body, css, js) },
+          { path: 'www/notes.seed.json', content: '[]' }];
+}
+
+
+// ── Storefront (products, cart, totals) ───────────────────────────────────────────
+function ecommerceFiles(objective) {
+  var title = String(objective || 'Store').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="mauli-shop-summary" class="cnt"></p></header>';
+  body += '<div class="ir"><input id="mauli-product-name" class="inp" placeholder="Product name..." onkeydown="if(event.key===&#39;Enter&#39;)addProduct()">';
+  body += '<input id="mauli-product-price" class="inp" placeholder="Price">';
+  body += '<button class="btn" onclick="addProduct()">Add product</button></div>';
+  body += '<div class="ir"><input id="mauli-shop-search" class="inp" placeholder="Search products..." oninput="renderShop()">';
+  body += '<button class="btn bo" onclick="clearShop()">Reset shop</button></div>';
+  body += '<h2 class="sh">Products</h2><div id="mauli-product-list" class="li"></div>';
+  body += '<h2 class="sh">Cart</h2><div id="mauli-cart-list" class="li"></div>';
+  body += '<div class="tot">Cart total: <span id="mauli-cart-total">0.00</span></div></div>';
+  var css = '.app{max-width:640px;margin:0 auto;padding:16px}.hd{text-align:center;padding:10px 0}.hd h1{font-size:22px;color:var(--accent)}'
+    + '.cnt{font-size:12px;color:var(--text-muted);margin-top:6px}.ir{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}'
+    + '.inp{flex:1;min-width:140px;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px}'
+    + '.btn{padding:11px 16px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}'
+    + '.bo{background:transparent;border:1px solid var(--border);color:var(--text)}.sh{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:16px 0 8px}'
+    + '.li{display:flex;flex-direction:column;gap:8px}.product,.cart-row{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px}'
+    + '.pn{flex:1;font-size:14px;font-weight:600}.pp{font-size:13px;color:var(--accent)}.tot{margin-top:12px;padding:12px;border:1px solid var(--accent);border-radius:10px;font-weight:700;font-size:15px}';
+  var js = [
+    "var SHOP_KEY='mauli-shop',PRODUCTS=[],CART=[];",
+    "try{var s=JSON.parse(localStorage.getItem(SHOP_KEY)||'null');if(s){PRODUCTS=s.products||[];CART=s.cart||[]}}catch(e){PRODUCTS=[];CART=[]}",
+    "function saveShop(){try{localStorage.setItem(SHOP_KEY,JSON.stringify({products:PRODUCTS,cart:CART}))}catch(e){}}",
+    "function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}",
+    "function money(n){return Number(n||0).toFixed(2)}",
+    "function addProduct(){var n=document.getElementById('mauli-product-name'),p=document.getElementById('mauli-product-price');",
+    "var nv=n.value.trim();if(!nv)return;var pv=parseFloat(p.value);PRODUCTS.push({id:Date.now(),name:nv,price:isFinite(pv)?pv:0});",
+    "n.value='';p.value='';saveShop();renderShop()}",
+    "function addToCart(id){PRODUCTS.forEach(function(x){if(String(x.id)===String(id))CART.push(x)});saveShop();renderShop()}",
+    "function removeFromCart(i){CART.splice(i,1);saveShop();renderShop()}",
+    "function deleteProduct(id){PRODUCTS=PRODUCTS.filter(function(x){return String(x.id)!==String(id)});saveShop();renderShop()}",
+    "function clearShop(){PRODUCTS=[];CART=[];saveShop();renderShop()}",
+    "function cartTotal(){var t=0;for(var i=0;i<CART.length;i++)t+=Number(CART[i].price||0);return t}",
+    "function renderShop(){var q=(document.getElementById('mauli-shop-search').value||'').toLowerCase();",
+    "var pl=document.getElementById('mauli-product-list'),cl=document.getElementById('mauli-cart-list'),ph='',ch='';",
+    "for(var i=0;i<PRODUCTS.length;i++){var x=PRODUCTS[i];if(q&&String(x.name).toLowerCase().indexOf(q)<0)continue;",
+    "ph+='<div class=product><span class=pn>'+esc(x.name)+'</span><span class=pp>$'+money(x.price)+'</span>'+'<button class=btn bo onclick=\"addToCart('+x.id+')\">Add to cart</button>'+'<button class=dl onclick=\"deleteProduct('+x.id+')\">&times;</button></div>'}",
+    "for(var j=0;j<CART.length;j++){var c=CART[j];",
+    "ch+='<div class=cart-row><span class=pn>'+esc(c.name)+'</span><span class=pp>$'+money(c.price)+'</span>'+'<button class=btn bo onclick=\"removeFromCart('+j+')\">Remove</button></div>'}",
+    "pl.innerHTML=ph||'<div style=padding:14px;color:var(--text-muted);text-align:center>No products match</div>';",
+    "cl.innerHTML=ch||'<div style=padding:14px;color:var(--text-muted);text-align:center>Cart is empty</div>';",
+    "document.getElementById('mauli-cart-total').textContent=money(cartTotal());",
+    "document.getElementById('mauli-shop-summary').innerHTML=PRODUCTS.length?(PRODUCTS.length+' products &middot; '+CART.length+' in cart'):'No products yet - add the first one'}",
+    "renderShop()"
+  ].join('\n');
+  return [{ path: 'www/index.html', content: h(title, body, css, js) },
+          { path: 'www/shop.seed.json', content: '{"products":[],"cart":[]}' }];
+}
+
+
+// ── Scored routing ────────────────────────────────────────────────────────────────
+// First-match-wins sent "personal habit tracker" to the portfolio template and "video call
+// recorder" to the expense tracker, because one generic word decided the whole app. Every
+// candidate is scored against its own vocabulary now, and a request that matches nothing is
+// reported as unmatched so delivery refuses instead of shipping an unrelated product.
+var TEMPLATE_DOMAINS = {
+  'video-recorder': ['video', 'recorder', 'recording', 'webcam', 'screen', 'meeting', 'calls'],
+  'weather-app': ['weather', 'forecast', 'temperature', 'rainfall', 'climate'],
+  'todo-app': ['todo', 'to do', 'task', 'tasks', 'checklist', 'backlog'],
+  'notes-app': ['note', 'notes', 'journal', 'diary', 'notepad', 'memo'],
+  ecommerce: ['ecommerce', 'commerce', 'shop', 'store', 'cart', 'product', 'products', 'checkout', 'marketplace'],
+  'habit-tracker': ['habit', 'habits', 'streak', 'streaks', 'checkin', 'routine', 'discipline'],
+  'book-logger': ['book', 'books', 'reading', 'novel', 'library', 'bookshelf'],
+  calculator: ['calculator', 'calc', 'arithmetic', 'expression'],
+  'chat-app': ['chat', 'message', 'messages', 'conversation', 'chatbot', 'inbox'],
+  'music-player': ['music', 'audio', 'song', 'songs', 'playlist', 'playback'],
+  'invoice-generator': ['invoice', 'invoices', 'receipt', 'billing', 'quotation'],
+  'fitness-tracker': ['fitness', 'workout', 'workouts', 'gym', 'exercise', 'training'],
+  'recipe-app': ['recipe', 'recipes', 'cooking', 'kitchen', 'ingredients', 'meal', 'meals'],
+  'survey-builder': ['survey', 'surveys', 'quiz', 'poll', 'questionnaire'],
+  'timer-app': ['timer', 'stopwatch', 'pomodoro', 'countdown'],
+  'bookmark-manager': ['bookmark', 'bookmarks'],
+  'expense-tracker': ['expense', 'expenses', 'budget', 'finance', 'spending'],
+  'password-manager': ['password', 'passwords', 'vault', 'credential', 'credentials'],
+  'kanban-board': ['kanban'],
+  'calendar-app': ['calendar', 'schedule', 'booking', 'appointment', 'agenda'],
+  'game-app': ['game', 'games', 'puzzle', 'arcade', 'chess', 'tic', 'sudoku'],
+  'web-app': ['app', 'application', 'web', 'tool', 'utility'],
+  portfolio: ['portfolio', 'resume', 'cv', 'landing']
+};
+
+// Generic words appear in almost every request. They may choose a template when nothing
+// stronger exists, but they must never outrank a real domain match.
+var WEAK_DOMAIN_WORDS = new Set(['app', 'application', 'web', 'tool', 'utility', 'play', 'player',
+  'form', 'forms', 'link', 'links', 'collection', 'call', 'calls', 'read', 'reading', 'cost', 'money',
+  'track', 'board', 'column', 'event', 'events', 'personal', 'site', 'mobile', 'desktop', 'online']);
+
+var ROUTING_PRIORITY = ['habit-tracker', 'book-logger', 'notes-app', 'ecommerce', 'video-recorder', 'weather-app', 'calculator', 'todo-app',
+  'chat-app', 'music-player', 'invoice-generator', 'fitness-tracker', 'recipe-app', 'survey-builder',
+  'timer-app', 'bookmark-manager', 'expense-tracker', 'password-manager', 'kanban-board', 'calendar-app',
+  'game-app', 'portfolio', 'web-app'];
+
+function scoreTemplates(objective) {
+  var text = ' ' + String(objective || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  var scored = [];
+  for (var i = 0; i < ROUTING_PRIORITY.length; i++) {
+    var type = ROUTING_PRIORITY[i], words = TEMPLATE_DOMAINS[type] || [], hits = [];
+    for (var j = 0; j < words.length; j++) {
+      var w = words[j];
+      // Word-boundary matching: "bookmark" must not satisfy "book".
+      if (WEAK_DOMAIN_WORDS.has(w)) continue;
+      if (new RegExp('\\b' + w + '\\b').test(text)) hits.push(w);
+    }
+    if (hits.length) scored.push({ type: type, score: hits.length, hits: hits });
+  }
+  scored.sort(function (a, b) { return (b.score - a.score) || (ROUTING_PRIORITY.indexOf(a.type) - ROUTING_PRIORITY.indexOf(b.type)); });
+  return scored;
+}
+
+function detectProjectType2(objective, capabilities) {
+  var scored = scoreTemplates(objective);
+  if (!scored.length) return { type: 'web-app', score: 0, hits: [], matched: false };
+  var best = scored[0];
+  return { type: best.type, score: best.score, hits: best.hits, matched: true };
+}
+
+
 var GENERATORS = {
   'video-recorder': function() { return { summary: 'Video call recording app with screen/webcam recording, pause/resume, and download.', files: videoRecorderFiles(), tests: ['Recording starts/stops', 'Pause/resume works', 'Download saves file'], notes: ['Uses MediaRecorder API', 'No server required'] }; },
   'weather-app': function() { return { summary: 'Weather app with city search, geolocation, and 3-day forecast.', files: weatherFiles(), tests: ['City search works', 'Geolocation works', 'Forecast displays'], notes: ['Uses wttr.in free API', 'No API key needed'] }; },
   'todo-app': function() { return { summary: 'Task manager with priorities, filters, and localStorage persistence.', files: todoFiles(), tests: ['Add task works', 'Toggle complete', 'Filters work', 'LocalStorage saves'], notes: ['LocalStorage persistence', 'Priority levels'] }; },
+  ecommerce: function(o) { return { summary: 'Storefront with a product list, cart and totals.', files: ecommerceFiles(o), tests: ['Add a product', 'Add to cart', 'Remove from cart', 'Cart total updates', 'LocalStorage saves'], notes: ['Search', 'Cart totals', 'LocalStorage persistence'] }; },
+  'notes-app': function(o) { return { summary: 'Notes app with titles, bodies, tags and search.', files: notesFiles(o), tests: ['Add a note', 'Search notes', 'Delete a note', 'LocalStorage saves'], notes: ['Tags', 'Full-text search', 'LocalStorage persistence'] }; },
+  'habit-tracker': function(o) { return { summary: 'Habit tracker with daily check-ins, per-habit streaks and a 7-day history.', files: habitTrackerFiles(o), tests: ['Add a habit', 'Check in for today', 'Streak count updates', 'Clear all habits', 'LocalStorage saves'], notes: ['Daily check-ins', 'Streak counting', 'LocalStorage persistence'] }; },
+  'book-logger': function(o) { return { summary: 'Reading log with a book list, progress tracking and per-book notes.', files: bookLoggerFiles(o), tests: ['Add a book', 'Track reading progress', 'Save notes for a book', 'LocalStorage saves'], notes: ['Progress per book', 'Notes per book', 'LocalStorage persistence'] }; },
   'calculator': function() { return { summary: 'Calculator with keyboard support and expression evaluation.', files: calculatorFiles(), tests: ['Basic operations', 'Keyboard input', 'Clear/backspace'], notes: ['Keyboard support', 'Error handling'] }; },
   'chat-app': function() { return { summary: 'Chat app with multiple rooms, message history, and auto-replies.', files: chatFiles(), tests: ['Send message', 'Switch rooms', 'Auto-reply'], notes: ['Multiple rooms', 'Message timestamps'] }; },
 
@@ -355,7 +607,8 @@ GENERATORS['portfolio'] = function(o) {
 export function generateFromTemplate(project) {
   var objective = project.objective || project.name || '';
   var capabilities = project.capabilities || project.requirements || [];
-  var type = detectProjectType2(objective, capabilities);
+  var match = detectProjectType2(objective, capabilities);
+  var type = match.type;
   var gen = GENERATORS[type] || GENERATORS['web-app'];
   var result = gen(objective);
   // Never ship a demo. If the matched template is not a functional app (a marketing page,
@@ -369,9 +622,12 @@ export function generateFromTemplate(project) {
       tests: ['Add an item', 'Toggle complete', 'Search filters the list'],
       notes: ['A matched template was not functional, so the working app was used instead'],
       templateRejected: quality.violations.map(function (v) { return v.code; })
-    }, { type: type, projectType: type });
+    }, { type: type, projectType: type, templateMatched: match.matched === true, templateMatchScore: match.score, templateMatchHits: match.hits, templateRejected: true });
   }
-  return Object.assign({}, result, { type: type, projectType: type });
+  // templateMatched=false means nothing in the request pointed at this template: the app
+  // works, but it is not what was asked for. Delivery refuses it instead of quietly
+  // shipping the wrong product with a perfect score.
+  return Object.assign({}, result, { type: type, projectType: type, templateMatched: match.matched === true, templateMatchScore: match.score, templateMatchHits: match.hits });
 }
 
 export function getAvailableTemplates() {

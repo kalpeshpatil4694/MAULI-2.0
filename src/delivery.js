@@ -34,6 +34,24 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
   if(fidelity&&!fidelity.passed){
     throw new Error('Delivery blocked: generated app fails functional fidelity ('+fidelity.violations.map(v=>v.code).join(', ')+')');
   }
+  // Wrong-app guard. Production shipped a contact form for "build a personal habit tracker"
+  // with a perfect fidelity score, because the page repeated the founder's words and no
+  // template matched the request. Both facts are now refused explicitly.
+  const objective=(project.objective??project.name??'').toString();
+  // The founder's own request, not requirements[0]: that slot is often a process
+  // statement ("requirements review", "Testing plan") that no product source names.
+  const founderRequirement=String(project.founderCommand??objective??'');
+  if(founderRequirement&&mergedFiles.length){
+    const founderCoverage=evaluateRequirementCoverage([founderRequirement],mergedFiles)[0];
+    if(founderCoverage&&founderCoverage.status==='MISSING'){
+      throw new Error(`Delivery blocked: the app does not implement "${founderRequirement.slice(0,80)}" (no evidence for it in the generated code)`);
+    }
+  }
+  const unmatched=codeArtifacts.filter(a=>a.metadata?.generatedBy==='app-templates'&&a.metadata?.templateMatched===false);
+  if(unmatched.length){
+    const wrongTemplates=[...new Set(unmatched.map(a=>a.metadata?.template))].filter(Boolean);
+    throw new Error(`Delivery blocked: MAULI could not build "${objective.slice(0,80)}" and would have delivered an unrelated template (${wrongTemplates.join(', ')})`);
+  }
   const gates = new Map(tasks.filter(t => t.pipelineGate && t.gateType).map(t => [t.gateType,t]));
 
   if (!tasks.length) throw new Error('Delivery blocked: project has no tasks');
