@@ -15,7 +15,7 @@ import { registerArtifact } from '../src/artifacts.js';
 import { getExecutor } from '../src/executor-registry.js';
 import { buildFinalDelivery } from '../src/delivery.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from '../src/generated-app-quality.js';
-import { GATES } from '../src/pipeline-gates.js';
+import { GATES, ensureProjectPipeline } from '../src/pipeline-gates.js';
 import { verifyGeneratedApp } from '../scripts/verify-generated-app.mjs';
 
 const TAIL = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -166,6 +166,30 @@ test('output that is only a demo is rejected before it can be registered as an a
     'a demo must not be registered as the generated application');
   assert.equal(analyzeGeneratedApp(result.files, { objective: 'Build an expense tracker web app' }).passed, true,
     'whatever is delivered must pass the fidelity gate');
+});
+
+// Production showed three "Pipeline gate: build" tasks for one project. Concurrent
+// scheduler ticks (cron plus an explicit trigger) each held a task list read a moment
+// earlier, so each created its own gate and the chain kept growing instead of settling.
+test('concurrent pipeline setup creates each gate exactly once', () => {
+  const pid = `p-${TAIL()}`;
+  store.put('projects', { id: pid, name: 'P', objective: 'Build a tracker', requirements: ['Track items'], state: 'active' });
+  store.put('tasks', { id: `${pid}-gen`, projectId: pid, title: 'Generate app', state: 'completed' });
+  store.put('tasks', { id: `${pid}-qa`, projectId: pid, title: 'Final project QA gate', state: 'queued', finalProjectVerification: true });
+
+  // Two ticks, each with the pre-create task list: neither sees the other's gates.
+  const stale = store.list('tasks').filter((t) => t.projectId === pid);
+  ensureProjectPipeline(pid, stale);
+  ensureProjectPipeline(pid, stale);
+  ensureProjectPipeline(pid);
+
+  const gates = store.list('tasks').filter((t) => t.projectId === pid && t.pipelineGate);
+  const byType = {};
+  for (const g of gates) byType[g.gateType] = (byType[g.gateType] ?? 0) + 1;
+  assert.deepEqual(byType, { build: 1, test: 1, requirements: 1, security: 1, qa: 1, integrity: 1 }, JSON.stringify(byType));
+  assert.equal(new Set(gates.map((g) => g.id)).size, gates.length, 'gate ids must be unique');
+  // Deterministic ids make the second create an upsert of the same row.
+  assert.ok(gates.every((g) => g.gateType === 'qa' || g.id.startsWith(`task_gate_${pid}_`)), gates.map((g) => g.id).join(', '));
 });
 
 test('the runtime verifier does not call a working app broken', () => {

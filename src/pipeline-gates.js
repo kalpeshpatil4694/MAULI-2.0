@@ -53,6 +53,19 @@ export function ensureProjectPipeline(projectId, tasksArg){
   const finalQa = tasks.find(t => t.finalProjectVerification);
   if(!finalQa) return null;
   const existing = new Map(gateTasksOf(tasks).map(t => [t.gateType, t]));
+  // Two scheduler ticks can run concurrently — the cron tick and an explicit trigger such
+  // as a founder command or an approval — each holding a task list read at a slightly
+  // different moment. Before creating a gate, re-read the project's gate rows so a
+  // concurrent create is recognised instead of duplicated (production showed three
+  // "Pipeline gate: build" tasks for one project, which kept the chain from settling).
+  let freshGates = null;
+  const beforeCreate = () => {
+    if (!freshGates) {
+      try { freshGates = store.list('tasks').filter(t => t.projectId === projectId && t.pipelineGate && t.gateType); }
+      catch (_) { freshGates = []; }
+    }
+    return freshGates;
+  };
   const generation = tasks.filter(t => !t.pipelineGate && !t.finalProjectVerification);
   let previousIds = generation.map(t => t.id);
   const created = [];
@@ -73,8 +86,13 @@ export function ensureProjectPipeline(projectId, tasksArg){
       if(existingGate.sequence !== gateSequence) existing.set(type, syncTask(tasks, store.put('tasks',{...existingGate,sequence:gateSequence,id:existingGate.id})));
       previousIds=[existing.get(type).id]; continue;
     }
+    const raced=beforeCreate().find(t => t.gateType === type);
+    if(raced){ existing.set(type, syncTask(tasks, raced)); previousIds=[raced.id]; continue; }
     const agent=gateAgent(type);
     const task=addTaskToProject(projectId, {
+      // Deterministic id: even if two ticks pass the re-read at the same instant, the
+      // second write upserts this same row instead of adding a duplicate gate.
+      id:`task_gate_${projectId}_${type}`,
       title:`Pipeline gate: ${type}`,
       description:`Mandatory ${type} gate for project ${projectId}`,
       requiredCapabilities:CAP[type], risk:'low',
