@@ -32,7 +32,11 @@ const PLACEHOLDER_PATTERNS = [
   { re: /this is a (mock|simulation)/i, code: 'mock-disclaimer' }
 ];
 
-const PERSISTENCE_RE = /\blocalStorage\b|\bsessionStorage\b|\bindexedDB\b|\bfetch\s*\(|\bDB\b|\bdatabase\b|\.prepare\s*\(/i;
+// Persistence must be EVIDENCE OF A CALL, not the word. The bare \bdatabase\b token let a
+// marketing one-pager pass the gate with a perfect score: its About section says
+// "database", so a page that stores nothing at all was delivered as a working app. Every
+// alternative below requires an actual call.
+const PERSISTENCE_RE = /\blocalStorage\s*\.\s*(?:get|set|remove)Item\s*\(|\bsessionStorage\s*\.\s*(?:get|set|remove)Item\s*\(|\bindexedDB\b|\bfetch\s*\(|XMLHttpRequest|EventSource|WebSocket|\.\s*prepare\s*\(|new\s+(?:SQLite|sqlite3|pg|Client|Redis)\b|\bdb\s*\.\s*(?:run|exec|query|get|all)\s*\(|\.(?:run|exec|query)\s*\(\s*['"`]?\s*(?:insert|select|update|delete)\b/i;
 const API_RE = /\bfetch\s*\(|\bXMLHttpRequest\b|WebSocket|EventSource/i;
 const REALTIME_RE = /WebSocket|EventSource|Server-Sent|\bnew\s+WebSocket|\.onmessage|socket\.(on|emit)/i;
 // A requirement whose wording implies stored/stateful data needs a persistence call.

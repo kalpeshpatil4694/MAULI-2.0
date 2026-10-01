@@ -371,11 +371,20 @@ if (process.argv.includes('--verify')) {
   const file = process.argv[idx + 1];
   if (!file) { console.error('--verify requires a JSON file path'); process.exit(2); }
   const workspace = JSON.parse(readFileSync(file, 'utf8'));
-  const result = verifyGeneratedApp(workspace.files ?? [], {
+  // Accept both shapes: the {files,objective,requirements} export and a bare files array.
+  // A bare array used to be silently treated as "no files", which printed a confident
+  // "FAIL (no violations)" for a workspace that had never been loaded at all.
+  const files = Array.isArray(workspace) ? workspace : (workspace.files ?? []);
+  if (!files.length) {
+    console.error('No files to verify in', file, '- expected {files:[…]} or a bare [{path,content}] array.');
+    process.exit(2);
+  }
+  const result = verifyGeneratedApp(files, {
     objective: workspace.objective ?? '',
     requirements: workspace.requirements ?? [],
     timeoutMs: 800
   });
+  console.log('files     :', files.length, files.map((f) => f.path).join(', ').slice(0, 160));
   console.log('objective :', workspace.objective ?? '(none)');
   console.log('static    :', result.quality.passed ? 'PASS' : 'FAIL', result.quality.violations.map(v => v.code).join(', ') || '(no violations)');
   console.log('coverage  :', result.quality.coverage.map(c => c.status + ': ' + c.requirement).join(' | ') || '(no requirements)');

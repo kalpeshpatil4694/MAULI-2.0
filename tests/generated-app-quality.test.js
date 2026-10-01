@@ -145,3 +145,37 @@ test('runtime verifier marks an unbound handler as broken', () => {
   assert.equal(result.verdict, 'broken');
   assert.deepEqual(result.missingHandlers, ['missing']);
 });
+
+// Persistence evidence must be a CALL, not a word. The bare \bdatabase\b token let a
+// marketing one-pager through the gate with a perfect score, because its About text
+// mentions a database: an app that stores nothing was delivered as a working product.
+test('prose that merely mentions a database is not persistence evidence', () => {
+  const page = [{
+    path: 'www/index.html',
+    content: '<!DOCTYPE html><html><body><nav><a href="#about">About</a></nav>' +
+      '<section id="about"><h1>Reading log</h1>' +
+      '<p>Our production stack uses a database with replication for durable storage.</p></section>' +
+      '<input id="book" class="inp"><button class="btn" onclick="add()">Add</button>' +
+      '<ul id="list"></ul><script>function add(){document.getElementById("list").innerHTML+="<li>x</li>"}</script></body></html>'
+  }];
+  const gate = analyzeGeneratedApp(page, {
+    objective: 'Build a personal reading log web app with a book list that persists progress',
+    requirements: ['Track reading progress and persist it']
+  });
+  assert.equal(gate.passed, false, JSON.stringify(gate.violations));
+  assert.ok(gate.violations.some((v) => v.code === 'no-persistence'), JSON.stringify(gate.violations));
+});
+
+test('a real storage call is still accepted as persistence evidence', () => {
+  const app = [{
+    path: 'www/index.html',
+    content: '<!DOCTYPE html><html><body><input id="book"><button onclick="add()">Add</button>' +
+      '<ul id="list"></ul><script>function add(){const v=document.getElementById("book").value;' +
+      'localStorage.setItem("mauli-books",v);document.getElementById("list").innerHTML+="<li>"+v+"</li>"}</script></body></html>'
+  }];
+  const gate = analyzeGeneratedApp(app, {
+    objective: 'Build a personal reading log web app with a book list that persists progress',
+    requirements: ['Track reading progress and persist it']
+  });
+  assert.equal(gate.passed, true, JSON.stringify(gate.violations));
+});
