@@ -136,11 +136,16 @@ test('queueing a command carries the chosen platform onto the project', async ()
     `the plan covers the target: ${JSON.stringify(chosen.project.requirements)}`
   );
 
-  // No explicit choice: the command's own words decide, then the web default.
+  // No explicit choice: the command's own words decide, then the web default. The reported
+  // source has to tell the truth about which of the two happened, so it is asserted here —
+  // a route that resolved first and passed the resolved id back reported 'explicit' for a
+  // command that named no platform at all.
   const inferred = await queueCommand('Build a portfolio website for Android', {}, {});
+  assert.equal(inferred.platform.source, 'inferred', 'the provenance is reported honestly');
   assert.equal(inferred.project.platform, 'android', 'the command is read when nothing is chosen');
 
   const plain = await queueCommand('Build a habit tracker', {}, {});
+  assert.deepEqual(plain.platform, { platform: 'web', source: 'default' });
   assert.equal(plain.project.platform, 'web', 'an unmentioned platform still builds for the web');
 
   store.data = new Map();

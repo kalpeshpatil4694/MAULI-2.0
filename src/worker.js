@@ -100,7 +100,10 @@ export default {
       const target = resolvePlatform(body.platform, body.command);
 
       try {
-        const queued = await queueCommand(body.command, env, { platform: target.platform });
+        // Hand over what the founder actually sent, not the value already resolved from it.
+        // Passing the resolved id back in made queueCommand re-resolve it and report
+        // source:'explicit' for a command that named no platform at all.
+        const queued = await queueCommand(body.command, env, { platform: body.platform });
         const payload = {
           runId: queued.runId,
           command: body.command,
