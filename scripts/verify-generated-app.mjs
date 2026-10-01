@@ -101,10 +101,24 @@ function makeFakeStream() {
     removeTrack() {}
   };
 }
+// A working app is not required to build its DOM with innerHTML. createElement +
+// appendChild is the other completely normal way to render a list, and an observer that
+// only reads innerHTML sees nothing change and reports a working feature as a dead
+// button. That is not hypothetical: a delivered habit tracker persisted every check-in
+// correctly and still scored `mutations: 0 / addHabit:no-op` here, so the one signal
+// meant to tell a working app from a dead page was blind to half of them.
+function childSignature(el) {
+  const kids = el?.children;
+  if (!kids || !kids.length) return '';
+  return kids
+    .map((c) => `${c.tagName ?? ''}#${c.id ?? ''}.${c.className ?? ''}=${c.textContent ?? ''}`)
+    .join('|');
+}
+
 function snapshot(elements, storage) {
   const out = new Map();
   for (const [id, el] of elements) {
-    out.set(id, `${el.innerHTML}|${el.textContent}|${el.value}|${el.className}|${[...el.classList._set].join(',')}`);
+    out.set(id, `${el.innerHTML}|${el.textContent}|${el.value}|${el.className}|${[...el.classList._set].join(',')}|kids=${childSignature(el)}`);
   }
   return out;
 }
@@ -363,6 +377,23 @@ export function runSelfTest() {
   check(badResult.verdict !== 'functional', 'demo app is not runtime-verified as functional', `verdict=${badResult.verdict}`);
   check(badResult.invoked.every((i) => i.status !== 'mutated'), 'the demo button changes nothing observable');
   check(badResult.quality.passed === false, 'demo app fails the static fidelity gate', badResult.quality.violations.map((v) => v.code).join(', '));
+
+  // A working app that renders with createElement + appendChild instead of innerHTML.
+  // This is the shape a delivered habit tracker used: it persisted every entry correctly
+  // and was still reported as a dead button, because the observer only read innerHTML.
+  const domApi = [
+    {
+      path: 'www/index.html',
+      content: '<!DOCTYPE html><html><body><h1>List</h1><input id="name"><button onclick="addItem()">Add</button><div id="list"></div><script src="app.js"></script></body></html>'
+    },
+    {
+      path: 'www/app.js',
+      content: 'var items=JSON.parse(localStorage.getItem("items")||"[]");function addItem(){var v=document.getElementById("name").value.trim();if(!v)return;items.push(v);localStorage.setItem("items",JSON.stringify(items));var li=document.createElement("li");li.className="item";li.textContent=v;document.getElementById("list").appendChild(li);}'
+    },
+    { path: 'package.json', content: '{"name":"list","version":"1.0.0"}' }
+  ];
+  const domResult = verifyGeneratedApp(domApi, { objective: 'Build a list app', requirements: ['Add items to a list'] });
+  check(domResult.verdict === 'functional', 'an appendChild-rendered app is not mistaken for a dead page', `verdict=${domResult.verdict}, mutations=${domResult.mutatedElements}`);
 
   // A truly broken app: the markup calls a handler that was never defined.
   const broken = [{ path: 'www/index.html', content: '<!DOCTYPE html><html><body><button onclick="saveItem()">Save</button></body></html>' }];
