@@ -165,6 +165,13 @@ export function extractRequirementSpec(input = {}) {
     // "live order updates", "live sync between devices": a live word and an update word,
     // not necessarily adjacent.
     || /\blive\b[^.]{0,24}?\b(?:update\w*|sync\w*|feed|refresh\w*|notif\w*|seen|connected)\b/i.test(text)
+    // "the counter screen updates live", "appears instantly", "shows up right away": the
+    // live word comes AFTER the verb, which is how a founder actually writes it. The live
+    // acceptance command for the bakery app said "updates live when a new order comes in"
+    // and the requirement was missed entirely.
+    || /\b(?:update\w*|show\w*|refresh\w*|appear\w*|display\w*|change\w*|come[s]? in|arrive\w*|reach\w*)\b[^.]{0,16}?\b(?:up\s+)?(?:live|instantly|automatically|right away|in real time|as soon as)\b/i.test(text)
+    || /\bwithout\s+(?:a\s+|any\s+)?(?:manual\s+|page\s+)?refresh\w*\b/i.test(text)
+    || /\b(?:push|pops? up|appears?)\b[^.]{0,20}?\b(?:to|on|for)\b[^.]{0,20}?\b(?:phone|device|screen|staff|team)\b/i.test(text);
     // A chat product is not automatically a live one: the founder has to ask for other
     // clients to see changes. Treating "chat" as real-time invented a requirement nobody
     // stated and refused a working messaging app for it.

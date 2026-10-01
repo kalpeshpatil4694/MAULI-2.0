@@ -71,6 +71,34 @@ test('a single-user tracker is understood without inventing accounts or a server
   assert.equal(spec.realtime.required, false, '"tracker" must not invent a real-time requirement');
 });
 
+// The FINAL ACCEPTANCE command was read as "not real-time" because the founder wrote
+// "the counter screen updates live" — the live word comes AFTER the verb. That command
+// produced a product with no live channel at all.
+test('real-time is recognised in the order founders actually write it', () => {
+  const wanted = [
+    'Build a bakery order app where the shop owner logs in, staff take orders at the counter, and the counter screen updates live when a new order comes in',
+    'Build a clinic queue app where the reception screen shows live when a doctor calls the next patient',
+    'Build a collaborative board where the other person sees my changes instantly',
+    'Build a delivery tracker where the map refreshes automatically',
+    'Build an expense tracker where the total updates live'
+  ];
+  const notWanted = [
+    MEDICINE,
+    'Build a habit tracker',
+    'Build a todo list app',
+    'Build a pomodoro timer',
+    'Build a Wi-Fi security auditor for my home network'
+  ];
+  for (const command of wanted) {
+    const architecture = selectArchitecture(extractRequirementSpec({ command, platform: 'web' }));
+    assert.equal(architecture.realtime, true, `"${command.slice(0, 48)}…" must be read as a live-update product`);
+  }
+  for (const command of notWanted) {
+    const architecture = selectArchitecture(extractRequirementSpec({ command, platform: 'web' }));
+    assert.equal(architecture.realtime, false, `"${command.slice(0, 48)}…" must not invent a live-update requirement`);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 4. Real architecture selection
 // ---------------------------------------------------------------------------
