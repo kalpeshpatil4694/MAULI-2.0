@@ -229,6 +229,26 @@ password. It touches nothing but a form, and it cannot reach anyone else's netwo
   handshake-capture or "hack someone else's network" tooling. The verifier runs the
   generated page too: `functional`, 20 DOM mutations, storage written.
 
+### Two liveness defects found by actually running a command
+
+Running the wireless-auditor commission end to end in production (rather than only in the
+test suite) exposed two failures that no unit test had:
+
+1. **A delivered artifact intermittently answered 404.** `getArtifact()` answers from the
+   isolate's hydrated store, and hydration on the request path is `.catch(() => {})`-swallowed.
+   A cold isolate whose hydrate read failed therefore served *every* artifact route from an
+   empty store: the founder clicked a delivered artifact and got "Artifact not found" for a
+   row the same Worker had listed one request earlier. `getArtifactDurable()` now falls through
+   to D1 on a cache miss and adopts the row, so one authoritative read happens before the
+   route is allowed to claim the artifact does not exist.
+2. **An approved project could sit at 6/13 tasks forever.** The approval decision and the
+   project-state write are two writes, not one atomic step. When an isolate died between them,
+   the approval said `approved` while the project still said `awaiting_approval` —
+   `claimNextTask` refuses such a project, and the maintenance gate check reported it as
+   "waiting for a human" who had already answered. Recovery now treats the approval row as
+   the authority and re-asserts the project state (`reactivated_approved`). An approval that
+   is genuinely still `pending` is untouched.
+
 ## 6. Upgradeability
 
 New agents, departments, tools, workflows, model providers, execution runtimes, and UI clients should be addable through interfaces/contracts rather than invasive changes to the core.
