@@ -63,6 +63,22 @@ test('a command MAULI cannot understand is BLOCKED, never rounded up to complete
   assert.equal(spec.productType, null);
 });
 
+// The laundry command is a domain MAULI has no catalogue entry for, and MAULI read it as
+// BLOCKED with no CRUD at all — a shop app with no way to register a garment.
+test('an unlisted domain with clear behaviour is PARTIAL on the founder\'s own noun, not BLOCKED', () => {
+  const command = 'Build a laundry pickup and drop-off app where the shop owner logs in, staff register each garment, and the counter screen updates live when a new pickup comes in';
+  const spec = extractRequirementSpec({ command, platform: 'web' });
+  const architecture = selectArchitecture(spec);
+
+  assert.equal(spec.understanding, 'PARTIAL', 'an unverified domain is never rounded up to COMPLETE');
+  assert.equal(spec.productType, 'domain');
+  assert.equal(spec.inferredFromDomain, 'laundry');
+  assert.ok(spec.features.some((f) => f.key === 'create'), '"register each garment" is a create action');
+  assert.equal(architecture.realtime, true);
+  assert.equal(architecture.backend, true);
+  assert.equal(domainEntity(spec), 'laundry', 'the founder\'s own noun becomes the entity, not a generic "record"');
+});
+
 test('a single-user tracker is understood without inventing accounts or a server', () => {
   const spec = extractRequirementSpec({ command: MEDICINE, platform: 'web' });
   assert.equal(spec.understanding, 'COMPLETE');

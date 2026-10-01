@@ -59,8 +59,8 @@ const ROLES = [
 // words are what the runtime looks for in the app's EXECUTED source, so they are written
 // as the words a working implementation actually uses — not as the founder's phrasing.
 const FEATURES = [
-  { key: 'create', label: 'Create records', evidence: ['add', 'create', 'new', 'submit', 'save', 'form', 'register', 'order'], patterns: [/\b(?:add|create|new entry|make a new|submit|place an order|take an order|book)\b/i], inputs: ['title / name field', 'detail fields'], rule: 'A submitted record is validated and then stored' },
-  { key: 'read', label: 'View / list records', evidence: ['list', 'view', 'show', 'display', 'render', 'table', 'items'], patterns: [/\b(?:list|view|show|browse|display|see)\b/i], outputs: ['record list', 'record detail'], rule: 'Stored records are listed from the store, not from a hardcoded array' },
+  { key: 'create', label: 'Create records', evidence: ['add', 'create', 'new', 'submit', 'save', 'form', 'register', 'order', 'log', 'record'], patterns: [/\b(?:add|create|new entry|make a new|submit|place an order|take an order|book|register each|log each|record each|check in|capture|enter)\b/i], inputs: ['title / name field', 'detail fields'], rule: 'A submitted record is validated and then stored' },
+  { key: 'read', label: 'View / list records', evidence: ['list', 'view', 'show', 'display', 'render', 'table', 'items'], patterns: [/\b(?:list|view|show|browse|display|see|track)\b/i], outputs: ['record list', 'record detail'], rule: 'Stored records are listed from the store, not from a hardcoded array' },
   { key: 'update', label: 'Update / edit records', evidence: ['edit', 'update', 'modify', 'change', 'save'], patterns: [/\b(?:update|edit|modify|change|revise)\b/i], inputs: ['edited values'], rule: 'An update changes the stored record and the UI reflects the new value' },
   { key: 'delete', label: 'Delete records', evidence: ['delete', 'remove', 'clear', 'discard'], patterns: [/\b(?:delete|remove|discard|clear)\b/i], rule: 'A deleted record disappears from the store and the UI' },
   { key: 'search', label: 'Search / filter', evidence: ['search', 'filter', 'query', 'find', 'match'], patterns: [/\b(?:search|filter|lookup|find)\b/i], inputs: ['search text'], rule: 'Search narrows the visible records by the entered text' },
@@ -157,6 +157,12 @@ export function extractRequirementSpec(input = {}) {
   if (!features.length && productTypes[0] && CRUD_TYPES.has(productTypes[0].type)) {
     features = CRUD_FEATURES.map((k) => FEATURES.find((f) => f.key === k));
   }
+  // A founder naming actions ("register each garment", "mark it ready") has described a
+  // record product even when the catalogue has no word for the domain. Those verbs imply the
+  // four record operations that a real product then owes.
+  if (features.some((f) => ['create', 'read', 'audit'].includes(f.key)) && !features.some((f) => f.key === 'delete')) {
+    features = [...features, FEATURES.find((f) => f.key === 'delete'), FEATURES.find((f) => f.key === 'read')].filter(Boolean);
+  }
 
   const wantsAuth = /\b(?:log ?in|login|sign ?in|signin|register|registration|sign ?up|signup|create account|user account|authentication|auth)\b/i.test(text) || roles.length > 0;
   // "live order updates", "instant sync", "real time" — the founder names the channel
@@ -180,12 +186,21 @@ export function extractRequirementSpec(input = {}) {
 
   // -- 1. product type --------------------------------------------------------
   const requirements = [];
-  if (productTypes.length) {
-    requirements.push(req('product', `Product type: ${productTypes[0].label}`, {
-      statement: `The product is a ${productTypes[0].label}.`,
+  // A domain MAULI has no catalogue entry for is still a specific product when the founder
+  // named the thing ("a laundry pickup and drop-off app ... register each garment"). It is
+  // reported as the founder's own domain, at PARTIAL confidence — never silently upgraded to
+  // a catalogue product, and never dropped to BLOCKED when the behaviour asked for is clear.
+  const domainNoun = nouns.find((w) => !['owner','shop','counter','screen','staff','team','customer','user','app','order','orders','item','items','thing','things','thing\'s','people','time','day','week','month','year','update','updates','live'].includes(w)) ?? null;
+  const inferredProduct = !productTypes.length && features.length && domainNoun
+    ? { type: 'domain', label: `${domainNoun} app` }
+    : null;
+  const product = productTypes[0] ?? inferredProduct;
+  if (product) {
+    requirements.push(req('product', `Product type: ${product.label}`, {
+      statement: `The product is a ${product.label}.`,
       critical: true,
       evidence: [...new Set([
-        ...productTypes[0].label.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3),
+        ...product.label.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3),
         ...nouns.slice(0, 4)
       ])]
     }));
@@ -334,10 +349,10 @@ export function extractRequirementSpec(input = {}) {
   // or a single feature: guessing here is exactly the generic-substitution failure.
   const asksForSoftware = /\b(?:build|create|make|develop|implement|design|generate|need|want)\b/i.test(text);
   const understood = productTypes.length > 0 && features.length > 0;
-  // COMPLETE needs a product AND behaviour. Anything less is PARTIAL — never silently
-  // rounded up to COMPLETE, because that is what licenses a generic substitution.
+  // COMPLETE needs a catalogue product AND behaviour. A product MAULI recognised from the
+  // founder's own domain noun is PARTIAL: the behaviour is clear, the domain is unverified.
   const understanding = understood ? 'COMPLETE'
-    : (productTypes.length || features.length) ? 'PARTIAL'
+    : (product || features.length) ? 'PARTIAL'
       : (asksForSoftware ? 'BLOCKED' : 'COMPLETE');
 
   return {
@@ -345,8 +360,9 @@ export function extractRequirementSpec(input = {}) {
     command,
     objective,
     platform: platform ?? null,
-    productType: productTypes[0]?.type ?? null,
-    productTypeLabel: productTypes[0]?.label ?? null,
+    productType: product?.type ?? null,
+    productTypeLabel: product?.label ?? null,
+    inferredFromDomain: inferredProduct ? (domainNoun ?? null) : null,
     alternativeProductTypes: productTypes.slice(1).map((p) => p.type),
     roles: roles.map((r) => ({ key: r.key, label: r.label })),
     features: features.map((f) => ({ key: f.key, label: f.label })),
