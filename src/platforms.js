@@ -18,6 +18,9 @@ export const PLATFORMS = [
     icon: '🌐',
     // A browser target needs no packaging step, so it adds no requirement of its own.
     requirements: [],
+    // The web keywords describe a delivery shape rather than a named target, so this
+    // platform ranks below any platform the founder actually named.
+    priority: 10,
     keywords: ['web', 'website', 'browser', 'pwa', 'online', 'site'],
   },
   {
@@ -25,6 +28,7 @@ export const PLATFORMS = [
     label: 'Android',
     icon: '📱',
     requirements: ['Android packaging and device permissions'],
+    priority: 30,
     keywords: ['android', 'apk', 'play store', 'google play'],
   },
   {
@@ -32,6 +36,7 @@ export const PLATFORMS = [
     label: 'iOS',
     icon: '🍎',
     requirements: ['iOS packaging and device permissions'],
+    priority: 30,
     keywords: ['ios', 'iphone', 'ipad', 'app store'],
   },
   {
@@ -39,6 +44,7 @@ export const PLATFORMS = [
     label: 'Desktop',
     icon: '🖥️',
     requirements: ['Desktop executable packaging and platform metadata'],
+    priority: 30,
     keywords: ['desktop', 'exe', 'windows', 'macos', 'mac', 'linux', 'electron'],
   },
 ];
@@ -104,22 +110,26 @@ export function normalizePlatform(input) {
 
 /**
  * Infer the target platform from the command text. Word-boundary matched so "mac" does not
- * fire on "machine" and "ios" does not fire on "curious". The most specific hit wins: a
- * command naming both a platform and a packaging format ("build an android apk") keeps the
- * platform, not the format.
+ * fire on "machine" and "ios" does not fire on "curious".
+ *
+ * Ranking is by platform specificity, NOT keyword length. "Build a portfolio website for
+ * Android" mentions both a target and a delivery shape, and ranking by word length let the
+ * longer word win — the web default hijacking a command that named a real platform. A named
+ * platform always outranks the browser hint; length only breaks ties within one platform.
  */
 export function detectPlatformFromText(text) {
   const haystack = ` ${String(text ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ')} `;
   const hits = [];
   for (const platform of PLATFORMS) {
     for (const keyword of platform.keywords) {
-      // Longer keywords are more specific, so they are preferred on a tie.
       const pattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-      if (pattern.test(haystack)) hits.push({ id: platform.id, weight: keyword.length });
+      if (pattern.test(haystack)) {
+        hits.push({ id: platform.id, rank: platform.priority, weight: keyword.length });
+      }
     }
   }
   if (!hits.length) return null;
-  hits.sort((a, b) => b.weight - a.weight);
+  hits.sort((a, b) => (b.rank - a.rank) || (b.weight - a.weight));
   return hits[0].id;
 }
 

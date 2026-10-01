@@ -19,6 +19,7 @@ import {
   describePlatform,
 } from '../src/platforms.js';
 import { createProject } from '../src/projects.js';
+import { queueCommand } from '../src/orchestrator.js';
 import { buildFinalDelivery } from '../src/delivery.js';
 import { generateFromTemplate } from '../src/app-templates.js';
 import { store } from '../src/store.js';
@@ -58,6 +59,16 @@ test('a short word inside a longer word is not a platform', () => {
   // "mac" and "ios" are the two that fire on ordinary English if the match is not bounded.
   assert.equal(detectPlatformFromText('Build a curious machine dashboard'), null);
   assert.equal(detectPlatformFromText('A curious operating manual'), null);
+});
+
+test('a named platform outranks the browser shape it is described in', () => {
+  // "website" is a longer word than "android", and ranking by length let the web default
+  // hijack a command that named a real target.
+  assert.equal(detectPlatformFromText('Build a portfolio website for Android'), 'android');
+  assert.equal(detectPlatformFromText('Create a web dashboard for iPhone'), 'ios');
+  assert.equal(detectPlatformFromText('Make a website that runs as a Windows exe'), 'desktop');
+  // With no named target, the browser hint is all there is.
+  assert.equal(detectPlatformFromText('Create a portfolio website'), 'web');
 });
 
 test('an explicit choice always beats the words in the command', () => {
@@ -107,6 +118,33 @@ test('a project records the platform it was commissioned for', () => {
   const plain = createProject({ name: 'P', objective: 'O' });
   assert.equal(plain.platform, null);
   store.data.get('projects')?.delete(plain.id);
+});
+
+test('queueing a command carries the chosen platform onto the project', async () => {
+  // Regression: the platform was threaded through planCommand but the route a founder
+  // actually hits lives in worker.js, and it called queueCommand without the option — so
+  // every commissioned target was silently downgraded to the web default.
+  store.configure(null);
+  store.data = new Map();
+  store.events = [];
+
+  const chosen = await queueCommand('Build a weather app with live forecasts', {}, { platform: 'android' });
+  assert.equal(chosen.platform.platform, 'android', 'the resolved target is reported back');
+  assert.equal(chosen.project.platform, 'android', 'and persisted on the project');
+  assert.ok(
+    chosen.project.requirements.includes('Android packaging and device permissions'),
+    `the plan covers the target: ${JSON.stringify(chosen.project.requirements)}`
+  );
+
+  // No explicit choice: the command's own words decide, then the web default.
+  const inferred = await queueCommand('Build a portfolio website for Android', {}, {});
+  assert.equal(inferred.project.platform, 'android', 'the command is read when nothing is chosen');
+
+  const plain = await queueCommand('Build a habit tracker', {}, {});
+  assert.equal(plain.project.platform, 'web', 'an unmentioned platform still builds for the web');
+
+  store.data = new Map();
+  store.events = [];
 });
 
 test('the delivery says which platform it was built for', () => {
