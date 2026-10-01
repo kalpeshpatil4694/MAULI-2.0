@@ -44,6 +44,9 @@ test('project state becomes completed only when every task is completed', () => 
     state: 'completed'
   });
 
-  const current = listProjects().find(p => p.id === project.id);
-  assert.equal(current.state, 'completed');
+  // Every task done is not the same as delivered: without a final delivery the founder
+  // has nothing to download, so the project must stay visibly unfinished.
+  assert.equal(listProjects().find(p => p.id === project.id).state, 'active');
+  store.put('projects', { ...store.get('projects', project.id), finalDeliveryId: 'artifact-state-test', id: project.id });
+  assert.equal(listProjects().find(p => p.id === project.id).state, 'completed');
 });

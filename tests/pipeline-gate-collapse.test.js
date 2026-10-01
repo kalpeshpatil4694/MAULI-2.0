@@ -138,7 +138,9 @@ test('a project with only collapsed duplicates reads as completed', async () => 
   const security = store.list('tasks').find((t) => t.projectId === pid && t.pipelineGate && t.gateType === 'security');
   store.put('tasks', { ...security, id: `${pid}-security-dup`, state: 'queued', verificationId: null, assignedAgentId: null, agentId: null, dependsOn: [] });
   ensureProjectPipeline(pid);
-  store.put('projects', { ...store.get('projects', pid), state: 'completed', id: pid });
+  // 'completed' is only true once the delivery exists — a project whose delivery was
+  // refused must not read as finished.
+  store.put('projects', { ...store.get('projects', pid), state: 'completed', finalDeliveryId: 'artifact_delivery', id: pid });
 
   const derived = listProjects().find((p) => p.id === pid);
   assert.equal(derived.state, 'completed',

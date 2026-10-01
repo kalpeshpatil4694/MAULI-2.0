@@ -78,7 +78,8 @@ function projectStateFromTasks(project, tasks) {
   if (own.some(t => ['working', 'running', 'blocked', 'assigned'].includes(t.state))) return 'active';
   // A collapsed duplicate gate (cancelled) is settled work, not an open task: deriving
   // 'active' from it kept a finished project looking unfinished on every read.
-  if (own.every(t => t.state === 'completed' || (t.state === 'cancelled' && t.collapsedDuplicate === true))) return 'completed';
+  if (own.every(t => t.state === 'completed' || (t.state === 'cancelled' && t.collapsedDuplicate === true)))
+    return project?.finalDeliveryId ? 'completed' : 'active';
   if (own.some(t => t.state === 'completed')) return 'active';
   return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
 }

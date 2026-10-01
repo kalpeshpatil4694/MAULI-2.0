@@ -14,11 +14,14 @@ function projectStateFromTasks(project) {
   const nonQa = tasks.filter(t => !t.finalProjectVerification);
   const qa = tasks.filter(t => t.finalProjectVerification);
   if (nonQa.some(t => t.state === 'failed')) return 'active';
-  if (tasks.every(settledTask) && qa.length > 0 && qa.every(t => settledTask(t) && t.verificationId)) return 'completed';
+  // 'completed' must mean DELIVERED. Deriving it from tasks alone let a project whose
+  // delivery was refused read as finished while the founder had nothing to download.
+  if (tasks.every(settledTask) && qa.length > 0 && qa.every(t => settledTask(t) && t.verificationId))
+    return project?.finalDeliveryId ? 'completed' : 'active';
   if (tasks.some(t => ['working','running','assigned','verifying'].includes(t.state))) return 'active';
   if (tasks.some(t => t.state === 'blocked')) return 'active';
   if (nonQa.length && nonQa.every(settledTask) && qa.some(t => !settledTask(t))) return 'active';
-  if (tasks.every(settledTask)) return 'completed';
+  if (tasks.every(settledTask)) return project?.finalDeliveryId ? 'completed' : 'active';
   return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
 }
 
