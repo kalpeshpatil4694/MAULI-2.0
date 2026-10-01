@@ -9,6 +9,7 @@ import { extractRequirementSpec, requirementId, resetRequirementIds } from '../s
 import { selectArchitecture, architectureEvidenceNeeds } from '../src/architecture.js';
 import { buildRequirementMatrix, buildTraceability, scoreGeneratedAppQuality, dualStatus, QUALITY_CATEGORIES } from '../src/requirement-matrix.js';
 import { generateFullStackApp, domainEntity } from '../src/fullstack-codegen.js';
+import { hasBackendEntryPoint } from '../src/functional-code-executor.js';
 import { generateFromTemplate, getAvailableTemplates } from '../src/app-templates.js';
 import { analyzeGeneratedApp } from '../src/generated-app-quality.js';
 
@@ -306,6 +307,32 @@ test('a structural requirement is not failed by a runtime that cannot observe it
   const row = matrix.rows.find((r) => r.id === platform.id);
   assert.equal(row.status, 'PASS', 'a target that cannot be observed at runtime must not be scored FAIL');
   assert.equal(dualStatus({ matrix, fidelity }).founderRequirementComplete, 'REQUIREMENT VERIFIED');
+});
+
+// The live acceptance run caught this: the Workers AI allowance reset mid-test and the
+// model returned a working localStorage PAGE for a command that owes a login, a database
+// and live updates. It scored 92 on the static gate, because `realtime-not-implemented` is
+// only a warning, and would have been merged over the correct full-stack build.
+test('a browser-only page is not an acceptable answer to a product that owes a backend', () => {
+  const spec = extractRequirementSpec({
+    command: 'Build a laundry pickup and drop-off app where the shop owner logs in, staff register each garment, and the counter screen updates live',
+    platform: 'web'
+  });
+  const architecture = selectArchitecture(spec);
+  assert.equal(architecture.backend, true);
+
+  const page = [
+    { path: 'www/index.html', content: '<!DOCTYPE html><html><body><h1>Laundry Management</h1><div id="pickupCounter">0</div><button onclick="addPickup()">Add Pickup</button></body></html>' },
+    { path: 'www/app.js', content: 'var n=Number(localStorage.getItem("laundry_pickups")||0);function addPickup(){n=n+1;localStorage.setItem("laundry_pickups",String(n));document.getElementById("pickupCounter").textContent=String(n);}addPickup();' },
+    { path: 'www/styles.css', content: 'body{background:#111;color:#eee;font-family:system-ui}' }
+  ];
+  assert.equal(hasBackendEntryPoint(page), false, 'a page is not a backend');
+  assert.equal(hasBackendEntryPoint(generateFullStackApp(spec, architecture).files), true, 'the generated product must satisfy the same check');
+
+  // And the static gate alone is not enough to catch it — which is why the generation rule
+  // and the delivery gate exist on top of it.
+  const fidelity = analyzeGeneratedApp(page, { objective: spec.command });
+  assert.match(fidelity.violations.map((v) => v.code).join(','), /realtime-not-implemented/);
 });
 
 // ---------------------------------------------------------------------------

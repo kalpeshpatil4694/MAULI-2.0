@@ -4,6 +4,7 @@ import { d1Get, hasD1 } from './db.js';
 import { registerArtifact } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
 import { buildRequirementMatrix, buildTraceability, scoreGeneratedAppQuality, dualStatus } from './requirement-matrix.js';
+import { hasBackendEntryPoint } from './functional-code-executor.js';
 import { describePlatform } from './platforms.js';
 
 const REQUIRED_GATES=['build','test','requirements','security','qa','integrity'];
@@ -67,6 +68,20 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
   const spec = project.requirementSpec ?? null;
   const specRequirements = spec?.requirements ?? [];
   const runtime = project.runtimeEvidence ?? null;
+  // Architecture obligations are delivery obligations. A specification that selected a
+  // Worker API must not be satisfied by a page: the gates judge the UNION of every agent's
+  // artifact, so one agent's static page must not quietly become the whole product.
+  if (project.architecture?.backend === true && !hasBackendEntryPoint(mergedFiles)) {
+    throw new Error(`Delivery blocked: the selected architecture is "${project.architecture.id}" (Worker API + ${project.architecture.database}), but the delivered code has no backend entry point`);
+  }
+  for (const obligation of project.architecture?.obligations ?? []) {
+    if (obligation.id !== 'backend-endpoint' && obligation.id !== 'db-binding') continue;
+    const satisfied = (obligation.evidence ?? []).some((word) =>
+      mergedFiles.some((f) => String(f.content ?? '').toLowerCase().includes(String(word).toLowerCase())));
+    if (!satisfied) {
+      throw new Error(`Delivery blocked: architecture obligation "${obligation.id}" is unmet — ${obligation.requirement}`);
+    }
+  }
   // The matrix judges a PRODUCT. "Research a travel destination" generates no code and
   // rightly has no code requirements; gating it on "no placeholder implementation" would
   // refuse a completed research commission for shipping nothing.

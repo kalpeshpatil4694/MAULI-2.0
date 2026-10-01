@@ -283,6 +283,16 @@ function architectureFor(task) {
 }
 
 /**
+ * Does this file set actually contain a server entry point? A Worker, an API or a server
+ * module — not a page that merely mentions the word "database".
+ */
+export function hasBackendEntryPoint(files) {
+  return (Array.isArray(files) ? files : []).some((f) =>
+    f && typeof f.path === 'string' && /(?:^|\/)(?:worker|api|server|backend|routes?)\/[a-z0-9_-]+\.[cm]?js$/i.test(f.path)
+      || /(?:^|\/)(?:worker|api|server)\.[cm]?js$/i.test(f.path));
+}
+
+/**
  * Generate the product the specification asks for, when it owes a backend.
  *
  * A template cannot produce this: every template is a browser page, and a founder who asked
@@ -373,6 +383,19 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   // which is itself fidelity-gated, and record why the AI output was refused.
   if (files && quality && !quality.passed) {
     lastError = 'functional fidelity failed: ' + quality.violations.map(v => v.code).join(', ');
+  }
+  if (files && (!quality || quality.passed)) {
+    // A model that returns a working PAGE for a product that owes a SERVER has returned a
+    // different product. This happened live: the Workers AI allowance reset mid-test, the
+    // model wrote a laundry counter in localStorage, scored 92 on the static gate (the
+    // real-time violation is only a warning) and would have been merged over the correct
+    // full-stack build. A static page is not an acceptable answer to a specification that
+    // selected a Worker API.
+    const architectureRequired = architectureFor(task).architecture?.backend === true;
+    if (architectureRequired && !hasBackendEntryPoint(files)) {
+      lastError = 'model returned a browser-only page for a product that requires a backend API';
+      files = null;
+    }
   }
   if (files && (!quality || quality.passed)) {
     const tests = Array.isArray(parsed?.tests) ? parsed.tests.map(text).filter(Boolean).slice(0, 20) : [];
