@@ -52,6 +52,24 @@ export async function recoverStuckProjects({ dryRun = false } = {}) {
       reports.push({ projectId: project.id, state: project.state, verdict: 'awaiting_approval', approvalId: gate.id, counts });
       continue;
     }
+    // ...unless the founder ALREADY approved it. The approval row is the authority, and the
+    // two writes (approval -> approved, project -> queued) are not one atomic step: an
+    // isolate killed between them leaves a project whose approval says "approved" and whose
+    // state still says "awaiting_approval". claimNextTask refuses to touch such a project,
+    // so the gate check above reported it as waiting for a human that had already answered,
+    // the orphan sweep never re-queued it, and the chain sat at 6/13 for 40 minutes until a
+    // founder re-pressed Approve by hand. Re-assert the project state from the approval.
+    const granted = project.state === 'awaiting_approval'
+      ? store.list('approvals').find(a => a.projectId === project.id && a.state === 'approved')
+      : null;
+    if (granted) {
+      if (!dryRun) {
+        await store.putDurable('projects', { ...project, state: 'active', approvedAt: project.approvedAt ?? granted.decidedAt ?? stamp, updatedAt: stamp, id: project.id });
+        store.addEvent('project.recovered', { projectId: project.id, from: project.state, to: 'active', reason: 'approval already granted; project state was never re-asserted', approvalId: granted.id, at: stamp });
+      }
+      reports.push({ projectId: project.id, state: project.state, verdict: dryRun ? 'would_reactivate' : 'reactivated_approved', approvalId: granted.id, counts });
+      continue;
+    }
     // No tasks at all means the plan never landed (or was pruned). Nothing to re-queue;
     // report it instead of inventing work.
     if (!own.length) {
