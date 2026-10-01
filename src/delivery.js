@@ -3,6 +3,7 @@ import { store } from './store.js';
 import { d1Get, hasD1 } from './db.js';
 import { registerArtifact } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
+import { buildRequirementMatrix, buildTraceability, scoreGeneratedAppQuality, dualStatus } from './requirement-matrix.js';
 import { describePlatform } from './platforms.js';
 
 const REQUIRED_GATES=['build','test','requirements','security','qa','integrity'];
@@ -54,6 +55,36 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
     throw new Error(`Delivery blocked: MAULI could not build "${objective.slice(0,80)}" and would have delivered an unrelated template (${wrongTemplates.join(', ')})`);
   }
   const gates = new Map(tasks.filter(t => t.pipelineGate && t.gateType).map(t => [t.gateType,t]));
+
+  // ---------------------------------------------------------------------------
+  // THE REQUIREMENT MATRIX GATE.
+  //
+  // Every requirement the founder's command produced is judged here, and a critical one
+  // that FAILs makes the project NOT DELIVERABLE. Passing generic features does not buy a
+  // delivery: this is the rule that stops MAULI from shipping a working app that is not the
+  // product that was asked for, and it runs before anything is written to the founder.
+  // ---------------------------------------------------------------------------
+  const spec = project.requirementSpec ?? null;
+  const specRequirements = spec?.requirements ?? [];
+  const runtime = project.runtimeEvidence ?? null;
+  // The matrix judges a PRODUCT. "Research a travel destination" generates no code and
+  // rightly has no code requirements; gating it on "no placeholder implementation" would
+  // refuse a completed research commission for shipping nothing.
+  const buildsProduct = mergedFiles.length > 0 || project.architecture?.backend === true || Boolean(spec?.productType);
+  const matrix = specRequirements.length && buildsProduct
+    ? buildRequirementMatrix({ requirements: specRequirements, files: mergedFiles, fidelity, runtime, architecture: project.architecture ?? null })
+    : null;
+  if (matrix && !matrix.deliverable) {
+    const failed = matrix.criticalFailed.map(r => `${r.id} ${r.title}`).join('; ');
+    throw new Error(`Delivery blocked: NOT DELIVERABLE — critical founder requirement(s) failed: ${failed}`);
+  }
+  const traceability = specRequirements.length
+    ? buildTraceability({ project, spec, matrix, tasks, artifacts })
+    : null;
+  const quality = scoreGeneratedAppQuality({
+    matrix, fidelity, runtime, architecture: project.architecture ?? null,
+    files: mergedFiles, integrity: gates.get('integrity')?.state === 'completed' ? { valid: true } : null
+  });
 
   if (!tasks.length) throw new Error('Delivery blocked: project has no tasks');
   if (failed.length) throw new Error(`Delivery blocked: ${failed.length} task(s) failed`);
@@ -108,6 +139,20 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
         ? evaluateRequirementCoverage(project.requirements??[],mergedFiles).map(c=>({requirement:c.requirement,status:c.status==='IMPLEMENTED'?'IMPLEMENTED':'FAILED',matched:c.matched}))
         : (project.requirements??[]).map(r=>({requirement:String(r),status:'BLOCKED',matched:[]})))
     },
+    // The requirement matrix, kept as its own block so "the app works" and "the founder got
+    // what they asked for" can never be read as the same statement.
+    requirementMatrix: matrix ? {
+      understanding: spec?.understanding ?? 'UNKNOWN',
+      productType: spec?.productType ?? null,
+      platform: spec?.platform ?? null,
+      architecture: project.architecture?.id ?? null,
+      deliverable: matrix.deliverable,
+      rows: matrix.rows,
+      summary: matrix.summary
+    } : null,
+    traceability,
+    qualityScore: quality,
+    status: dualStatus({ matrix, runtime, fidelity }),
     functionalFidelity:fidelity?{
       passed:fidelity.passed,
       score:fidelity.score,

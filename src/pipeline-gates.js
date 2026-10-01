@@ -4,6 +4,7 @@ import { addTaskToProject } from './projects.js';
 import { selectAgents, seedAgents } from './agents.js';
 import { listProjectArtifacts } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
+import { buildRequirementMatrix, scoreGeneratedAppQuality, dualStatus } from './requirement-matrix.js';
 import { now } from './core.js';
 
 export const GATES = ['build','test','requirements','security','qa','integrity'];
@@ -204,6 +205,21 @@ async function gateResult(task){
     }));
   };
 
+  // The structured specification's own matrix. Requirement ids, criticality and per-row
+  // evidence come from the founder's command, not from plan prose, so the gate reports on
+  // exactly what was asked for.
+  const specMatrix=()=>{
+    const project=store.get('projects',pid);
+    const spec=project?.requirementSpec;
+    if(!spec?.requirements?.length) return null;
+    const files=mergedCodeArtifacts(pid);
+    if(!files.length) return null;
+    return buildRequirementMatrix({
+      requirements:spec.requirements, files, architecture:project?.architecture??null,
+      runtime:project?.runtimeEvidence??null
+    });
+  };
+
   if(type==='build'){
     const latest=latestCodeArtifact(pid), files=latest?.content?.files??[], pkg=parsePackage(files);
     check('generated_artifact_present',arts.length>0,'No generated artifact exists');
@@ -215,12 +231,19 @@ async function gateResult(task){
     const b=prior(pid,'build'), latest=latestCodeArtifact(pid), files=latest?.content?.files??[], pkg=parsePackage(files);
     check('build_gate_passed',b?.state==='completed','Build gate has not passed');
     check('artifact_structure_test',validFiles(pid),'Artifact structure test failed');
-    check('test_contract_present',Boolean(pkg.testScript||latest?.content?.tests?.length||files.some(f=>f.path==='www/index.html'||f.path==='README.md')), 'No test/static validation contract was found');
-  } else if(type==='requirements'){
+    check('test_contract_present',Boolean(pkg.testScript||latest?.content?.tests?.length||files.some(f=>f.path==='www/index.html'||f.path==='README.md')), 'No test/static validation contract was found');  }else if(type==='requirements'){
     const t=prior(pid,'test'), p=store.get('projects',pid);
     check('test_gate_passed',t?.state==='completed','Test gate has not passed');
     check('objective_present',Boolean(String(p?.objective??'').trim()),'Project objective is missing');
     check('requirements_recorded',Array.isArray(p?.requirements)&&p.requirements.length>0,'Project requirements are missing');
+    // A command that was never understood cannot be verified. The gate says so here rather
+    // than letting the QA gate discover it and report a generic failure.
+    const spec=p?.requirementSpec;
+    check('specification_extracted',!spec||spec.understanding!=='BLOCKED',spec?.understanding==='BLOCKED'?'The founder command could not be understood: no product or feature was identified':'');
+    check('architecture_selected',!spec||Boolean(p?.architecture?.id),'No architecture was selected for this specification');
+    const matrix=specMatrix();
+    check('requirement_matrix_built',!spec?.requirements?.length||Boolean(matrix),'The requirement matrix could not be built');
+    check('no_critical_requirement_failed',!matrix||matrix.deliverable,matrix?.criticalFailed?.length?('Critical requirement(s) failed: '+matrix.criticalFailed.map(r=>r.id+' '+r.title).join('; ')):'');
   } else if(type==='security'){
     const r=prior(pid,'requirements'), risky=securityProblems(code);
     check('requirements_gate_passed',r?.state==='completed','Requirement verification has not passed');
@@ -246,6 +269,12 @@ async function gateResult(task){
     const coverage=evaluateRequirementCoverage(project?.requirements??[],merged);
     const unmet=coverage.filter(c=>c.status==='MISSING');
     check('requirement_evidence',unmet.length===0,unmet.length?('No source evidence for: '+unmet.slice(0,5).map(c=>c.requirement).join(' | ')):'Every requirement has evidence in the executed source');
+    // The per-requirement matrix, the ten-category quality score and the two independent
+    // statuses are recorded as QA evidence so a completed project carries them.
+    const matrix=specMatrix();
+    const quality=scoreGeneratedAppQuality({matrix,fidelity,architecture:project?.architecture??null,files:merged,integrity:{valid:false}});
+    const status=dualStatus({matrix,runtime:project?.runtimeEvidence??null,fidelity});
+    check('no_critical_requirement_failed',!matrix||matrix.deliverable,matrix?.criticalFailed?.length?('Critical requirement(s) failed: '+matrix.criticalFailed.map(r=>r.id).join(', ')):'');
   } else if(type==='integrity'){
     const q=prior(pid,'qa'), ids=arts.map(a=>a.id);
     const files=code.flatMap(a=>(a.content?.files??[]).map(f=>({artifactId:a.id,path:f.path,content:f.content})));
@@ -257,7 +286,17 @@ async function gateResult(task){
     check('file_manifest_valid',manifest.length>0&&manifest.every(x=>x.path&&/^[a-f0-9]{64}$/.test(x.sha256)),'Artifact file manifest could not be generated');
     return {type:'plan',taskId:task.id,gate:type,passed,checks,requirementStatuses:requirementStatuses(),verifiedAt:now(),manifest,summary:passed?`${type} gate passed.`:`${type} gate failed.`};
   }
-  return {type:'plan',taskId:task.id,gate:type,passed,checks,requirementStatuses:requirementStatuses(),verifiedAt:now(),summary:passed?`${type} gate passed.`:`${type} gate failed.`};
+  // Requirement-matrix evidence rides on every gate result so the project's QA record always
+  // carries REQ ids, the quality score and the two independent statuses.
+  return {
+    type:'plan', taskId:task.id, gate:type, passed, checks,
+    requirementStatuses:requirementStatuses(),
+    requirementMatrix:typeof matrix!=='undefined'&&matrix?{rows:matrix.rows,deliverable:matrix.deliverable,summary:matrix.summary}:null,
+    qualityScore:typeof quality!=='undefined'&&quality?quality:null,
+    status:typeof status!=='undefined'&&status?status:null,
+    verifiedAt:now(),
+    summary:passed?`${type} gate passed.`:`${type} gate failed.`
+  };
 }
 
 registerExecutor('internal.pipeline-gate', async ({task}) => gateResult(task), {

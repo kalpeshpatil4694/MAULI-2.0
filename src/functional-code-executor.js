@@ -3,6 +3,8 @@ import { registerArtifact } from './artifacts.js';
 import { registerExecutor, grantExecutor } from './executor-registry.js';
 import { generateFromTemplate } from './app-templates.js';
 import { analyzeGeneratedApp } from './generated-app-quality.js';
+import { generateFullStackApp } from './fullstack-codegen.js';
+import { store } from './store.js';
 
 const WEB_REQUIRED = ['www/index.html', 'www/app.js', 'www/styles.css'];
 const COMMON_REQUIRED = ['package.json', 'README.md'];
@@ -267,6 +269,51 @@ export async function probeAiGeneration(objective, { env, acceptance = [], inclu
   return { available: true, generated: false, error: text(lastError).slice(0, 400), model: env?.MAULI_CODE_MODEL ?? null };
 }
 
+/**
+ * The architecture the project's extracted specification selected, when one is available.
+ * A project with no spec is a legacy project: the generation path behaves exactly as it did
+ * before requirement extraction existed.
+ */
+function architectureFor(task) {
+  const project = task?.projectId ? store.get('projects', task.projectId) : null;
+  const architecture = project?.architecture ?? null;
+  const spec = project?.requirementSpec ?? null;
+  if (!architecture || !spec) return { architecture: null, spec: null, project: null };
+  return { architecture, spec, project };
+}
+
+/**
+ * Generate the product the specification asks for, when it owes a backend.
+ *
+ * A template cannot produce this: every template is a browser page, and a founder who asked
+ * for accounts, shared records or live updates cannot be given one. This compiles the
+ * architecture instead, and it is the honest answer to "MAULI could not write that with a
+ * model today" — a real Worker over real D1 rather than a static imitation of one.
+ */
+function generateFromArchitecture({ task, agentId, objective, acceptance }) {
+  const { architecture, spec } = architectureFor(task);
+  if (!architecture || !spec || architecture.backend !== true) return null;
+  if (spec.understanding === 'BLOCKED') return null;
+  let built;
+  try { built = generateFullStackApp(spec, architecture, { objective }); }
+  catch (error) { return { error: `Full-stack generation failed: ${text(error)}` }; }
+  const quality = analyzeGeneratedApp(built.files, { objective, requirements: spec.requirements.map(r => r.title) });
+  const artifact = registerArtifact({
+    projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
+    content: { summary: built.summary, files: built.files, tests: built.tests || [], notes: built.notes || [] },
+    metadata: {
+      generatedBy: 'fullstack-codegen', architecture: architecture.id, architectureLabel: architecture.label,
+      apiBase: `/api/${built.table}s`, table: built.table,
+      specVersion: spec.specVersion, requirements: spec.requirements.map(r => ({ id: r.id, title: r.title, critical: r.critical })),
+      fileCount: built.files.length, fidelity: { passed: quality.passed, score: quality.score, violations: quality.violations.map(v => v.code) }
+    }
+  });
+  return {
+    type: 'code', artifactId: artifact.id, summary: built.summary, files: built.files,
+    tests: built.tests || [], notes: built.notes || [], acceptance
+  };
+}
+
 async function generateFunctionalArtifact({ task, env, agentId }) {
   const runtimeEnv = resolveRuntimeEnv(env);
   const objective = text(task.description || task.title || 'Build a software application');
@@ -275,6 +322,9 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
 
   // If no AI binding, use templates directly
   if (!runtimeEnv?.AI?.run) {
+    const architectural = generateFromArchitecture({ task, agentId, objective, acceptance });
+    if (architectural?.error) throw new Error(architectural.error);
+    if (architectural?.artifactId) return architectural;
     const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
     if (templateResult.files?.length > 0) {
       // A template emits a single index.html. Shipped like that, the project has no
@@ -338,7 +388,13 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
     return { type: 'code', artifactId: artifact.id, summary: artifact.content.summary, files, tests, notes, acceptance };
   }
 
-  // Fallback to templates
+  // Fallback: the architecture the founder's own specification selected. A model that could
+  // not produce the requested product does not license a different one.
+  const architectural = generateFromArchitecture({ task, agentId, objective, acceptance });
+  if (architectural?.error) throw new Error(architectural.error);
+  if (architectural?.artifactId) {
+    return { ...architectural, notes: [...(architectural.notes ?? []), `Model output refused (${lastError || 'unusable'}); built from the founder's specification instead`] };
+  }
   const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
   if (templateResult.files?.length > 0) {
     // Same requirement as the branch above: a fallback project still has to be installable.

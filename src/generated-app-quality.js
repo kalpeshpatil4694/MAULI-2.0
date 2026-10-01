@@ -167,7 +167,38 @@ const REQUIREMENT_SYNONYMS = {
   game: ['score', 'play', 'player', 'board'],
   chess: ['game', 'board', 'move', 'piece'],
   app: ['application'],
-  application: ['app']
+  application: ['app'],
+  // Product-type vocabulary. A founder says "e-commerce platform"; the working product it
+  // describes calls its own data "orders" and "cart". Without these the wrong-app guard
+  // refused a correct store for using the nouns of the domain it actually implements.
+  ecommerce: ['order', 'cart', 'checkout', 'store', 'shop', 'product', 'catalog', 'sale'],
+  platform: ['application', 'app', 'service'],
+  commerce: ['order', 'cart', 'checkout', 'store', 'shop'],
+  portal: ['dashboard', 'panel', 'hub'],
+  system: ['app', 'service', 'tool'],
+  solution: ['app', 'tool'],
+  business: ['order', 'customer', 'invoice', 'sale'],
+  cafe: ['order', 'coffee', 'menu'],
+  restaurant: ['order', 'menu', 'table'],
+  gym: ['workout', 'exercise', 'member'],
+  clinic: ['patient', 'appointment', 'medicine'],
+  school: ['student', 'course', 'class'],
+  library: ['book', 'borrow', 'isbn'],
+  garden: ['plant', 'water', 'seed'],
+  recipe: ['cook', 'bake', 'ingredients'],
+  travel: ['trip', 'booking', 'destination'],
+  crypto: ['wallet', 'coin', 'block'],
+  fitness: ['workout', 'exercise', 'training'],
+  budget: ['expense', 'spending', 'cost'],
+  invoice: ['receipt', 'billing', 'total'],
+  quote: ['estimate', 'price', 'total'],
+  fleet: ['vehicle', 'driver', 'route'],
+  inventory: ['stock', 'item', 'sku'],
+  booking: ['appointment', 'slot', 'reservation'],
+  payroll: ['salary', 'employee', 'pay'],
+  warehouse: ['stock', 'shelf', 'item'],
+  project: ['task', 'milestone', 'board'],
+  meeting: ['agenda', 'minutes', 'attendee']
 };
 
 function expandWords(words) {

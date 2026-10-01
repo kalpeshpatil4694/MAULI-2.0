@@ -137,9 +137,13 @@ function splitScripts(files) {
     html += String(f.content ?? '');
     for (const m of String(f.content ?? '').matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)) inline.push(m[1]);
   }
-  // server.js / node scripts are not part of the browser app; executing them in the DOM
-  // shim only produces false "broken" verdicts, so they are skipped.
-  const external = files.filter((f) => /\.(m?js)$/i.test(f.path) && !/^server\.[cm]?js$/i.test(f.path)).map((f) => String(f.content ?? ''));
+  // Server-side entry points are NOT part of the browser app. Running a Worker (which uses
+  // `export default`) inside the DOM shim reports every backend-carrying project as
+  // "broken: Unexpected token 'export'" — a false verdict produced by the verifier, not a
+  // defect in the product. They are executed for real instead, by the user-journey runner.
+  const BACKEND = /(^|\/)(?:server|worker|api|index)\.[cm]?js$/i;
+  const isBackendPath = (p) => /(^|\/)(?:worker|server|api|backend|routes?)\//i.test(p) || BACKEND.test(p) && !/^www\//i.test(p);
+  const external = files.filter((f) => /\.(m?js)$/i.test(f.path) && !isBackendPath(f.path)).map((f) => String(f.content ?? ''));
   return { inline, external, html };
 }
 
@@ -149,7 +153,7 @@ function splitScripts(files) {
  *   missingHandlers:Array, invoked:Array, mutatedElements:number, storageChanged:boolean,
  *   handlers:number, quality:object}}
  */
-export function verifyGeneratedApp(files, { objective = '', requirements = [], timeoutMs = SCRIPT_TIMEOUT_MS } = {}) {
+export function verifyGeneratedApp(files, { objective = '', requirements = [], timeoutMs = SCRIPT_TIMEOUT_MS, fetchImpl = null, env = {} } = {}) {
   const list = (Array.isArray(files) ? files : []).filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string');
   const quality = analyzeGeneratedApp(list, { objective, requirements });
   const { inline, external, html } = splitScripts(list);
@@ -205,7 +209,12 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
       userAgent: 'mauli-verify'
     },
     location: { href: 'https://app.local/', reload() {}, assign() {} },
-    fetch: () => Promise.reject(new Error('network-disabled-during-verification')),
+    // The generated app's own network calls. With no fetchImpl they fail loudly, because a
+    // frontend that cannot reach its backend is exactly the defect item 6 is about. When a
+    // backend IS supplied (scripts/user-journey.mjs), the same call is executed for real
+    // against it — this is the integration seam, not a simulation of one.
+    fetch: fetchImpl ?? (() => Promise.reject(new Error('network-disabled-during-verification'))),
+    ...env,
     URL: { createObjectURL: () => 'blob:verify', revokeObjectURL() {} },
     Blob: class Blob { constructor() { this.size = 0; } },
     MediaRecorder: class MediaRecorder { constructor() { this.state = 'inactive'; } static isTypeSupported() { return true; } },
@@ -345,10 +354,55 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
   if (errors.length || missingHandlers.length || threw) verdict = 'broken';
   else if (!didSomething || invoked.every((i) => i.status !== 'mutated')) verdict = 'static';
 
-  return { verdict, executed, errors, missingHandlers, invoked, mutatedElements, storageChanged, handlers: ctxFns.length, quality };
+  return { verdict, executed, errors, missingHandlers, invoked, mutatedElements, storageChanged, handlers: ctxFns.length, quality, ctx, elements, storage, sandbox, timers };
 }
 
-export function runSelfTest() {
+/**
+ * Drive one real user action against a running app: type into a field, press a control,
+ * or call a handler. Used by the user-journey runner, which must perform the founder's
+ * steps in order rather than poking every function in turn.
+ */
+export async function interact(app, { input, value, click, call, args = [], fill = {} } = {}) {
+  const before = snapshot(app.elements, app.storage);
+  for (const [id, v] of Object.entries(fill)) {
+    const el = app.elements.get(id);
+    if (el) el.value = String(v);
+  }
+  if (input) {
+    const el = app.elements.get(input);
+    if (el) el.value = String(value ?? '');
+  }
+  let error = null;
+  try {
+    if (click) {
+      const el = app.elements.get(click);
+      if (!el) throw new Error(`control "${click}" not found`);
+      el.click();
+      el.dispatchEvent({ type: 'click', target: el });
+    }
+    if (call) {
+      const fn = app.ctx[call];
+      if (typeof fn !== 'function') throw new Error(`handler "${call}" is not a function`);
+      fn.apply(null, args);
+    }
+  } catch (e) { error = String(e?.message ?? e); }
+  // Let the app's own promises settle so async handlers actually complete before we judge.
+  await drainMicrotasks(app);
+  return { changed: diffCount(before, snapshot(app.elements, app.storage)) > 0, error, mutations: diffCount(before, snapshot(app.elements, app.storage)) };
+}
+
+/** Run pending microtasks and one macrotask turn, so awaited fetches resolve. */
+export async function drainMicrotasks(app, rounds = 6) {
+  for (let i = 0; i < rounds; i++) {
+    try { await Promise.resolve(); } catch { break; }
+    await new Promise((r) => setImmediate(r));
+    for (const fn of app.timers.splice(0, app.timers.length)) {
+      try { if (typeof fn === 'function') fn(); } catch { /* an app's own timer error is its bug, reported elsewhere */ }
+    }
+  }
+}
+
+export async function runSelfTest() {
   const results = [];
   const check = (ok, label, detail = '') => { results.push(ok); console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${label}${detail ? `  — ${detail}` : ''}`); };
 
@@ -425,6 +479,44 @@ export function runSelfTest() {
   const brokenResult = verifyGeneratedApp(broken, { objective: 'Save items' });
   check(brokenResult.verdict === 'broken', 'app with an unbound handler is broken at runtime', `missing=${brokenResult.missingHandlers.join(',')}`);
 
+  // A full-stack app: the frontend runs in the DOM shim and the Worker is loaded and
+  // executed separately. Running `export default` as browser script used to report every
+  // backend-carrying project as broken with "Unexpected token 'export'".
+  const fullStack = [{
+    path: 'www/index.html',
+    content: '<!DOCTYPE html><html><body><h1>Notes</h1><input id="t"><button onclick="add()">Add</button><ul id="l"></ul><script src="app.js"></script></body></html>'
+  }, {
+    path: 'www/app.js',
+    content: 'function add(){var v=document.getElementById("t").value.trim();if(!v)return;fetch("/api/notes",{method:"POST"}).then(function(){document.getElementById("l").innerHTML+="<li>"+v+"</li>";});}document.addEventListener("DOMContentLoaded",function(){document.getElementById("l").innerHTML="<li>loaded</li>";});'
+  }, {
+    path: 'worker/index.js',
+    content: 'export default { async fetch(request, env) { const url = new URL(request.url); if (url.pathname === "/api/notes" && request.method === "POST") { await env.DB.prepare("INSERT INTO notes (body) VALUES (?)").bind("x").run(); return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } }); } return new Response("no", { status: 404 }); } };'
+  }];
+  const { createRuntime, loadWorker } = await import('./generated-runtime.mjs');
+  const runtime = createRuntime({});
+  const loaded = await loadWorker(fullStack, runtime);
+
+  // The frontend's fetch is wired to the backend the app actually ships. This is the seam
+  // that makes "the frontend and the backend are connected" a checked fact rather than an
+  // assumption: the page below only reaches a rendered row by getting a real response.
+  const wired = verifyGeneratedApp(fullStack, {
+    objective: 'A notes app with a backend',
+    fetchImpl: (input, init = {}) => loaded.handler(
+      new Request(new URL(typeof input === 'string' ? input : input.url, 'https://generated.app'), init),
+      runtime.env, {}
+    )
+  });
+  check(wired.verdict === 'functional', 'a backend-carrying app is not reported broken for using export', `verdict=${wired.verdict}, errors=${wired.errors.map(e => e.message).join('; ')}`);
+  check(!wired.errors.some((e) => /Unexpected token/.test(e.message)), 'the Worker module is not executed as browser script');
+
+  // The same app's backend is executed for real against a D1 binding.
+  const wrote = await loaded.handler(new Request('https://generated.app/api/notes', { method: 'POST' }), runtime.env, {});
+  const rows = runtime.DB.snapshot().find((t) => t.table === 'notes')?.rows ?? [];
+  const notFound = await loaded.handler(new Request('https://generated.app/api/other'), runtime.env, {});
+  check(wrote.status === 200 && rows.length > 0, 'a generated backend is executed, not scanned: the insert really reached D1', `status=${wrote.status}, rows=${rows.length}`);
+  check(notFound.status === 404, 'an unknown backend route returns 404 instead of a fabricated success', `status=${notFound.status}`);
+  runtime.disposeGlobals();
+
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed === results.length ? 'ALL VERIFIER CHECKS PASSED' : 'VERIFIER CHECKS FAILED'} (${passed}/${results.length})`);
   if (passed !== results.length) process.exitCode = 1;
@@ -434,7 +526,7 @@ export function runSelfTest() {
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly && !process.argv.includes('--verify')) {
   if (process.argv.includes('--self-test')) {
-    runSelfTest();
+    await runSelfTest();
   } else {
     console.log('Usage: node scripts/verify-generated-app.mjs --self-test');
     console.log('(Runtime verification of a live project runs from CI or the durability harness.)');

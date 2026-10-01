@@ -271,6 +271,131 @@ test suite) exposed two failures that no unit test had:
    the authority and re-asserts the project state (`reactivated_approved`). An approval that
    is genuinely still `pending` is untouched.
 
+### FUNCTIONAL FIDELITY 2.0 — the command becomes a specification
+
+Everything above treats a founder command as prose to be planned. That is the root of the
+whole failure class this section removes. A command is now read as a **structured
+specification** first, and every later stage is accountable to it.
+
+```text
+Founder command
+  → extractRequirementSpec()      src/requirement-spec.js
+  → selectArchitecture()          src/architecture.js
+  → generate                      src/functional-code-executor.js
+                                 src/fullstack-codegen.js
+  → requirement matrix + gates    src/requirement-matrix.js, src/pipeline-gates.js
+  → runtime execution             scripts/user-journey.mjs
+  → delivery gate                 src/delivery.js
+```
+
+**Extraction is deterministic and offline.** `extractRequirementSpec()` runs inside the
+Worker with no model call and no network: product type, platform, roles, core features,
+inputs, outputs, business rules, data requirements, authentication, APIs, external
+services, real-time, security and acceptance criteria, each requirement carrying a stable
+`REQ-001`… id. It reports its own confidence as `COMPLETE`, `PARTIAL` or `BLOCKED`; a
+command it cannot identify is `BLOCKED` and is never rounded up, because rounding up is
+what licenses a generic substitution.
+
+**Architecture is a decision, not a constant** (`src/architecture.js`). A server is owed to
+the founder only when something genuinely needs one: several users, accounts, live updates,
+an external service, a native client, or a product whose records are the *business's* rather
+than one person's device. A personal medicine tracker is honestly a frontend plus a device
+store, and forcing a Worker and D1 onto it would be its own kind of wrong product. Each
+selected layer also produces an **obligation** — `realtime-channel`, `auth-protected`,
+`database-write` — so naming an architecture is a promise the matrix later checks.
+
+**The requirement matrix is the delivery gate** (`src/requirement-matrix.js`). Every
+requirement is judged `PASS` / `PARTIAL` / `FAIL` / `BLOCKED` / `NOT APPLICABLE`, and a
+critical `FAIL` makes the project **NOT DELIVERABLE** before anything is written to the
+founder. `NOT APPLICABLE` is not a loophole: a server-only requirement (a 401 on a protected
+route) is recorded as not applicable when the selected architecture has no server, because
+refusing a working single-user tracker for lacking an endpoint it was never owed is the same
+mistake in the opposite direction. `buildFinalDelivery()` throws on a critical failure and
+records the full matrix, the traceability chain and the quality score on the artifact.
+
+**Two statuses, never merged** (`dualStatus()`). The delivery reports `functional` and
+`founderRequirementComplete` independently, because an app can run beautifully and still not
+be the product that was requested. The ten-category quality score is derived from executed
+evidence only; with no evidence the score is `0` and `functionalClaim` is `false` — a
+percentage is never printed without what is behind it.
+
+### A product that actually has a backend
+
+Until now MAULI could only produce a browser page. That is a legitimate product for an
+offline note pad and a fake one for anyone who asked for accounts, shared data or live
+updates, because there was nothing behind the page to talk to.
+
+`src/fullstack-codegen.js` is a compiler, not a template library: it reads the extracted
+specification and emits the architecture that specification selected — a Worker entry point
+with real D1 SQL, PBKDF2 password hashing, server-side session enforcement, WebSocket
+broadcast through a Durable Object, migrations, and a `wrangler.jsonc` — plus a frontend
+that calls those endpoints for every read and write. The founder's domain noun becomes the
+entity (`coffee shop order app` → `/api/orders`), so the delivered product is the product
+that was requested. "Generate less, implement correctly."
+
+It is the honest answer when the model cannot write the product: with the Workers AI
+allowance exhausted, MAULI previously had nothing left but a static template, which is a
+different product. Now it compiles the architecture instead, and records
+`generatedBy: 'fullstack-codegen'` with the architecture id and the REQ ids it implements.
+
+### The backend is executed, not scanned
+
+`scripts/generated-runtime.mjs` is a small but real Workers runtime: an in-memory D1 that
+parses the SQL a generated app actually issues (`prepare().bind().run()/all()/first()`),
+real WebCrypto, and a `WebSocketPair` of two genuinely connected sockets.
+`scripts/user-journey.mjs` loads the generated Worker, issues real requests, and derives the
+founder's journey from the specification — open → register → login → create → read → update
+→ refresh → live update → logout → error — executing each step and recording *evidence*
+rather than a verdict about the source text.
+
+Four defects were found by running it rather than reading it, and each is now a regression
+test:
+
+1. **The verifier ran `worker/index.js` as browser script.** Any product with a backend was
+   reported `broken: Unexpected token 'export'`. Server entry points are now excluded from
+   the DOM shim and executed by the journey runner instead.
+2. **The D1 shim's `.first()` returned the result envelope, not the row.** Every
+   "does this user already exist" check was therefore truthy, so a brand new address was
+   answered `409 already registered`. A harness bug that looked exactly like a broken
+   product.
+3. **`UPDATE` bound its parameters in reverse order.** The id was written into the title
+   column and `WHERE` compared against the timestamp, so a 200 update was reported as
+   "new value stored: false".
+4. **The shim replaced `console` with a silent one on `globalThis`.** That silenced the
+   *verifier's own* output for as long as the runtime was loaded, so a failure inside the
+   harness printed nothing and looked like a clean exit — the reason two debugging runs
+   above appeared to succeed while producing no results.
+
+The journey is also a trap: a backend that answers `200 {ok:true}` from a literal, one that
+never refuses an unauthenticated read, and a product with no backend at all are all caught
+and reported (`tests/generated-app-runtime.test.js`).
+
+### The repair loop re-runs the journey, not the test
+
+`scripts/repair-loop.mjs` is Detect → Diagnose → Fix → Rebuild → Retest, bounded. The
+diagnosis names the founder step that broke *and what was observed* when it broke, and the
+retest executes the **whole** journey from the start, because the common failure is a repair
+that fixes the step it broke while quietly regressing the step that was already working. It
+stops at its bound and reports failure rather than spinning.
+
+### What the matrix caught in MAULI's own templates
+
+The gate is not decoration. Running all 25 shipped templates through their own requirement
+matrix found that the **todo app could create, complete and delete a task but never edit
+one** — a record product missing a third of its CRUD surface. The template was fixed
+(`stEd`/`svEd`/`cnEd`, a per-row Edit control) rather than the requirement being softened.
+`tests/functional-fidelity-2.test.js` now asserts every shipped template satisfies its own
+matrix, so the same regression cannot come back quietly.
+
+Two false positives were found and corrected in the extractor at the same time, because a
+gate that refuses correct work gets disabled:
+
+- **"manager" read as a user role.** "A bookmark manager" and "a task manager" are products,
+  not roles; matching `manager` invented a login requirement and refused a working
+  bookmark app for it.
+- **"chat" read as a real-time requirement.** A chat product is not automatically a live
+  one. Treating it as one invented a requirement the founder never stated.
+
 ## 6. Upgradeability
 
 New agents, departments, tools, workflows, model providers, execution runtimes, and UI clients should be addable through interfaces/contracts rather than invasive changes to the core.
