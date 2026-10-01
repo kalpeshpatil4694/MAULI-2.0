@@ -1,20 +1,8 @@
 {
-  "name": "mauli2.0",
-  "version": "2.0.0",
+  "name": "personal-habit-tracker",
+  "version": "1.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "check": "node scripts/check-syntax.mjs",
-    "test": "node --test",
-    "test:routes": "node scripts/dryrun-durable-routes.mjs",
-    "test:runtime": "node scripts/verify-generated-app.mjs --self-test",
-    "verify:app": "node scripts/verify-generated-app.mjs --verify",
-    "test:security": "node --test tests/founder-auth.test.js tests/tool-security.test.js test/security-governance.test.js tests/d1-write-budget.test.js tests/d1-monotonic-writes.test.js",
-    "self-test": "node --test test/*.test.js"
-  },
-  "devDependencies": {
-    "wrangler": "^4.0.0"
+    "start": "npx serve www"
   }
 }
