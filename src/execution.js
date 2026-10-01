@@ -29,6 +29,13 @@ const HEARTBEAT_INTERVAL_MS = 60_000;
 // so a slow-but-working generation is never killed, and matches the 10-minute window
 // agents.js already uses to decide whether a run owns its agent.
 export const MAX_RUN_LIFETIME_MS = 600_000;
+// The executor already promises to settle inside taskTimeoutMs. Recording that promise on
+// the run turns the absolute lifetime from a guess into a fact the scheduler can check: past
+// its own deadline a run has failed by construction, however recently it heartbeated. The
+// margin is deliberately generous so a slow-but-working generation is never killed, and it
+// sits well under MAX_RUN_LIFETIME_MS so a normal task's dead run is noticed in minutes
+// rather than ten. Runs written before this field existed fall back to that constant.
+const RUN_DEADLINE_MARGIN = 2;
 // A task must finish well inside a cron window or it is not making progress. The default is
 // deliberately larger than the executor's own budget (functional-code-executor allows two
 // 40s AI attempts) so a slow-but-working generation is never killed by this, while an
@@ -50,6 +57,8 @@ function requiredToolNames(task) { return [...new Set((task?.toolNames??task?.re
 async function authorizeRequiredTools(task,context,callTool) { const results=[]; for(const name of requiredToolNames(task)){const tool=store.list('tools').find(t=>t.name===name&&t.enabled!==false);if(!tool)throw new Error(`Required tool is not registered: ${name}`);results.push({name,authorization:await callTool(name,{...context,type:'authorization-check',taskId:task.id,projectId:task.projectId,approved:Boolean(context.approved),approvalId:context.approvalId??null,allowExternal:Boolean(context.allowExternal)})});}return results; }
 
 export function runOverLifetime(run, at = Date.now()) {
+  const deadline = Date.parse(run?.deadlineAt ?? '');
+  if (Number.isFinite(deadline)) return at > deadline;
   const started = Date.parse(run?.startedAt ?? '');
   if (!Number.isFinite(started)) return false;
   return at - started > MAX_RUN_LIFETIME_MS;
@@ -68,7 +77,7 @@ export async function executeTask(task,context={}) {
     if(isStaleRun(existing)){recoverRun(existing);}
     else { heartbeatExecution(existing.id); store.addEvent('execution.duplicate_prevented',{runId:existing.id,taskId:task.id,executor:executorName}); return publicExecution(existing); }
   }
-  const timestamp=now(); const run={id:id('run'),taskId:task.id,executor:executorName,state:'running',startedAt:timestamp,heartbeatAt:timestamp,attempt:context.attempt??1,agentId:task.agentId??task.assignedAgentId??context.agentId??null,recoverable:true};
+  const timestamp=now(); const run={id:id('run'),taskId:task.id,executor:executorName,state:'running',startedAt:timestamp,heartbeatAt:timestamp,deadlineAt:new Date(Date.parse(timestamp)+taskTimeoutMs(context)*RUN_DEADLINE_MARGIN).toISOString(),attempt:context.attempt??1,agentId:task.agentId??task.assignedAgentId??context.agentId??null,recoverable:true};
   store.put('runs',run);store.addEvent('execution.started',run);
   const heartbeatTimer=setInterval(()=>heartbeatExecution(run.id),HEARTBEAT_INTERVAL_MS);
   try{
