@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { store } from '../src/store.js';
 import { ensureProjectPipeline } from '../src/pipeline-gates.js';
 import { recoverStaleTasks, schedulerTick } from '../src/scheduler.js';
+import { listProjects } from '../src/projects.js';
 
 const TAIL = () => `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const ago = (ms) => new Date(Date.now() - ms).toISOString();
@@ -124,4 +125,22 @@ test('a collapsed duplicate gate no longer blocks finalization', async () => {
     .every((t) => t.state === 'completed' || t.state === 'cancelled');
   assert.equal(settled, true);
   assert.equal(typeof schedulerTick, 'function');
+});
+
+// The project row said 'completed'; the dashboard derives the state from the tasks, so a
+// collapsed duplicate counted as live work kept the project reading 'active' forever.
+test('a project with only collapsed duplicates reads as completed', () => {
+  const pid = seedProject();
+  ensureProjectPipeline(pid);
+  for (const gate of store.list('tasks').filter((t) => t.projectId === pid && t.pipelineGate)) {
+    store.put('tasks', { ...gate, state: 'completed', verificationId: `v-${gate.id}`, id: gate.id });
+  }
+  const security = store.list('tasks').find((t) => t.projectId === pid && t.pipelineGate && t.gateType === 'security');
+  store.put('tasks', { ...security, id: `${pid}-security-dup`, state: 'queued', verificationId: null, assignedAgentId: null, agentId: null, dependsOn: [] });
+  ensureProjectPipeline(pid);
+  store.put('projects', { ...store.get('projects', pid), state: 'completed', id: pid });
+
+  const derived = listProjects().find((p) => p.id === pid);
+  assert.equal(derived.state, 'completed',
+    'a collapsed duplicate gate must not keep a delivered project looking active');
 });

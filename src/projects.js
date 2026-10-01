@@ -3,17 +3,22 @@ import { store } from './store.js';
 import { createTask, assignTask } from './tasks.js';
 import { estimateProjectDuration } from './time-tracking.js';
 
+// A duplicate pipeline gate that was collapsed (cancelled) is not unfinished work: counting
+// it as live kept such a project deriving as 'active' forever, even after its delivery was
+// written, which is what "the project never finishes" looked like from the dashboard.
+const settledTask = t => t.state === 'completed' || (t.state === 'cancelled' && t.collapsedDuplicate === true);
+
 function projectStateFromTasks(project) {
   const tasks = store.list('tasks').filter(t => t?.projectId === project?.id);
   if (!tasks.length) return project?.state ?? 'planning';
   const nonQa = tasks.filter(t => !t.finalProjectVerification);
   const qa = tasks.filter(t => t.finalProjectVerification);
   if (nonQa.some(t => t.state === 'failed')) return 'active';
-  if (tasks.every(t => t.state === 'completed') && qa.length > 0 && qa.every(t => t.state === 'completed' && t.verificationId)) return 'completed';
+  if (tasks.every(settledTask) && qa.length > 0 && qa.every(t => settledTask(t) && t.verificationId)) return 'completed';
   if (tasks.some(t => ['working','running','assigned','verifying'].includes(t.state))) return 'active';
   if (tasks.some(t => t.state === 'blocked')) return 'active';
-  if (nonQa.length && nonQa.every(t => t.state === 'completed') && qa.some(t => t.state !== 'completed')) return 'active';
-  if (tasks.every(t => t.state === 'completed')) return 'completed';
+  if (nonQa.length && nonQa.every(settledTask) && qa.some(t => !settledTask(t))) return 'active';
+  if (tasks.every(settledTask)) return 'completed';
   return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
 }
 
