@@ -22,7 +22,17 @@ const SEVERITY = { CRITICAL: 'critical', WARNING: 'warning' };
 // Wording that is never acceptable in a delivered production app. Kept as separate
 // patterns so a violation can name what matched.
 const PLACEHOLDER_PATTERNS = [
-  { re: /\bTODO\b|\bFIXME\b/i, code: 'todo-marker' },
+  // Case matters, and getting it wrong made an entire app category undeliverable. "todo" is
+  // a product noun, not only a placeholder: a todo app's domain text, its README title, its
+  // API error strings and its own variable names are full of it. Matching case-insensitively
+  // meant a perfectly working task tracker was rejected for using its own name — the runtime
+  // verifier passed it and the static gate threw it away. The unfinished-work convention is
+  // upper case, so only upper case is treated as a marker.
+  { re: /\bTODO\b|\bFIXME\b/, code: 'todo-marker' },
+  // A lower-case marker is still caught when it is written the way markers are actually
+  // written — `// todo: finish the parser`. A domain noun is never followed by a colon, so
+  // this does not re-admit the app that the case-insensitive rule used to reject.
+  { re: /\b(?:todo|fixme)\s*:/i, code: 'todo-marker' },
   { re: /coming soon/i, code: 'coming-soon' },
   { re: /\bplaceholder\b/i, code: 'placeholder' },
   { re: /ai generation unavailable/i, code: 'ai-unavailable-stub' },

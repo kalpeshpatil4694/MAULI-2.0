@@ -179,3 +179,51 @@ test('a real storage call is still accepted as persistence evidence', () => {
   });
   assert.equal(gate.passed, true, JSON.stringify(gate.violations));
 });
+
+// "todo" is the product, not only a placeholder. The marker rule matched it
+// case-insensitively, so a todo app's own domain text — its README title, its API error
+// strings, its variable names — was read as an unfinished-work marker and the whole app
+// category was thrown away. A delivered task tracker passed runtime verification and was
+// then rejected by this gate, so no todo app could ever be delivered at all.
+test('a todo app is not rejected for using the word todo', () => {
+  const app = [{
+    path: 'www/index.html',
+    content: '<!DOCTYPE html><html><body><input id="todoText"><button onclick="addTodo()">Add</button>' +
+      '<ul id="todoList"></ul><script>function addTodo(){const v=document.getElementById("todoText").value;' +
+      'if(!v)return;localStorage.setItem("todos",v);document.getElementById("todoList").innerHTML+="<li>"+v+"</li>"}</script></body></html>'
+  }, {
+    path: 'server.js',
+    // Every one of these is the app talking about its own domain, not a leftover marker.
+    content: '// Create a new todo\nfunction create(todo){ if(!todo) return 400; return todo; }\n' +
+      'function drop(todo){ return { error: "Todo not found" }; }'
+  }];
+  const gate = analyzeGeneratedApp(app, { objective: 'Build a todo list app', requirements: ['Add todos'] });
+  assert.equal(
+    gate.violations.filter((v) => v.code === 'todo-marker').length,
+    0,
+    'the domain word must not be read as a placeholder: ' + JSON.stringify(gate.violations)
+  );
+});
+
+test('a real unfinished-work marker is still refused', () => {
+  // Loosening the rule until it accepts everything is not a fix, so every conventional way
+  // of writing the marker is pinned here.
+  const marked = [
+    ['// TODO: fix the parser', 'upper case TODO'],
+    ['/* FIXME */', 'upper case FIXME'],
+    ['// todo: finish login', 'lower case marker with a colon'],
+    ['// fixme: broken', 'lower case fixme with a colon'],
+  ];
+  for (const [comment, label] of marked) {
+    const app = [{
+      path: 'www/index.html',
+      content: '<!DOCTYPE html><html><body><input id="q"><button onclick="go()">Go</button><div id="out"></div>' +
+        '<script>function go(){localStorage.setItem("k","v");document.getElementById("out").textContent="x"}</script></body></html>'
+    }, { path: 'server.js', content: comment + '\nfunction handle(){ return 1; }' }];
+    const gate = analyzeGeneratedApp(app, { objective: 'Build a search app', requirements: ['Search'] });
+    assert.ok(
+      gate.violations.some((v) => v.code === 'todo-marker'),
+      `${label} must still be refused: ${JSON.stringify(gate.violations)}`
+    );
+  }
+});
