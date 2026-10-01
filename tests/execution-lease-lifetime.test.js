@@ -71,6 +71,50 @@ test('a slow but living execution is not killed by the lifetime bound', () => {
   assert.equal(staleRun(stopped), true, 'a silent execution is reclaimed by the lease');
 });
 
+test("a run's own deadline, not a flat constant, decides when it is over", () => {
+  // The executor promises to settle inside its timeout. A run past that promise has failed
+  // by construction, so it is reclaimed in minutes rather than waiting out the 10-minute
+  // backstop — even though its heartbeat is one second old.
+  const overDeadline = {
+    id: 'run_deadline',
+    taskId: 'task_deadline',
+    state: 'running',
+    startedAt: iso(Date.now() - 400_000),
+    heartbeatAt: iso(Date.now() - 1_000),
+    deadlineAt: iso(Date.now() - 40_000),
+  };
+  assert.equal(runOverLifetime(overDeadline), true, 'past its own deadline');
+  assert.equal(isStaleRun(overDeadline), true);
+  assert.equal(staleRun(overDeadline), true);
+
+  // Still inside its own deadline, even though the flat backstop would already have passed:
+  // a slow-but-working generation must never be killed for being slow.
+  const withinDeadline = {
+    ...overDeadline,
+    startedAt: iso(Date.now() - 500_000),
+    deadlineAt: iso(Date.now() + 120_000),
+  };
+  assert.equal(withinDeadline.startedAt < overDeadline.startedAt, true, 'older than the backstop allows');
+  assert.equal(runOverLifetime(withinDeadline), false, 'its own deadline wins over the constant');
+  assert.equal(staleRun(withinDeadline), false, 'a slow but living run is left alone');
+});
+
+test('a run with no recorded deadline still falls back to the absolute lifetime', () => {
+  // Runs written before deadlineAt existed must stay reclaimable, not become immortal.
+  const legacy = {
+    id: 'run_legacy',
+    taskId: 'task_legacy',
+    state: 'running',
+    startedAt: iso(Date.now() - (MAX_RUN_LIFETIME_MS + 30_000)),
+    heartbeatAt: iso(Date.now() - 1_000),
+  };
+  assert.equal(runOverLifetime(legacy), true);
+  assert.equal(staleRun(legacy), true);
+
+  const fresh = { ...legacy, startedAt: iso(Date.now() - 60_000) };
+  assert.equal(runOverLifetime(fresh), false);
+});
+
 test('the heartbeat stops renewing the lease once the lifetime is spent', () => {
   const dead = {
     id: 'run_immortal',
