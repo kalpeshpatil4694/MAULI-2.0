@@ -171,6 +171,100 @@ function chatFiles() {
 // ── Habit tracker (daily check-ins + streaks) ─────────────────────────────────────
 // ── Habit tracker (daily check-ins + streaks) ─────────────────────────────────────
 // ── Habit tracker (daily check-ins + streaks) ─────────────────────────────────────
+// A security auditor for a wireless network the person running it owns. It reads the
+// network's own configuration, scores it, and lists the hardening steps — deliberately
+// scoped to your own network: it cannot and does not reach anyone else's.
+function wifiAuditFiles(objective) {
+  var title = String(objective || 'Wi-Fi Security Auditor').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p class="sub">Audit your own wireless network and harden it</p></header>';
+  body += '<div class="card"><h2>Network details</h2>';
+  body += '<label>Network name (SSID)</label><input id="mauli-wifi-ssid" class="inp" placeholder="e.g. HomeNetwork">';
+  body += '<label>Wi-Fi encryption</label><select id="mauli-wifi-enc" class="sel"><option value="wpa3">WPA3 (strongest)</option><option value="wpa2">WPA2</option><option value="wep">WEP (insecure)</option><option value="open">Open / no password</option></select>';
+  body += '<label>Router password still the factory default?</label><select id="mauli-wifi-def" class="sel"><option value="no">No, I changed it</option><option value="yes">Yes, unchanged</option></select>';
+  body += '<label>WPS (Wi-Fi Protected Setup) enabled?</label><select id="mauli-wifi-wps" class="sel"><option value="no">No</option><option value="yes">Yes</option></select>';
+  body += '<label>Router admin panel reachable from the internet?</label><select id="mauli-wifi-admin" class="sel"><option value="no">No</option><option value="yes">Yes</option></select>';
+  body += '<label>Guest network separated from your devices?</label><select id="mauli-wifi-guest" class="sel"><option value="yes">Yes</option><option value="no">No</option></select>';
+  body += '<div class="row"><button class="btn run" onclick="runWifiAudit()">Run security audit</button><button class="btn ghost" onclick="clearWifiAudits()">Clear history</button></div></div>';
+  body += '<div class="card"><h2>Wi-Fi password strength</h2><input id="mauli-wifi-pass" class="inp" placeholder="Type your own network password to score it" oninput="scoreWifiPassword()">';
+  body += '<div class="meter"><div id="mauli-wifi-bar" class="bar-fill"></div></div><p id="mauli-wifi-passverdict" class="cnt">Not scored yet</p></div>';
+  body += '<div class="card"><h2>Audit result</h2><div id="mauli-wifi-score" class="score">--</div><p id="mauli-wifi-grade" class="cnt">Run an audit to see your network grade</p><ul id="mauli-wifi-findings" class="findings"></ul></div>';
+  body += '<div class="card"><h2>Previous audits</h2><div id="mauli-wifi-history" class="hist"></div></div></div>';
+
+  var css = '.app{max-width:640px;margin:0 auto;padding:16px}.hd{text-align:center;padding:14px 0}.hd h1{font-size:24px;color:var(--accent)}.sub{font-size:12px;color:var(--text-muted);margin-top:4px}'
+    + '.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px}.card h2{font-size:14px;margin-bottom:10px;color:var(--text)}'
+    + 'label{display:block;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 4px}'
+    + '.inp,.sel{width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px}'
+    + '.row{display:flex;gap:8px;margin-top:14px}.btn{flex:1;padding:10px;border:none;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer}'
+    + '.run{background:var(--accent);color:#000}.ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted)}'
+    + '.meter{height:8px;border-radius:4px;background:var(--bg);border:1px solid var(--border);margin-top:10px;overflow:hidden}'
+    + '.bar-fill{height:100%;width:0;background:var(--red);transition:width .2s}.cnt{font-size:12px;color:var(--text-muted);margin-top:8px}'
+    + '.score{font-size:40px;font-weight:700;color:var(--accent);text-align:center}.findings{list-style:none;margin-top:10px}'
+    + '.findings li{font-size:12px;padding:9px 10px;border-radius:8px;margin-bottom:6px;background:var(--bg);border-left:3px solid var(--yellow)}'
+    + '.findings li.crit{border-left-color:var(--red)}.findings li.ok{border-left-color:var(--green)}.findings b{display:block;margin-bottom:2px}'
+    + '.findings span{color:var(--text-muted)}.hist div{font-size:11px;color:var(--text-muted);padding:6px 0;border-bottom:1px solid var(--border)}';
+
+  var js = [
+    `var WIFI_KEY='mauli-wifi-audits',WIFI_AUDITS=[];`,
+    `try{WIFI_AUDITS=JSON.parse(localStorage.getItem(WIFI_KEY)||'[]')}catch(e){WIFI_AUDITS=[]}`,
+    `function saveWifiAudits(){try{localStorage.setItem(WIFI_KEY,JSON.stringify(WIFI_AUDITS))}catch(e){}}`,
+    `function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}`,
+    `function wifiGrade(n){if(n>=90)return'Excellent - your wireless network is well hardened';if(n>=70)return'Good - a few settings are worth tightening';if(n>=45)return'Fair - important gaps to close';return'At risk - fix the critical items below'}`,
+    `function runWifiAudit(){var ssid=document.getElementById('mauli-wifi-ssid').value.trim()||'My Wi-Fi network';`
+      + `var enc=document.getElementById('mauli-wifi-enc').value,def=document.getElementById('mauli-wifi-def').value,`
+      + `wps=document.getElementById('mauli-wifi-wps').value,admin=document.getElementById('mauli-wifi-admin').value,`
+      + `guest=document.getElementById('mauli-wifi-guest').value;`,
+    // Weights are calibrated so a fully hardened network reaches 100 and the default
+    // options a freshly bought router ships with land in the danger band. An earlier
+    // version topped out at 35, so a perfect network was graded "At risk" by the same
+    // page that is supposed to reward good settings.
+    `var score=0,findings=[];`,
+    `if(enc==='wpa3'){score+=40;findings.push(['ok','WPA3 encryption enabled','The strongest wireless encryption available.'])}`
+      + `else if(enc==='wpa2'){score+=30;findings.push(['warn','WPA2 encryption enabled','Acceptable, but check whether your router also offers WPA3.'])}`
+      + `else if(enc==='wep'){score+=5;findings.push(['crit','WEP encryption is broken','WEP can be cracked in minutes. Change the router to WPA2 or WPA3.'])}`
+      + `else{score+=0;findings.push(['crit','Open network with no password','Anyone nearby can join and read your traffic. Set a WPA2 or WPA3 password.'])}`,
+    `if(def==='yes'){score-=25;findings.push(['crit','Router password is still the factory default','Default router credentials are public. Change the router admin password now.'])}`
+      + `else{score+=20;findings.push(['ok','Router admin password changed','You already moved away from the factory default.'])}`,
+    `if(wps==='yes'){score-=15;findings.push(['crit','WPS is enabled','WPS PINs can be brute-forced. Disable WPS in the router settings.'])}`
+      + `else{score+=15;findings.push(['ok','WPS is disabled','Nothing to fix here.'])}`,
+    `if(admin==='yes'){score-=25;findings.push(['crit','Admin panel is exposed to the internet','Remote administration lets attackers try to take over the router. Disable it.'])}`
+      + `else{score+=15;findings.push(['ok','Admin panel is not internet-facing','Remote access to router settings is closed.'])}`,
+    `if(guest==='no'){score-=5;findings.push(['warn','Guest traffic is not separated','Put guest devices on an isolated network so they cannot reach your computers.'])}`
+      + `else{score+=10;findings.push(['ok','Guest network is isolated','Guest devices cannot reach your main network.'])}`,
+    `score=Math.max(0,Math.min(100,score));`,
+    `var rec={ssid:ssid,enc:enc,score:score,at:new Date().toISOString()};`,
+    `WIFI_AUDITS.unshift(rec);if(WIFI_AUDITS.length>10)WIFI_AUDITS.length=10;saveWifiAudits();`,
+    `document.getElementById('mauli-wifi-score').textContent=score;`
+      + `document.getElementById('mauli-wifi-score').style.color=score>=70?'var(--green)':score>=45?'var(--yellow)':'var(--red)';`
+      + `document.getElementById('mauli-wifi-grade').textContent=wifiGrade(score);`,
+    `var html='';for(var i=0;i<findings.length;i++){var f=findings[i];`
+      + `html+='<li class='+f[0]+'><b>'+esc(f[1])+'</b><span>'+esc(f[2])+'</span></li>'}`
+      + `document.getElementById('mauli-wifi-findings').innerHTML=html;`,
+    `renderWifiHistory()}`,
+    `function scoreWifiPassword(){var p=document.getElementById('mauli-wifi-pass').value,bar=document.getElementById('mauli-wifi-bar'),`
+      + `out=document.getElementById('mauli-wifi-passverdict');`,
+    `if(!p){bar.style.width='0%';out.textContent='Not scored yet';return}`,
+    `var s=0;if(p.length>=12)s+=30;else if(p.length>=8)s+=15;`,
+    `if(/[a-z]/.test(p)&&/[A-Z]/.test(p))s+=20;else s+=5;`
+      + `if(/[0-9]/.test(p))s+=20;else s+=5;if(/[^A-Za-z0-9]/.test(p))s+=30;else s+=10;`,
+    `bar.style.width=Math.min(100,s)+'%';`
+      + `bar.style.background=s>=80?'var(--green)':s>=50?'var(--yellow)':'var(--red)';`
+      + `out.textContent=s>=80?'Strong password':s>=50?'Acceptable, but could be stronger':'Weak password - a cracker will guess this quickly';`,
+    `document.getElementById('mauli-wifi-passverdict').textContent=out.textContent}`,
+    `function renderWifiHistory(){var box=document.getElementById('mauli-wifi-history'),html='';`
+      + `if(!WIFI_AUDITS.length){box.innerHTML='<div>No audits recorded yet</div>';return}`,
+    `for(var i=0;i<WIFI_AUDITS.length;i++){var a=WIFI_AUDITS[i];`
+      + `html+='<div>'+esc(a.ssid)+' &middot; '+esc(a.enc).toUpperCase()+' &middot; score '+a.score+' &middot; '+esc(String(a.at).slice(0,10))+'</div>'}`
+      + `box.innerHTML=html}`,
+    `function clearWifiAudits(){WIFI_AUDITS=[];saveWifiAudits();`
+      + `document.getElementById('mauli-wifi-score').textContent='--';`
+      + `document.getElementById('mauli-wifi-grade').textContent='Run an audit to see your network grade';`
+      + `document.getElementById('mauli-wifi-findings').innerHTML='';renderWifiHistory()}`,
+    `renderWifiHistory()`
+  ].join('\n');
+
+  return [{ path: 'www/index.html', content: h(title, body, css, js) }];
+}
+
 function habitTrackerFiles(objective) {
   var title = String(objective || 'Habit Tracker').slice(0, 60);
   var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="mauli-habit-summary" class="cnt"></p></header>';
@@ -383,6 +477,7 @@ var TEMPLATE_DOMAINS = {
   'notes-app': ['note', 'notes', 'journal', 'diary', 'notepad', 'memo'],
   ecommerce: ['ecommerce', 'commerce', 'shop', 'store', 'cart', 'product', 'products', 'checkout', 'marketplace'],
   'habit-tracker': ['habit', 'habits', 'streak', 'streaks', 'checkin', 'routine', 'discipline'],
+  'wifi-security': ['wifi', 'wi-fi', 'wireless', 'network', 'network security', 'router', 'ssid', 'wpa2', 'wpa3', 'wep', 'wps', 'access point', 'audit', 'auditor', 'lan'],
   'book-logger': ['book', 'books', 'reading', 'novel', 'library', 'bookshelf'],
   calculator: ['calculator', 'calc', 'arithmetic', 'expression'],
   'chat-app': ['chat', 'message', 'messages', 'conversation', 'chatbot', 'inbox'],
@@ -408,13 +503,20 @@ var WEAK_DOMAIN_WORDS = new Set(['app', 'application', 'web', 'tool', 'utility',
   'form', 'forms', 'link', 'links', 'collection', 'call', 'calls', 'read', 'reading', 'cost', 'money',
   'track', 'board', 'column', 'event', 'events', 'personal', 'site', 'mobile', 'desktop', 'online']);
 
-var ROUTING_PRIORITY = ['habit-tracker', 'book-logger', 'notes-app', 'ecommerce', 'video-recorder', 'weather-app', 'calculator', 'todo-app',
+var ROUTING_PRIORITY = ['wifi-security', 'habit-tracker', 'book-logger', 'notes-app', 'ecommerce', 'video-recorder', 'weather-app', 'calculator', 'todo-app',
   'chat-app', 'music-player', 'invoice-generator', 'fitness-tracker', 'recipe-app', 'survey-builder',
   'timer-app', 'bookmark-manager', 'expense-tracker', 'password-manager', 'kanban-board', 'calendar-app',
   'game-app', 'portfolio', 'web-app'];
 
 function scoreTemplates(objective) {
-  var text = ' ' + String(objective || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  var lower = String(objective || '').toLowerCase();
+  var text = ' ' + lower.replace(/[^a-z0-9\s-]/g, ' ').replace(/-/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  // A second, hyphen-free view of the same command. Normalisation turned the hyphen in
+  // "Wi-Fi" into a space, so "Wi-Fi" was tokenised as "wi fi" and matched neither the
+  // 'wifi' nor the 'wi-fi' domain word: "Build a Wi-Fi security auditor for my home
+  // network" scored ZERO against the wireless template and fell through to the generic
+  // web app. Collapsing hyphens restores the word people actually type.
+  var compact = ' ' + lower.replace(/[^a-z0-9\s-]/g, ' ').replace(/-/g, '').replace(/\s+/g, ' ').trim() + ' ';
   var scored = [];
   for (var i = 0; i < ROUTING_PRIORITY.length; i++) {
     var type = ROUTING_PRIORITY[i], words = TEMPLATE_DOMAINS[type] || [], hits = [];
@@ -422,7 +524,8 @@ function scoreTemplates(objective) {
       var w = words[j];
       // Word-boundary matching: "bookmark" must not satisfy "book".
       if (WEAK_DOMAIN_WORDS.has(w)) continue;
-      if (new RegExp('\\b' + w + '\\b').test(text)) hits.push(w);
+      var joined = w.replace(/-/g, '');
+      if (new RegExp('\\b' + w + '\\b').test(text) || (joined !== w && new RegExp('\\b' + joined + '\\b').test(compact))) hits.push(w);
     }
     if (hits.length) scored.push({ type: type, score: hits.length, hits: hits });
   }
@@ -445,6 +548,7 @@ var GENERATORS = {
   ecommerce: function(o) { return { summary: 'Storefront with a product list, cart and totals.', files: ecommerceFiles(o), tests: ['Add a product', 'Add to cart', 'Remove from cart', 'Cart total updates', 'LocalStorage saves'], notes: ['Search', 'Cart totals', 'LocalStorage persistence'] }; },
   'notes-app': function(o) { return { summary: 'Notes app with titles, bodies, tags and search.', files: notesFiles(o), tests: ['Add a note', 'Search notes', 'Delete a note', 'LocalStorage saves'], notes: ['Tags', 'Full-text search', 'LocalStorage persistence'] }; },
   'habit-tracker': function(o) { return { summary: 'Habit tracker with daily check-ins, per-habit streaks and a 7-day history.', files: habitTrackerFiles(o), tests: ['Add a habit', 'Check in for today', 'Streak count updates', 'Clear all habits', 'LocalStorage saves'], notes: ['Daily check-ins', 'Streak counting', 'LocalStorage persistence'] }; },
+  'wifi-security': function(o) { return { summary: 'Wireless network security auditor that scores your own Wi-Fi settings and lists hardening steps.', files: wifiAuditFiles(o), tests: ['Run a network audit', 'Score a wireless password', 'Findings render with severity', 'Audit history persists', 'LocalStorage saves'], notes: ['Audits your own network only', 'Scored findings with fixes', 'LocalStorage audit history'] }; },
   'book-logger': function(o) { return { summary: 'Reading log with a book list, progress tracking and per-book notes.', files: bookLoggerFiles(o), tests: ['Add a book', 'Track reading progress', 'Save notes for a book', 'LocalStorage saves'], notes: ['Progress per book', 'Notes per book', 'LocalStorage persistence'] }; },
   'calculator': function() { return { summary: 'Calculator with keyboard support and expression evaluation.', files: calculatorFiles(), tests: ['Basic operations', 'Keyboard input', 'Clear/backspace'], notes: ['Keyboard support', 'Error handling'] }; },
   'chat-app': function() { return { summary: 'Chat app with multiple rooms, message history, and auto-replies.', files: chatFiles(), tests: ['Send message', 'Switch rooms', 'Auto-reply'], notes: ['Multiple rooms', 'Message timestamps'] }; },
