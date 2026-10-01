@@ -3,6 +3,7 @@ import { store } from './store.js';
 import { d1Get, hasD1 } from './db.js';
 import { registerArtifact } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
+import { describePlatform } from './platforms.js';
 
 const REQUIRED_GATES=['build','test','requirements','security','qa','integrity'];
 
@@ -78,6 +79,8 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
 
   const integrityResult=gates.get('integrity')?.result??gates.get('integrity')?.output??null;
   const deliveryContent = {
+    platform: project.platform ?? null,
+    platformLabel: describePlatform(project.platform),
     projectId: project.id,
     project: {
       id: project.id,
@@ -144,6 +147,10 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
     content: deliveryContent,
     metadata: {
       state: project.state,
+      // The delivery records the platform it was built for, so a download is never a
+      // mystery target: the founder asked for Android, and the manifest says Android.
+      platform: project.platform ?? null,
+      platformLabel: describePlatform(project.platform),
       generatedBy: 'mauli-l1-delivery',
       gate: 'build+test+requirements+security+qa+integrity',
       mandatoryGatesPassed:true

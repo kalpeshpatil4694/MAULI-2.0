@@ -170,6 +170,31 @@ Dashboard polling (`GET /api/state`, `GET /api/projects/:id/detail`) performs re
 never writes to D1 and never starts execution. Execution begins from the cron trigger
 (`*/5 * * * *`) or from explicit POSTs: `/api/command`, `/api/approvals/:id`, `/api/chat`.
 
+### Target platform is part of the command
+
+"Build a habit tracker" and "Build a habit tracker for Android" are different products. The
+platform used to be discovered *afterwards*, when the founder clicked a build button, so
+MAULI generated the same web page for both and the packaging step was a separate,
+easy-to-forget action. The target is now captured with the command.
+
+- **`src/platforms.js`** owns the registry: `web`, `android`, `ios`, `desktop`, each with a
+  label, icon, and the requirements its packaging needs. `normalizePlatform()` resolves what
+  founders actually type (`exe` → desktop, `apk` → android, `iPhone` → iOS) and returns
+  `null` for anything unbuildable, so a typo is reported instead of guessed at.
+- **Detection is a fallback, not the mechanism.** `detectPlatformFromText()` reads the
+  command when no platform was chosen, matching on word boundaries so `mac` does not fire on
+  "machine" and `ios` does not fire on "curious". An explicit choice always wins, and a
+  command naming no platform still builds for the web rather than failing.
+- **`POST /api/command` rejects an unknown platform** with a 400 listing the supported ones.
+  Silently substituting a different target is exactly the failure this feature removes.
+- **The platform is persisted on the project**, adds its packaging requirement to the plan,
+  and is recorded in the delivery manifest and metadata, so a download states what it is.
+- **`POST /api/build-app` defaults to the project's own platform** rather than a hard-coded
+  `android`, so a desktop commission produces an EXE build.
+- The dashboard renders a platform selector above the command box, sends the choice with
+  the command, and labels each project and its build button with the target it was
+  commissioned for.
+
 ## 6. Upgradeability
 
 New agents, departments, tools, workflows, model providers, execution runtimes, and UI clients should be addable through interfaces/contracts rather than invasive changes to the core.

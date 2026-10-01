@@ -6,6 +6,7 @@ import { listProjects } from './projects.js';
 import { listTasks } from './tasks.js';
 import { listApprovals, decideApproval } from './governance.js';
 import { planCommand, resumeApprovedCommand } from './orchestrator.js';
+import { PLATFORMS, DEFAULT_PLATFORM, normalizePlatform, resolvePlatform, platformLabel, platformIcon, describePlatform } from './platforms.js';
 import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { collectProjectFiles, createZip } from './zip.js';
@@ -400,6 +401,7 @@ export default { async fetch(request, env, ctx) { try {
     const avgRunDuration=completedRuns.filter(r=>r.completedAt&&r.startedAt).map(r=>Date.parse(r.completedAt)-Date.parse(r.startedAt)).reduce((a,b)=>a+b,0)/(completedRuns.length||1);
     return ok({analytics:{projects:projects.length,tasks:allTasks.length,artifacts:allArtifacts.length,runs:allRuns.length,byState,byAgent,avgRunDurationMs:Math.round(avgRunDuration),completionRate:allTasks.length?Math.round(allTasks.filter(t=>t.state==='completed').length/allTasks.length*100):0}});
   }
+  if(request.method==='GET'&&url.pathname==='/api/platforms'){return ok({platforms:PLATFORMS.map(({id,label,icon})=>({id,label,icon})),default:DEFAULT_PLATFORM});}
   if(request.method==='GET'&&url.pathname==='/api/health'){const blocked=d1WriteBlockedSnapshot(env);
     // The AI binding being present says nothing about whether generation still works: the
     // free Workers AI allowance is a daily budget, and once it is spent every generation
@@ -578,7 +580,13 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/artifacts'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');const taskId=url.searchParams.get('taskId');const artifacts=projectId?listProjectArtifacts(projectId):taskId?listTaskArtifacts(taskId):store.list('artifacts');return ok({artifacts});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')&&url.pathname.endsWith('/download')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const artifactId=parts[parts.length-2];const artifact=getArtifact(artifactId);if(!artifact)return fail('Artifact not found',404);const safeName=String(artifact.projectId).replace(/[^a-zA-Z0-9_-]/g,'_');let files=collectProjectFiles(artifact.projectId,artifact,store);if(!files.length){const tasks=store.list('tasks').filter(t=>t.projectId===artifact.projectId);const summary=[];summary.push({path:'README.md',content:`# MAULI 2.0 — Project Delivery\\n\\n## Project\\n- **ID:** ${artifact.projectId}\\n- **Type:** ${artifact.type}\\n- **Delivered:** ${new Date().toISOString()}\\n\\n## Tasks (${tasks.length})\\n${tasks.map(t=>`- [${t.state}] ${t.title}${t.assignedAgentId?' (Agent: '+t.assignedAgentId+')':''}`).join('\\n')}\\n`});summary.push({path:'project-data.json',content:JSON.stringify({projectId:artifact.projectId,type:artifact.type,content:artifact.content,metadata:artifact.metadata},null,2)});files=summary;}const zip=createZip(files);return new Response(zip,{status:200,headers:{'content-type':'application/zip','content-disposition':`attachment; filename="mauli-${safeName}.zip"`,'cache-control':'private, max-age=300'}});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return artifactJson(getArtifact(url.pathname.split('/').pop()));}
-  if(request.method==='POST'&&url.pathname==='/api/command'){const limit=checkCommandRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const body=await json(request);const cmdValidation=validateString(body.command,'command',{minLength:1,maxLength:2000});if(!cmdValidation.ok)return fail(cmdValidation.error,400);const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const isolatedTest=isIsolatedTestEnv(env);let result;try{result=await Promise.race([planCommand(body.command,env),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),60000))]);}catch(e){return ok({result:{status:'error',error:e.message,command:body.command}});}const persistedPayload={command:body.command,generatedAt:now(),result};const saved=isolatedTest?{saved:true,skipped:true,testMode:true}:await saveCommandResult(persistedPayload,env).catch(()=>({saved:false}));return ok({result,resultFile:saved},201);}
+  if(request.method==='POST'&&url.pathname==='/api/command'){const limit=checkCommandRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const body=await json(request);const cmdValidation=validateString(body.command,'command',{minLength:1,maxLength:2000});if(!cmdValidation.ok)return fail(cmdValidation.error,400);
+  // The founder picks the target platform with the command, so the product is built for it
+  // from the start. An unrecognised platform is rejected rather than silently replaced: a
+  // founder who asked for Android must never be handed a web build that reports success.
+  if(body.platform!==undefined&&body.platform!==null&&body.platform!==''&&!normalizePlatform(body.platform))return fail(`Unsupported platform: ${body.platform}. Supported: ${PLATFORMS.map(p=>p.id).join(', ')}`,400);
+  const target=resolvePlatform(body.platform,body.command);
+  const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const isolatedTest=isIsolatedTestEnv(env);let result;try{result=await Promise.race([planCommand(body.command,env,{platform:target.platform}),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),60000))]);}catch(e){return ok({result:{status:'error',error:e.message,command:body.command}});}const persistedPayload={command:body.command,platform:target.platform,generatedAt:now(),result};const saved=isolatedTest?{saved:true,skipped:true,testMode:true}:await saveCommandResult(persistedPayload,env).catch(()=>({saved:false}));return ok({result,resultFile:saved},201);}
   if(request.method==='POST'&&url.pathname.startsWith('/api/approvals/')){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const approvalId=url.pathname.split('/').pop();const body=await json(request);const pending=store.get('approvals',approvalId);if(!pending)return fail('Approval not found',404);
     // A proper approval opens two gates at once: the approval row becomes 'approved', AND the
     // project + its live tasks are re-queued so the scheduler actually begins the chain.
@@ -592,8 +600,13 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='POST'&&url.pathname==='/api/build-app'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const body=await json(request);
-    const projectId=body.projectId;const platform=body.platform||'android';
+    const projectId=body.projectId;
     if(!projectId)return fail('projectId required',400);
+    // Default to the platform the project was actually commissioned for. Hard-coding
+    // 'android' meant a founder who asked for a desktop app got an APK build unless they
+    // happened to know to pass a parameter.
+    const commissioned=store.get('projects',projectId)?.platform;
+    const platform=normalizePlatform(body.platform)??resolvePlatform(commissioned,'web').platform;
     const codeArtifacts=await projectCodeArtifacts(projectId,env);
     if(!codeArtifacts.length)return fail('No code artifact found for this project. Run the command first.',404);
     const latest=codeArtifacts.slice().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0];
