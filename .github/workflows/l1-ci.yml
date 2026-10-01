@@ -44,6 +44,11 @@ jobs:
       - name: Integration tests
         run: npm run test:routes
 
+      # Proves the generated-app runtime verifier can actually execute a generated app and
+      # tell a working app from a demo. MAULI must never ship a demo for a working product.
+      - name: Generated-app runtime verification
+        run: npm run test:runtime
+
       - name: Security + governance tests
         run: npm run test:security
 
