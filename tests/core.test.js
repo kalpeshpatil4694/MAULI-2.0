@@ -23,7 +23,7 @@ test('selects agents by capability', () => {
   assert.ok(found);
 });
 
-test('assigns a compatible task and advances lifecycle', () => {
+test('assigns a compatible task and advances lifecycle', async () => {
   const agent = registerAgent({ name: 'Test Researcher', role: 'Researcher', capabilities: ['research'] });
   const task = createTask({ title: 'Research', requiredCapabilities: ['research'] });
   const assigned = assignTask(task.id);
@@ -31,7 +31,7 @@ test('assigns a compatible task and advances lifecycle', () => {
   assert.equal(assigned.state, 'assigned');
   assert.equal(startTask(task.id).state, 'working');
   assert.equal(markVerifying(task.id, { ok: true }).state, 'verifying');
-  assert.equal(completeTask(task.id, { ok: true }).state, 'completed');
+  assert.equal((await completeTask(task.id, { ok: true })).state, 'completed');
 });
 
 test('high-risk code and external actions require approval', () => {

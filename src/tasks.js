@@ -38,9 +38,12 @@ export function markVerifying(taskId,result={}){const task=store.get('tasks',tas
   // it reclaims a stranded 'verifying' row. Persisting it cost a row write per task for a
   // state nobody could observe after the fact.
   const next=store.putTransient('tasks',{...task,state:'verifying',result,id:task.id});if(task.agentId)updateAgent(task.agentId,{state:'verifying',currentTaskId:task.id});store.addEvent('task.verifying',next);return next;}
-export function completeTask(taskId,result={},extra={}){const task=store.get('tasks',taskId);if(!task)return null;const completed=store.put('tasks',{...task,...enrichTaskTiming({...task,state:'completed',completedAt:now()}),state:'completed',result,...extra,id:task.id});if(task.agentId)updateAgent(task.agentId,{state:'available',currentTaskId:null});store.addEvent('task.completed',completed);
+export async function completeTask(taskId,result={},extra={}){const task=store.get('tasks',taskId);if(!task)return null;// A completion write that loses the compare-and-set is dropped, and the task stays
+  // 'assigned' in D1 while the in-memory copy says completed: the chain then re-claims it,
+  // re-runs it, and can settle on nothing. Progress must be re-applied, not discarded.
+  const completed=await store.putDurable('tasks',{...task,...enrichTaskTiming({...task,state:'completed',completedAt:now()}),state:'completed',result,...extra,id:task.id});if(task.agentId)updateAgent(task.agentId,{state:'available',currentTaskId:null});store.addEvent('task.completed',completed);
   for(const dependent of store.list('tasks')){if(dependent.state==='blocked'&&Array.isArray(dependent.dependsOn)&&dependent.dependsOn.includes(taskId)&&dependenciesCompleted(dependent))assignTask(dependent.id);}
   return completed;
 }
-export function failTask(taskId,error='Execution failed',extra={}){const task=store.get('tasks',taskId);if(!task)return null;const failed=store.put('tasks',{...task,...enrichTaskTiming({...task,state:'failed',failedAt:now()}),state:'failed',error,...extra,id:task.id});if(task.agentId)updateAgent(task.agentId,{state:'available',currentTaskId:null});store.addEvent('task.failed',failed);return failed;}
+export async function failTask(taskId,error='Execution failed',extra={}){const task=store.get('tasks',taskId);if(!task)return null;const failed=await store.putDurable('tasks',{...task,...enrichTaskTiming({...task,state:'failed',failedAt:now()}),state:'failed',error,...extra,id:task.id});if(task.agentId)updateAgent(task.agentId,{state:'available',currentTaskId:null});store.addEvent('task.failed',failed);return failed;}
 export const listTasks=()=>store.list('tasks');
