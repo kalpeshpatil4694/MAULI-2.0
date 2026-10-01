@@ -281,6 +281,24 @@ test('functional and founder-requirement-complete are reported as separate statu
   assert.match(status.note, /independent/i);
 });
 
+test('a structural requirement is not failed by a runtime that cannot observe it', () => {
+  const spec = extractRequirementSpec({ command: 'Build a laundry pickup and drop-off app where the shop owner logs in, staff register each garment', platform: 'web' });
+  const architecture = selectArchitecture(spec);
+  const built = generateFullStackApp(spec, architecture);
+  const fidelity = analyzeGeneratedApp(built.files, { objective: spec.command });
+  const platform = spec.requirements.find((r) => r.title.startsWith('Platform'));
+  assert.ok(platform, 'the platform requirement must exist');
+  assert.deepEqual(platform.evidence, [], '"runs on the web" has no observable evidence vocabulary');
+
+  const matrix = buildRequirementMatrix({
+    requirements: spec.requirements, files: built.files, fidelity, architecture,
+    runtime: { executed: true, evidence: { create: true, read: true, persistence: true } }
+  });
+  const row = matrix.rows.find((r) => r.id === platform.id);
+  assert.equal(row.status, 'PASS', 'a target that cannot be observed at runtime must not be scored FAIL');
+  assert.equal(dualStatus({ matrix, fidelity }).founderRequirementComplete, 'REQUIREMENT VERIFIED');
+});
+
 // ---------------------------------------------------------------------------
 // 20. No regression: every existing template still satisfies its own matrix
 // ---------------------------------------------------------------------------

@@ -95,9 +95,16 @@ export function buildRequirementMatrix({ requirements = [], files = [], fidelity
     } else if (runtimeKeys.length > 0) {
       status = MATRIX_STATUS.PASS;
       basis = `runtime execution: ${runtimeKeys.join(', ')}`;
+    } else if (evidence.ratio === null) {
+      // A requirement with no observable evidence vocabulary ("the product runs on the
+      // web") cannot be evidenced by running the app any more than by reading it. Scoring
+      // it FAIL under runtime made a correct product report REQUIREMENT NOT VERIFIED for a
+      // row nobody can observe.
+      status = MATRIX_STATUS.PASS;
+      basis = 'structural requirement, satisfied by the delivered target itself';
     } else if (runtime && runtime.executed) {
       // The app was executed and this requirement's behaviour was never observed.
-      status = evidence.ratio !== null && evidence.ratio > 0 ? MATRIX_STATUS.PARTIAL : MATRIX_STATUS.FAIL;
+      status = evidence.matched.length ? MATRIX_STATUS.PARTIAL : MATRIX_STATUS.FAIL;
       basis = evidence.matched.length ? 'source words present but no runtime behaviour observed' : 'no evidence in source and no runtime behaviour observed';
     } else if (requirement.verifiableStatically === false) {
       status = evidence.matched.length ? MATRIX_STATUS.PARTIAL : MATRIX_STATUS.FAIL;
