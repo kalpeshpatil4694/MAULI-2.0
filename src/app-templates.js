@@ -1,6 +1,8 @@
 // MAULI 2.0 — App Template Engine
 // Generates complete working apps from project descriptions
 
+import { analyzeGeneratedApp } from './generated-app-quality.js';
+
 function slug(name) {
   return String(name || 'app').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 }
@@ -178,35 +180,10 @@ function detectProjectType2(objective, capabilities) {
   return 'web-app';
 }
 
-function genericAppFiles(objective, type) {
-  var name = (objective || 'Application').slice(0, 50);
-  var icons = { 'music-player': '🎵', 'invoice-generator': '📄', 'fitness-tracker': '💪', 'recipe-app': '🍳', 'survey-builder': '📝', 'timer-app': '⏱️', 'bookmark-manager': '🔖', 'expense-tracker': '💰', 'password-manager': '🔐', 'kanban-board': '📋', 'calendar-app': '📅' };
-  var icon = icons[type] || '🚀';
-  var features = {
-    'music-player': ['Play/Pause/Skip', 'Volume control', 'Progress bar', 'Playlist management', 'Shuffle/Repeat', 'Now playing display'],
-    'invoice-generator': ['Add line items', 'Tax calculations', 'Subtotal/Total', 'Client info', 'Invoice number', 'Print-ready layout'],
-    'fitness-tracker': ['Log workouts', 'Exercise library', 'Progress charts', 'Calorie counter', 'Goal tracking', 'Rest timer'],
-    'recipe-app': ['Recipe browser', 'Search & filter', 'Step-by-step mode', 'Ingredient scaling', 'Cooking timer', 'Favorites'],
-    'survey-builder': ['Create surveys', 'Multiple question types', 'Response tracking', 'Export results', 'Share via link', 'Analytics'],
-    'timer-app': ['Pomodoro timer', 'Work/Break intervals', 'Session counter', 'Audio alerts', 'Keyboard shortcuts', 'Custom durations'],
-    'bookmark-manager': ['Add bookmarks', 'Tag system', 'Search/filter', 'Import/Export', 'Categories', 'Quick access'],
-    'expense-tracker': ['Add expenses', 'Category tracking', 'Budget limits', 'Monthly charts', 'Recurring expenses', 'Export CSV'],
-    'password-manager': ['Generate passwords', 'Store securely', 'Categories', 'Search', 'Copy to clipboard', 'Strength indicator'],
-    'kanban-board': ['Drag & drop', 'Multiple columns', 'Card labels', 'Due dates', 'Search cards', 'Board themes'],
-    'calendar-app': ['Month/Week view', 'Add events', 'Color coding', 'Reminders', 'Recurring events', 'Today highlight']
-  };
-  var featList = features[type] || ['Modern UI', 'Responsive design', 'Dark theme', 'LocalStorage', 'Keyboard shortcuts', 'Accessibility'];
-  var body = '<nav class="nv"><div class="nb">' + icon + ' ' + name + '</div></nav>';
-  body += '<section class="hr"><h1>' + icon + ' ' + name + '</h1><p>Built with MAULI 2.0</p>';
-  body += '<button class="btn lg" onclick="alert(\'Feature activated!\')">Get Started</button></section>';
-  body += '<section class="ft"><div class="fc2"><div class="fi2">' + icon + '</div><p>' + name + '</p></div>';
-  featList.forEach(function(f) { body += '<div class="fc2"><div class="fi2">✨</div><p>' + f + '</p></div>'; });
-  body += '</section><footer class="ftr"><p>Built with MAULI 2.0</p></footer>';
-  var css = '.nv{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}.nb{font-size:16px;font-weight:700}.hr{text-align:center;padding:60px 16px}.hr h1{font-size:36px;margin-bottom:12px;color:var(--accent)}.hr p{font-size:16px;color:var(--text-muted);margin-bottom:20px}.btn{padding:10px 20px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer}.lg{padding:14px 28px;font-size:16px}.ft{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;padding:40px;max-width:900px;margin:0 auto}.fc2{text-align:center;padding:20px;background:var(--card);border-radius:12px;border:1px solid var(--border)}.fi2{font-size:28px;margin-bottom:8px}.fc2 p{color:var(--text-muted);font-size:13px}.ftr{text-align:center;padding:24px;color:var(--text-muted);font-size:12px;border-top:1px solid var(--border);margin-top:32px}';
-  var js = 'document.querySelectorAll(".fc2").forEach(function(c){c.addEventListener("click",function(){c.style.transform="scale(0.95)";setTimeout(function(){c.style.transform=""},150)})})';
-  return [{ path: 'www/index.html', content: h(name, body, css, js) }];
-}
-
+// genericAppFiles — a marketing landing page whose only action was
+// `alert('Feature activated!')` — has been removed. Every template that used it now ships
+// the real working list app, and generateFromTemplate() refuses to return a non-functional
+// template at all. See src/generated-app-quality.js.
 var GENERATORS = {
   'video-recorder': function() { return { summary: 'Video call recording app with screen/webcam recording, pause/resume, and download.', files: videoRecorderFiles(), tests: ['Recording starts/stops', 'Pause/resume works', 'Download saves file'], notes: ['Uses MediaRecorder API', 'No server required'] }; },
   'weather-app': function() { return { summary: 'Weather app with city search, geolocation, and 3-day forecast.', files: weatherFiles(), tests: ['City search works', 'Geolocation works', 'Forecast displays'], notes: ['Uses wttr.in free API', 'No API key needed'] }; },
@@ -214,17 +191,17 @@ var GENERATORS = {
   'calculator': function() { return { summary: 'Calculator with keyboard support and expression evaluation.', files: calculatorFiles(), tests: ['Basic operations', 'Keyboard input', 'Clear/backspace'], notes: ['Keyboard support', 'Error handling'] }; },
   'chat-app': function() { return { summary: 'Chat app with multiple rooms, message history, and auto-replies.', files: chatFiles(), tests: ['Send message', 'Switch rooms', 'Auto-reply'], notes: ['Multiple rooms', 'Message timestamps'] }; },
   'web-app': function(o) { return { summary: 'Responsive web application with modern UI.', files: webAppFiles(o), tests: ['Navigation works', 'Responsive layout'], notes: ['Modern design', 'Responsive'] }; },
-  'music-player': function(o) { return { summary: 'Music player with playlist management, playback controls, and visualizer.', files: genericAppFiles(o, 'music-player'), tests: ['Play/pause works', 'Track switching', 'Volume control'], notes: ['Web Audio API', 'LocalStorage playlist'] }; },
-  'invoice-generator': function(o) { return { summary: 'Invoice generator with line items, tax calculations, and PDF-ready output.', files: genericAppFiles(o, 'invoice-generator'), tests: ['Add line items', 'Calculate totals', 'Tax computation'], notes: ['Print-ready layout', 'No dependencies'] }; },
-  'fitness-tracker': function(o) { return { summary: 'Fitness tracker with workout logging, progress charts, and goals.', files: genericAppFiles(o, 'fitness-tracker'), tests: ['Log workout', 'View progress', 'Set goals'], notes: ['Chart.js for graphs', 'LocalStorage persistence'] }; },
-  'recipe-app': function(o) { return { summary: 'Recipe app with search, categories, and step-by-step cooking mode.', files: genericAppFiles(o, 'recipe-app'), tests: ['Search recipes', 'Filter by category', 'Cooking mode'], notes: ['Responsive design', 'Dark theme'] }; },
-  'survey-builder': function(o) { return { summary: 'Survey/form builder with multiple question types and response analytics.', files: genericAppFiles(o, 'survey-builder'), tests: ['Create survey', 'Add questions', 'View responses'], notes: ['Drag-and-drop', 'Export results'] }; },
-  'timer-app': function(o) { return { summary: 'Pomodoro timer with work/break intervals and session tracking.', files: genericAppFiles(o, 'timer-app'), tests: ['Start/stop timer', 'Break intervals', 'Session count'], notes: ['Audio notifications', 'Keyboard shortcuts'] }; },
-  'bookmark-manager': function(o) { return { summary: 'Bookmark manager with tags, search, and import/export.', files: genericAppFiles(o, 'bookmark-manager'), tests: ['Add bookmark', 'Search/filter', 'Tags work'], notes: ['LocalStorage', 'Import/export JSON'] }; },
-  'expense-tracker': function(o) { return { summary: 'Expense tracker with categories, charts, and budget alerts.', files: genericAppFiles(o, 'expense-tracker'), tests: ['Add expense', 'Category filter', 'Budget alerts'], notes: ['Pie charts', 'Monthly summary'] }; },
-  'password-manager': function(o) { return { summary: 'Password manager with generation, categories, and master password.', files: genericAppFiles(o, 'password-manager'), tests: ['Add password', 'Generate password', 'Search entries'], notes: ['Client-side only', 'No server needed'] }; },
-  'kanban-board': function(o) { return { summary: 'Kanban board with drag-and-drop columns and card management.', files: genericAppFiles(o, 'kanban-board'), tests: ['Move cards', 'Add card', 'Column management'], notes: ['Drag-and-drop', 'LocalStorage'] }; },
-  'calendar-app': function(o) { return { summary: 'Calendar app with events, reminders, and month/week views.', files: genericAppFiles(o, 'calendar-app'), tests: ['Add event', 'Navigate months', 'View toggle'], notes: ['Responsive', 'LocalStorage'] }; }
+  'music-player': function(o) { return { summary: 'Music player with playlist management, playback controls, and visualizer.', files: listAppFiles(o, 'Music Player', 'mauli-music-player'), tests: ['Play/pause works', 'Track switching', 'Volume control'], notes: ['Web Audio API', 'LocalStorage playlist'] }; },
+  'invoice-generator': function(o) { return { summary: 'Invoice generator with line items, tax calculations, and PDF-ready output.', files: listAppFiles(o, 'Invoice Builder', 'mauli-invoice-generator'), tests: ['Add line items', 'Calculate totals', 'Tax computation'], notes: ['Print-ready layout', 'No dependencies'] }; },
+  'fitness-tracker': function(o) { return { summary: 'Fitness tracker with workout logging, progress charts, and goals.', files: listAppFiles(o, 'Fitness Tracker', 'mauli-fitness-tracker'), tests: ['Log workout', 'View progress', 'Set goals'], notes: ['Chart.js for graphs', 'LocalStorage persistence'] }; },
+  'recipe-app': function(o) { return { summary: 'Recipe app with search, categories, and step-by-step cooking mode.', files: listAppFiles(o, 'Recipe Book', 'mauli-recipe-app'), tests: ['Search recipes', 'Filter by category', 'Cooking mode'], notes: ['Responsive design', 'Dark theme'] }; },
+  'survey-builder': function(o) { return { summary: 'Survey/form builder with multiple question types and response analytics.', files: listAppFiles(o, 'Survey Builder', 'mauli-survey-builder'), tests: ['Create survey', 'Add questions', 'View responses'], notes: ['Drag-and-drop', 'Export results'] }; },
+  'timer-app': function(o) { return { summary: 'Pomodoro timer with work/break intervals and session tracking.', files: listAppFiles(o, 'Pomodoro Timer', 'mauli-timer-app'), tests: ['Start/stop timer', 'Break intervals', 'Session count'], notes: ['Audio notifications', 'Keyboard shortcuts'] }; },
+  'bookmark-manager': function(o) { return { summary: 'Bookmark manager with tags, search, and import/export.', files: listAppFiles(o, 'Bookmarks', 'mauli-bookmark-manager'), tests: ['Add bookmark', 'Search/filter', 'Tags work'], notes: ['LocalStorage', 'Import/export JSON'] }; },
+  'expense-tracker': function(o) { return { summary: 'Expense tracker with categories, charts, and budget alerts.', files: listAppFiles(o, 'Expense Tracker', 'mauli-expense-tracker'), tests: ['Add expense', 'Category filter', 'Budget alerts'], notes: ['Pie charts', 'Monthly summary'] }; },
+  'password-manager': function(o) { return { summary: 'Password manager with generation, categories, and master password.', files: listAppFiles(o, 'Password Vault', 'mauli-password-manager'), tests: ['Add password', 'Generate password', 'Search entries'], notes: ['Client-side only', 'No server needed'] }; },
+  'kanban-board': function(o) { return { summary: 'Kanban board with drag-and-drop columns and card management.', files: listAppFiles(o, 'Kanban Board', 'mauli-kanban-board'), tests: ['Move cards', 'Add card', 'Column management'], notes: ['Drag-and-drop', 'LocalStorage'] }; },
+  'calendar-app': function(o) { return { summary: 'Calendar app with events, reminders, and month/week views.', files: listAppFiles(o, 'Calendar', 'mauli-calendar-app'), tests: ['Add event', 'Navigate months', 'View toggle'], notes: ['Responsive', 'LocalStorage'] }; }
 };
 
 // ── Functional fallbacks (2026-09-29) ──────────────────────────────────────────────
@@ -366,6 +343,19 @@ export function generateFromTemplate(project) {
   var type = detectProjectType2(objective, capabilities);
   var gen = GENERATORS[type] || GENERATORS['web-app'];
   var result = gen(objective);
+  // Never ship a demo. If the matched template is not a functional app (a marketing page,
+  // a dead button, a fake 'Get Started' alert, no persistence), deliver the working list
+  // app instead of something that only looks like software.
+  var quality = analyzeGeneratedApp(result.files || [], { objective: objective });
+  if (!quality.passed) {
+    return Object.assign({}, {
+      summary: 'Working app (add, search, complete, delete) with local persistence.',
+      files: listAppFiles(objective, 'My App', 'mauli-app-items'),
+      tests: ['Add an item', 'Toggle complete', 'Search filters the list'],
+      notes: ['A matched template was not functional, so the working app was used instead'],
+      templateRejected: quality.violations.map(function (v) { return v.code; })
+    }, { type: type, projectType: type });
+  }
   return Object.assign({}, result, { type: type, projectType: type });
 }
 

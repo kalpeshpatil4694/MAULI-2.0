@@ -9,6 +9,7 @@
     "check": "node scripts/check-syntax.mjs",
     "test": "node --test",
     "test:routes": "node scripts/dryrun-durable-routes.mjs",
+    "test:runtime": "node scripts/verify-generated-app.mjs --self-test",
     "test:security": "node --test tests/founder-auth.test.js tests/tool-security.test.js test/security-governance.test.js tests/d1-write-budget.test.js tests/d1-monotonic-writes.test.js",
     "self-test": "node --test test/*.test.js"
   },

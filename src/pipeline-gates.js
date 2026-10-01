@@ -3,6 +3,7 @@ import { store } from './store.js';
 import { addTaskToProject } from './projects.js';
 import { selectAgents, seedAgents } from './agents.js';
 import { listProjectArtifacts } from './artifacts.js';
+import { analyzeGeneratedApp } from './generated-app-quality.js';
 import { now } from './core.js';
 
 export const GATES = ['build','test','requirements','security','qa','integrity'];
@@ -147,6 +148,13 @@ async function gateResult(task){
     check('artifacts_present',arts.length>0,'No project artifact available for QA');
     check('artifact_files_valid',validFiles(pid),'Artifact files failed QA structure checks');
     check('placeholder_free',qualityProblems(code).length===0,'QA found placeholder/stub markers');
+    // "Code exists" is not "the feature works". A generated app that is only markup, a
+    // demo, a placeholder or a dead button must never reach delivery. The runtime proof is
+    // produced by scripts/verify-generated-app.mjs; this is the static gate the Worker can
+    // always run.
+    const project=store.get('projects',pid);
+    const fidelity=analyzeGeneratedApp((latestCodeArtifact(pid)?.content?.files)??[],{objective:project?.objective??'',requirements:project?.requirements??[]});
+    check('functional_fidelity',fidelity.passed,fidelity.passed?'Generated app passed functional fidelity checks':('Not a working app: '+fidelity.violations.map(v=>v.code).join(', ')));
   } else if(type==='integrity'){
     const q=prior(pid,'qa'), ids=arts.map(a=>a.id);
     const files=code.flatMap(a=>(a.content?.files??[]).map(f=>({artifactId:a.id,path:f.path,content:f.content})));
