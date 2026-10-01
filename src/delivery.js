@@ -1,5 +1,6 @@
 import { now } from './core.js';
 import { store } from './store.js';
+import { d1Get, hasD1 } from './db.js';
 import { registerArtifact } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
 
@@ -144,4 +145,24 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
     },
     id: artifact.id
   });
+}
+
+// The delivery artifact IS the product the founder downloads, and a plain store.put writes
+// it in the background: production recorded a completed project whose finalDeliveryId
+// pointed at an artifact row that never reached D1 — nothing to download, no error. This
+// builds the delivery and then proves the artifact is durable before the caller is allowed
+// to point the project at it.
+export async function buildFinalDeliveryDurable(project, options = {}) {
+  const delivery = buildFinalDelivery(project, options);
+  if (delivery?.id && hasD1(store.env)) {
+    await store.flush().catch(() => null);
+    const stored = await d1Get(store.env, 'artifacts', delivery.id).catch(() => null);
+    if (!stored) {
+      // The write was lost with the isolate: re-apply against whatever D1 holds.
+      await store.putDurable('artifacts', delivery);
+      const confirmed = await d1Get(store.env, 'artifacts', delivery.id).catch(() => null);
+      if (!confirmed) throw new Error(`Delivery blocked: artifact ${delivery.id} could not be persisted`);
+    }
+  }
+  return delivery;
 }

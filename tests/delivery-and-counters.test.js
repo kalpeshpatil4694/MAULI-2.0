@@ -169,3 +169,76 @@ test('ensureProjectPipeline chains still advance end-to-end through runTask with
   const delivery = buildFinalDelivery(store.get('projects', pid), { enforceGates: true });
   assert.equal(delivery.type, 'final-delivery', 'the finished chain must be deliverable');
 });
+
+// The delivery artifact is the thing the founder downloads. Registering it with a plain
+// store.put left it in the background queue, and an isolate that died before the flush
+// produced a project marked completed whose finalDeliveryId pointed at nothing — the
+// founder saw "done" and had no artifact to download. The durable build proves the
+// artifact reached D1 before the project is allowed to point at it, and refuses loudly
+// when it did not.
+function fakeArtifactD1({ persist = true } = {}) {
+  const rows = new Map();
+  return {
+    rows,
+    DB: {
+      prepare(sql) {
+        return {
+          bind(...b) {
+            return {
+              async run() {
+                if (!persist) return { meta: { rows_written: 0 } };
+                rows.set(`${b[0]}::${b[1]}`, b[2]);
+                return { meta: { rows_written: 1 } };
+              },
+              async first() {
+                if (sql.includes('SELECT')) {
+                  const key = b[0] + '::' + b[1];
+                  const data = rows.get(key);
+                  return data ? { data } : null;
+                }
+                return undefined;
+              }
+            };
+          }
+        };
+      }
+    }
+  };
+}
+
+function seedDeliverableProject() {
+  const project = store.put('projects', { id: 'p-durable-delivery', name: 'P', objective: 'Build a habit tracker', state: 'completed' });
+  store.put('tasks', { id: 'p-dd-task', projectId: project.id, title: 'Only task', state: 'completed' });
+  store.put('tasks', { id: 'p-dd-qa', projectId: project.id, title: 'Final QA', state: 'completed', finalProjectVerification: true, verificationId: 'v-dd' });
+  return project;
+}
+
+test('durable delivery persists the artifact before the project can point at it', async () => {
+  const { buildFinalDeliveryDurable } = await import('../src/delivery.js');
+  const db = fakeArtifactD1();
+  store.configure({ DB: db.DB });
+  store.data = new Map();
+  store.events = [];
+  try {
+    const project = seedDeliverableProject();
+    const delivery = await buildFinalDeliveryDurable(project);
+    assert.ok(delivery?.id, 'a delivery artifact id must be returned');
+    assert.ok(db.rows.has('artifacts::' + delivery.id), 'the artifact must be readable from D1 before delivery is reported');
+  } finally {
+    store.configure(null);
+  }
+});
+
+test('a delivery whose artifact never persisted is reported, not silently claimed', async () => {
+  const { buildFinalDeliveryDurable } = await import('../src/delivery.js');
+  const db = fakeArtifactD1({ persist: false });
+  store.configure({ DB: db.DB });
+  store.data = new Map();
+  store.events = [];
+  try {
+    const project = seedDeliverableProject();
+    await assert.rejects(() => buildFinalDeliveryDurable(project), /could not be persisted/);
+  } finally {
+    store.configure(null);
+  }
+});

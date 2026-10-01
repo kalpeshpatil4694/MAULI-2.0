@@ -8,7 +8,7 @@ import { selectAgents, updateAgent } from './agents.js';
 import { executeTask } from './execution.js';
 import { verifyResult, retryDecision } from './verification.js';
 import { completeTask, failTask, markVerifying, assignTask } from './tasks.js';
-import { buildFinalDelivery } from './delivery.js';
+import { buildFinalDeliveryDurable } from './delivery.js';
 import { saveCommandResult } from './result-recorder.js';
 import { ensureProjectPipeline } from './pipeline-gates.js';
 import { withProjectExecutionLock } from './execution-coordination.js';
@@ -141,7 +141,7 @@ async function finalizeCommand(projectId,env={},indexedTasks=null){const project
   // delivers nothing' failure this gate exists to prevent. Record why and stay unfinished.
   let finalDelivery=project.finalDeliveryId?store.get('artifacts',project.finalDeliveryId):null;
   if(!finalDelivery){
-    try{finalDelivery=buildFinalDelivery(project,{enforceGates:true});}
+    try{finalDelivery=await buildFinalDeliveryDurable(project,{enforceGates:true});}
     catch(error){
       const reason=String(error?.message??error);
       store.addEvent('delivery.blocked',{projectId,reason,at:now()});
