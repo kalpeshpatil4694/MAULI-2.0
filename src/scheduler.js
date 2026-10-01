@@ -58,13 +58,13 @@ export function claimNextTask(taskId){const task=store.get('tasks',taskId);if(!t
   if(!agent||!['available','registered'].includes(agent.state))agent=chooseAgent(task);
   if(!agent||!['available','registered'].includes(agent.state))return null;
   if(task.assignedAgentId&&task.assignedAgentId!==agent.id){const old=store.get('agents',task.assignedAgentId);if(old&&old.currentTaskId===task.id)updateAgent(old.id,{state:'available',currentTaskId:null,heartbeatAt:now()});}
-  const claimedAt=now();const claimed=store.put('tasks',{...task,state:'assigned',agentId:agent.id,assignedAgentId:agent.id,claimedAt,leaseUntil:new Date(Date.now()+LEASE_MS).toISOString(),updatedAt:claimedAt,id:task.id});updateAgent(agent.id,{state:'assigned',currentTaskId:task.id,heartbeatAt:claimedAt});store.addEvent('scheduler.task_claimed',{taskId:task.id,agentId:agent.id,at:claimedAt});return claimed;}
+  const claimedAt=now();const claimed=store.put('tasks',{...task,state:'assigned',agentId:agent.id,assignedAgentId:agent.id,claimedAt,leaseUntil:new Date(Date.now()+LEASE_MS).toISOString(),updatedAt:claimedAt,id:task.id});updateAgent(agent.id,{state:'assigned',currentTaskId:task.id,heartbeatAt:claimedAt});store.addEvent('scheduler.task_claimed',{projectId:task.projectId,taskId:task.id,agentId:agent.id,at:claimedAt});return claimed;}
 async function requeueAfterInfraFailure(task,reason,stamp,extra={}){
   const infra=Number(task.infraRecoveries??0)+1;
   if(infra>MAX_INFRA_RECOVERIES){
     await store.putDurable('tasks',{...task,state:'failed',error:reason,updatedAt:stamp,id:task.id});
     releaseAgent(task);
-    store.addEvent('scheduler.task_failed',{taskId:task.id,reason,infraRecoveries:infra,at:stamp});
+    store.addEvent('scheduler.task_failed',{projectId:task.projectId,taskId:task.id,reason,infraRecoveries:infra,at:stamp});
     return 'failed';
   }
   releaseAgent(task);
@@ -76,7 +76,10 @@ async function requeueAfterInfraFailure(task,reason,stamp,extra={}){
   // task stuck in 'assigned' with an expired lease is then never recovered again — the project
   // sits in 'active' forever. putDurable re-applies it against the version D1 holds.
   await store.putDurable('tasks',{...task,state:'queued',agentId:null,assignedAgentId:null,leaseUntil:null,infraRecoveries:infra,blockedReason:null,error:null,updatedAt:stamp,id:task.id});
-  store.addEvent('scheduler.task_recovered',{taskId:task.id,reason,infraRecoveries:infra,nextState:'queued',at:stamp,...extra});
+  // projectId belongs on every scheduler event: the project detail view is the founder's
+  // audit trail, and a recovery recorded without it was invisible there — a project could be
+  // silently requeued and re-claimed with no trace of why its task states kept changing.
+  store.addEvent('scheduler.task_recovered',{projectId:task.projectId,taskId:task.id,reason,infraRecoveries:infra,nextState:'queued',at:stamp,...extra});
   return 'queued';
 }
 export async function recoverStaleTasks(){
@@ -116,7 +119,7 @@ export async function recoverStaleTasks(){
   }
   return recovered;
 }
-export async function runTask(taskId,env={},context={}){const claimed=claimNextTask(taskId);if(!claimed)return{status:'not-runnable',taskId};const task=store.get('tasks',taskId),run=await executeTask(task,{...context,env,agentId:task.agentId}),check=verifyResult(task,run);if(run.state==='completed'&&check?.passed){markVerifying(task.id,check);const withCheck=await completeTask(task.id,run.result??check.result??null,{verificationId:check.id});return{status:'completed',task:withCheck,run,verification:check};}const attempt=Number(task.attempts??1),decision=retryDecision(task,check,attempt);if(decision?.action==='retry'&&attempt<Number(task.maxAttempts??DEFAULT_MAX_ATTEMPTS)){releaseAgent(task);const retryTask=store.put('tasks',{...task,state:'queued',assignedAgentId:null,agentId:null,updatedAt:now(),id:task.id});store.addEvent('scheduler.task_retry',{taskId:task.id,attempt,reason:run.error??check?.error??'verification failed'});return{status:'retry-queued',task:retryTask,run,verification:check};}const failedTask=await failTask(task.id,run.error??check?.error??'Task execution/verification failed',check?.id?{verificationId:check.id}:{});releaseAgent(task);store.addEvent('scheduler.task_failed',{taskId:task.id,at:now()});return{status:'failed',task:store.get('tasks',task.id),run,verification:check};}
+export async function runTask(taskId,env={},context={}){const claimed=claimNextTask(taskId);if(!claimed)return{status:'not-runnable',taskId};const task=store.get('tasks',taskId),run=await executeTask(task,{...context,env,agentId:task.agentId}),check=verifyResult(task,run);if(run.state==='completed'&&check?.passed){markVerifying(task.id,check);const withCheck=await completeTask(task.id,run.result??check.result??null,{verificationId:check.id});return{status:'completed',task:withCheck,run,verification:check};}const attempt=Number(task.attempts??1),decision=retryDecision(task,check,attempt);if(decision?.action==='retry'&&attempt<Number(task.maxAttempts??DEFAULT_MAX_ATTEMPTS)){releaseAgent(task);const retryTask=store.put('tasks',{...task,state:'queued',assignedAgentId:null,agentId:null,updatedAt:now(),id:task.id});store.addEvent('scheduler.task_retry',{projectId:task.projectId,taskId:task.id,attempt,reason:run.error??check?.error??'verification failed'});return{status:'retry-queued',task:retryTask,run,verification:check};}const failedTask=await failTask(task.id,run.error??check?.error??'Task execution/verification failed',check?.id?{verificationId:check.id}:{});releaseAgent(task);store.addEvent('scheduler.task_failed',{projectId:task.projectId,taskId:task.id,at:now()});return{status:'failed',task:store.get('tasks',task.id),run,verification:check};}
 // Tasks completed before runTask persisted verificationId (every scheduler-completed task
 // ever made) can never satisfy finalizeCommand's qaPassed/integrityPassed checks or
 // buildFinalDelivery's security evidence check. The verification itself exists in the
