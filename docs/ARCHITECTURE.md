@@ -502,6 +502,23 @@ rather than surfacing to the founder as a product failure and sending them to hu
 their own app. `tests/acceptance-identity.test.js` pins all seven of these claims, including
 the negative control that a live route answering `200` *is* accepted.
 
+**A binding in the config is not a binding at runtime.** The coffee-shop product still
+answered `501` on `/api/live` after the identity fix, while `wrangler deploy --dry-run`
+happily reported `env.LIVE (LiveConnections) Durable Object` among the worker's bindings and
+every assertion in the configuration gate passed. The config declared the class as
+`new_sqlite_classes`, but the class itself was a plain ES class. To workerd a class that does
+not extend the runtime base is **not a Durable Object**: the deploy succeeds, the binding is
+simply absent, and the product answers `501` — a defect in the deployment, reported to the
+founder as a broken app. The class now `extends DurableObject`, imported from
+`cloudflare:workers`.
+
+That import is what made the defect invisible: the generated Worker is executed in the
+harness through a `data:` URL module, and `cloudflare:workers` is not a real URL scheme, so
+the harness rewrites the **specifier only** to an inlined definition of the same base class.
+The shipped source stays byte-for-byte what Cloudflare runs, and the local run now proves the
+class really answers the live route (`101`, upgraded) instead of the harness quietly
+supplying the missing binding itself.
+
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
 Everything above proves the code is a working app. None of it proved the app **ran**. The

@@ -358,8 +358,16 @@ export default {
 };
 ${realtime ? `
 // Real-time entry point: upgrade a request to a WebSocket and keep it in the client set.
-export class LiveConnections {
-  constructor(state) { this.state = state; }
+//
+// It extends DurableObject because the config declares this class as a SQLite-backed
+// Durable Object (\`new_sqlite_classes\`). A class that does not extend the runtime base is
+// not a Durable Object to workerd: the deploy SUCCEEDS, wrangler's dry run reports
+// \`env.LIVE\` as a bound Durable Object, and at runtime the binding is simply absent -- the
+// deployed app then answers /api/live with 501 while every configuration check passes.
+import { DurableObject } from 'cloudflare:workers';
+
+export class LiveConnections extends DurableObject {
+  constructor(ctx, state) { super(ctx, state); this.state = state; }
   async fetch(request, env) {
     if (new URL(request.url).pathname !== '/api/live') return new Response('Not found', { status: 404 });
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade', { status: 426 });

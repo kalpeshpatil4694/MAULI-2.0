@@ -379,8 +379,18 @@ export async function loadWorker(files, runtime) {
   // A Worker module is ESM. Transpile nothing; import it as a module with the runtime's
   // globals installed on globalThis for the duration of the call, which is exactly how a
   // Worker sees them.
+  //
+  // `cloudflare:workers` is a Worker-runtime module, not a real URL scheme, so a `data:`
+  // module cannot import it (ERR_UNSUPPORTED_ESM_URL_SCHEME). A generated Durable Object
+  // extends DurableObject from that module, so the import is rewritten to a local definition
+  // of the same base class. Rewriting the SPECIFIER and nothing else keeps the generated
+  // source byte-for-byte what ships.
+  const source = entry.content.replace(
+    /(['"])cloudflare:workers\1/g,
+    `'cloudflare:workers:shim'`
+  );
   try {
-    const mod = await import(`data:text/javascript;base64,${Buffer.from(entry.content, 'utf8').toString('base64')}#${encodeURIComponent(entry.path)}`);
+    const mod = await import(`data:text/javascript;base64,${Buffer.from(withRuntimeModule(source), 'utf8').toString('base64')}#${encodeURIComponent(entry.path)}`);
     attachDurableObjectBindings(mod, runtime);
     const handler = typeof mod.default === 'function' ? mod.default
       : typeof mod.default?.fetch === 'function' ? mod.default.fetch.bind(mod.default)
@@ -429,6 +439,28 @@ function attachDurableObjectBindings(mod, runtime) {
     };
   }
   return bindings.length;
+}
+
+/**
+ * The local stand-in for `cloudflare:workers`, inlined into the module before it is imported.
+ *
+ * It carries only what a generated Durable Object needs — the base class its `extends`
+ * clause names. The constructor stores the context and state, which is all `LiveConnections`
+ * touches; everything real (WebSocketPair, crypto, fetch) already comes from the globals the
+ * runtime installs, exactly as on Cloudflare.
+ */
+const RUNTIME_MODULE_SHIM = `const DurableObject = class DurableObject {
+  constructor(ctx, state) { this.ctx = ctx; this.state = state; }
+};
+export { DurableObject };
+`;
+
+function withRuntimeModule(source) {
+  if (!source.includes('cloudflare:workers:shim')) return source;
+  // The replacement is a JS string literal, so it must be quoted and escaped — substituting
+  // a bare `data:...` URL produced "Unexpected identifier 'data'".
+  const literal = JSON.stringify('data:text/javascript;base64,' + Buffer.from(RUNTIME_MODULE_SHIM, 'utf8').toString('base64'));
+  return source.replace(/(['"])cloudflare:workers:shim\1/g, literal);
 }
 
 /** Install the runtime's Worker globals on globalThis; returns a restore function. */

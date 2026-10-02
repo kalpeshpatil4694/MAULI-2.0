@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FOUNDER_COMMANDS, chainProjectId } from '../scripts/acceptance-chain.mjs';
 import { waitForDeployment } from '../scripts/deploy-executor.mjs';
+import { extractRequirementSpec } from '../src/requirement-spec.js';
+import { selectArchitecture } from '../src/architecture.js';
+import { generateFullStackApp } from '../src/fullstack-codegen.js';
+import { createRuntime, loadWorker } from '../scripts/generated-runtime.mjs';
 
 // THE DEPLOY JOB FAILED FOR A REASON NO TEST HAD.
 //
@@ -120,6 +124,39 @@ test('a backend product is not required to have a live route at all', async () =
     assert.equal(ready.ready, true);
     assert.equal(ready.service, 'Booking');
   } finally { server.close(); }
+});
+
+// A class the config declares as a SQLite-backed Durable Object but that does not extend
+// the runtime base is not a Durable Object to workerd. The deploy SUCCEEDS, wrangler's dry
+// run reports env.LIVE as a bound Durable Object, and at runtime the binding is simply
+// absent -- the deployed app answers /api/live with 501 while every configuration check
+// passes. No static check could see this; only executing the generated Worker can.
+test('the generated Durable Object extends the runtime base class it is declared as', async () => {
+  const command = 'Build a shop order app for a coffee shop with staff login and live order updates';
+  const spec = extractRequirementSpec({ command, platform: 'web' });
+  const architecture = selectArchitecture(spec);
+  const built = generateFullStackApp(spec, architecture, { objective: command });
+  const worker = built.files.find((f) => f.path === 'worker/index.js');
+  const config = built.files.find((f) => f.path === 'wrangler.jsonc').content;
+  assert.match(config, /"new_sqlite_classes":\s*\["LiveConnections"\]/);
+  assert.match(worker.content, /export class LiveConnections extends DurableObject/,
+    'a new_sqlite_classes DO that does not extend DurableObject deploys but never binds');
+
+  // And it must really execute: the class has to answer the live route itself.
+  const runtime = createRuntime({ files: built.files });
+  try {
+    const loaded = await loadWorker(built.files, runtime);
+    assert.equal(typeof loaded.handler, 'function');
+    assert.equal(typeof runtime.env.LIVE?.fetch, 'function', 'the DO binding must reach the Worker');
+    const res = await loaded.handler(
+      new Request('https://generated.app/api/live', { headers: { Upgrade: 'websocket' } }),
+      runtime.env, {}
+    );
+    assert.equal(res.status, 101, 'the Durable Object itself must answer the live route');
+  } finally {
+    runtime.disposeGlobals();
+    await runtime.dispose();
+  }
 });
 
 // --- tiny real HTTP stub, so the wait is exercised over a socket -----------------------
