@@ -219,14 +219,25 @@ function broadcast(sender, message) {
 }
 
 async function broadcastLive(env, message) {
-  if (!env?.LIVE || typeof env.LIVE.idFromName !== 'function' || typeof env.LIVE.get !== 'function') return;
-  const id = env.LIVE.idFromName('global');
-  const stub = env.LIVE.get(id);
-  await stub.fetch(new Request('https://mauli-live/broadcast', {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: message
-  }));
+  if (!env?.LIVE) return;
+  if (typeof env.LIVE.idFromName === 'function' && typeof env.LIVE.get === 'function') {
+    const id = env.LIVE.idFromName('global');
+    const stub = env.LIVE.get(id);
+    await stub.fetch(new Request('https://mauli-live/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: message
+    }));
+    return;
+  }
+  // Deterministic in-process harness fallback; never used by a real Cloudflare namespace.
+  if (typeof env.LIVE.fetch === 'function') {
+    await env.LIVE.fetch(new Request('https://mauli-live/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: message
+    }), env);
+  }
 }
 ` : ''}
 async function route(request, env, url) {
@@ -361,6 +372,9 @@ export default {
           const id = env.LIVE.idFromName('global');
           return await env.LIVE.get(id).fetch(request);
         }
+        // The generated-runtime test harness exposes a direct DO instance for deterministic
+        // in-process execution. Production Cloudflare always takes the namespace branch above.
+        if (env && env.LIVE && typeof env.LIVE.fetch === 'function') return await env.LIVE.fetch(request, env);
         return fail('Live updates are not configured for this deployment', 501);
       }
       return await route(request, env, url);
