@@ -427,7 +427,13 @@ function attachDurableObjectBindings(mod, runtime) {
   for (const binding of bindings) {
     const Cls = mod?.[binding.className];
     if (typeof Cls !== 'function') continue;
-    const instance = new Cls({ id: { toString: () => binding.name } });
+    const doSockets = new Set();
+    const doCtx = {
+      id: { name: binding.name, toString: () => binding.name },
+      acceptWebSocket(socket) { doSockets.add(socket); },
+      getWebSockets() { return [...doSockets]; }
+    };
+    const instance = new Cls(doCtx);
     instance.env = runtime.env;
     // Cloudflare's Durable Object namespace exposes BOTH the stub API (`get`) and the direct
     // `fetch`. Generated code calls `env.<BINDING>.fetch(...)`, so a shim that only answers
