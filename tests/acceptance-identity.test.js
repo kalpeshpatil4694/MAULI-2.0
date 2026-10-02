@@ -40,7 +40,46 @@ test('the derivation reads the whole command, not its first ten characters', () 
 test('an unreachable deployment is refused instead of handed to the acceptance runner', async () => {
   const ready = await waitForDeployment('http://127.0.0.1:1', { attempts: 1, intervalMs: 0 });
   assert.equal(ready.ready, false);
-  assert.match(ready.reason, /did not answer on \/api\/health/);
+  assert.match(ready.reason, /did not serve its own \/api\/health/);
+});
+
+// A freshly created workers.dev subdomain is reachable at the edge before the route serves.
+// Cloudflare answers that window with its OWN error page — a real HTTP 404 that is not the
+// application. The first version of this wait accepted any response and accepted it as proof
+// of health, so the acceptance run probed a non-existent app and reported 404 on every route.
+test('Cloudflare edge error pages are NOT a served deployment', async () => {
+  const server = await startStubWorker({
+    '/api/health': [404, '<!DOCTYPE html><title>Error 1001</title>DNS resolution error'],
+    '/api/orders': [404, '<!DOCTYPE html><title>Error 1101</title>Worker threw exception']
+  });
+  try {
+    const ready = await waitForDeployment(server.url, { attempts: 1, intervalMs: 0 });
+    assert.equal(ready.ready, false, 'an HTML error page from the edge is not the app answering');
+    assert.match(ready.reason, /edge is serving its error page/);
+  } finally { server.close(); }
+});
+
+test('a 200 without the generated app JSON is refused', async () => {
+  const server = await startStubWorker({ '/api/health': [200, 'OK'] });
+  try {
+    const ready = await waitForDeployment(server.url, { attempts: 1, intervalMs: 0 });
+    assert.equal(ready.ready, false);
+  } finally { server.close(); }
+});
+
+test('the wait recovers once the edge starts serving the real app', async () => {
+  // First answer is Cloudflare's error page; the second is the deployment.
+  let hits = 0;
+  const server = await startStubWorker({
+    '/api/health': () => (++hits === 1
+      ? [404, '<!DOCTYPE html><title>Error 1001</title>']
+      : [200, '{"ok":true,"service":"Order"}'])
+  });
+  try {
+    const ready = await waitForDeployment(server.url, { attempts: 4, intervalMs: 5 });
+    assert.equal(ready.ready, true, 'the wait must keep polling instead of accepting the first answer');
+    assert.equal(ready.service, 'Order');
+  } finally { server.close(); }
 });
 
 test('a Worker that answers 501 on /api/live is a DEPLOYMENT defect, not a broken product', async () => {
@@ -48,11 +87,11 @@ test('a Worker that answers 501 on /api/live is a DEPLOYMENT defect, not a broke
   // binding was never deployed — reporting that as a product FAIL sends the founder to hunt
   // a bug in their own app that is actually in Cloudflare's configuration.
   const server = await startStubWorker({
-    '/api/health': [200, '{"ok":true}'],
-    '/api/live': [501, 'Durable Object binding not deployed']
+    '/api/health': [200, '{"ok":true,"service":"Order"}'],
+    '/api/live': [501, '{"ok":false,"error":{"message":"Live updates are not configured for this deployment"}}']
   });
   try {
-    const ready = await waitForDeployment(server.url, { requiresRealtime: true, attempts: 1 });
+    const ready = await waitForDeployment(server.url, { requiresRealtime: true, attempts: 1, intervalMs: 0 });
     assert.equal(ready.ready, false);
     assert.match(ready.reason, /no LIVE Durable Object binding/);
     assert.match(ready.reason, /not a product failure/);
@@ -60,22 +99,26 @@ test('a Worker that answers 501 on /api/live is a DEPLOYMENT defect, not a broke
 });
 
 test('a realtime Worker whose live route answers is ready', async () => {
+  // The wait probes /api/live with a plain fetch, which carries no Upgrade header, so a
+  // working Durable Object answers 426 "Expected a WebSocket upgrade" — not 101. Only the
+  // 501 "binding not deployed" answer is a defect.
   const server = await startStubWorker({
-    '/api/health': [200, '{"ok":true}'],
-    '/api/live': [200, '{"ok":true}']
+    '/api/health': [200, '{"ok":true,"service":"Order"}'],
+    '/api/live': [426, 'Expected a WebSocket upgrade']
   });
   try {
-    const ready = await waitForDeployment(server.url, { requiresRealtime: true, attempts: 1 });
+    const ready = await waitForDeployment(server.url, { requiresRealtime: true, attempts: 1, intervalMs: 0 });
     assert.equal(ready.ready, true);
-    assert.equal(ready.liveStatus, 200);
+    assert.equal(ready.liveStatus, 426);
   } finally { server.close(); }
 });
 
 test('a backend product is not required to have a live route at all', async () => {
-  const server = await startStubWorker({ '/api/health': [200, '{"ok":true}'] });
+  const server = await startStubWorker({ '/api/health': [200, '{"ok":true,"service":"Booking"}'] });
   try {
-    const ready = await waitForDeployment(server.url, { requiresRealtime: false, attempts: 1 });
+    const ready = await waitForDeployment(server.url, { requiresRealtime: false, attempts: 1, intervalMs: 0 });
     assert.equal(ready.ready, true);
+    assert.equal(ready.service, 'Booking');
   } finally { server.close(); }
 });
 
@@ -85,11 +128,12 @@ import { createServer } from 'node:http';
 
 async function startStubWorker(routes) {
   const server = createServer((req, res) => {
-    const route = routes[req.url.split('?')[0]];
-    if (!route) { res.statusCode = 404; res.end('not found'); return; }
-    res.statusCode = route[0];
-    res.setHeader('Content-Type', 'application/json');
-    res.end(route[1]);
+    const entry = routes[req.url.split('?')[0]];
+    if (!entry) { res.statusCode = 404; res.end('not found'); return; }
+    const [status, body] = typeof entry === 'function' ? entry() : entry;
+    res.statusCode = status;
+    res.setHeader('Content-Type', status === 101 ? 'application/json' : (String(body).startsWith('<') ? 'text/html' : 'application/json'));
+    res.end(body);
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();

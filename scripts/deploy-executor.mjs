@@ -139,12 +139,34 @@ async function provisionDatabase(root, databaseName) {
  * a bug that Cloudflare has.
  */
 export async function waitForDeployment(url, { requiresRealtime = false, attempts = 20, intervalMs = 3000 } = {}) {
+  // A 200 from `fetch` proves nothing about WHO answered. A freshly created workers.dev
+  // subdomain is reachable at the edge before the route is serving, and Cloudflare answers
+  // that window with its OWN error page: a real HTTP response, a real 404, and not the
+  // application at all. The first version of this wait accepted any response and therefore
+  // accepted Cloudflare's 404 as proof of a healthy deployment — the acceptance run then
+  // probed an application that was not there and reported 404 on every one of its routes.
+  //
+  // Readiness is therefore the APPLICATION answering: `/api/health` must return the
+  // generated app's own JSON, which carries its `service` name. An HTML error page, an empty
+  // body or a missing `ok` field is not a deployment and the wait keeps polling.
   const probe = async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await fetch(`${String(url).replace(/\/+$/, '')}/api/health`, { signal: controller.signal });
-      return { reached: true, status: res.status, body: await res.text().catch(() => '') };
+      const res = await fetch(`${String(url).replace(/\/+$/, '')}/api/health`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' }
+      });
+      const body = await res.text().catch(() => '');
+      let json = null;
+      try { json = JSON.parse(body); } catch (_) { json = null; }
+      const ours = res.ok && json !== null && json.ok === true && typeof json.service === 'string';
+      return {
+        reached: ours,
+        status: res.status,
+        service: ours ? json.service : null,
+        body: ours ? '' : redact(body.slice(0, 120))
+      };
     } finally { clearTimeout(timer); }
   };
   let last = null;
@@ -154,9 +176,12 @@ export async function waitForDeployment(url, { requiresRealtime = false, attempt
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   if (!last?.reached) {
-    return { ready: false, reason: `the deployment at ${url} did not answer on /api/health within ${(attempts * intervalMs) / 1000}s: ${last?.body ?? 'no response'}` };
+    return {
+      ready: false,
+      reason: `the deployment at ${url} did not serve its own /api/health within ${(attempts * intervalMs) / 1000}s (last answer: HTTP ${last?.status ?? 0}${last?.body ? ` — ${last.body}` : ''}). An HTTP response that is not the generated app's JSON means the edge is serving its error page, not this project.`
+    };
   }
-  if (!requiresRealtime) return { ready: true, status: last.status };
+  if (!requiresRealtime) return { ready: true, status: last.status, service: last.service };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
@@ -167,9 +192,9 @@ export async function waitForDeployment(url, { requiresRealtime = false, attempt
         reason: 'the deployed Worker has no LIVE Durable Object binding, so a product whose specification requires live updates cannot work. This is a deployment defect (errorCategory "deployment"), not a product failure.'
       };
     }
-    return { ready: true, status: last.status, liveStatus: live.status };
+    return { ready: true, status: last.status, service: last.service, liveStatus: live.status };
   } catch (error) {
-    return { ready: true, status: last.status, liveStatus: 0, liveWarning: redact(error?.message ?? error) };
+    return { ready: true, status: last.status, service: last.service, liveStatus: 0, liveWarning: redact(error?.message ?? error) };
   } finally { clearTimeout(timer); }
 }
 
