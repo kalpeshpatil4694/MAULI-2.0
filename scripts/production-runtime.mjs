@@ -424,6 +424,15 @@ async function openLiveSocket(url, sink, timeoutMs) {
       });
       socket.on('error', () => { /* the server went away */ });
       resolve({
+        send(text) {
+          const payload = Buffer.from(String(text), 'utf8');
+          if (payload.length >= 126) throw new Error('test WebSocket payload is unexpectedly large');
+          const mask = randomBytes(4);
+          const header = Buffer.from([0x81, 0x80 | payload.length]);
+          const masked = Buffer.alloc(payload.length);
+          for (let i = 0; i < payload.length; i++) masked[i] = payload[i] ^ mask[i % 4];
+          socket.write(Buffer.concat([header, mask, masked]));
+        },
         close() {
           try {
             // A masked close frame, then a real FIN. The server answers and both ends go
@@ -457,6 +466,14 @@ export async function runDeployedRealtimeTwoClient({ baseUrl, recordsPath, token
     socketA = await openLiveSocket(url, clientA, timeoutMs);
     socketB = await openLiveSocket(url, clientB, timeoutMs);
     const before = { a: clientA.length, b: clientB.length };
+    socketA.send(JSON.stringify({ type: 'ping' }));
+    socketB.send(JSON.stringify({ type: 'ping' }));
+    for (let i = 0; i < 40 && (!clientA.some((m) => m.includes('"type":"pong"')) || !clientB.some((m) => m.includes('"type":"pong"'))); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (!clientA.some((m) => m.includes('"type":"pong"')) || !clientB.some((m) => m.includes('"type":"pong"'))) {
+      return { passed: false, detail: `both live clients connected but the bidirectional ping/pong proof failed (A pong: ${clientA.some((m) => m.includes('"type":"pong"'))}, B pong: ${clientB.some((m) => m.includes('"type":"pong"'))})`, clients: 2, received: 0 };
+    }
     const write = await callApi('POST', recordsPath, { body: { title: 'realtime two-client proof', detail: 'broadcast probe' }, token });
     if (!write.ok) return { passed: false, detail: `the write that should broadcast → ${write.status}`, clients: 2, received: 0 };
     for (let i = 0; i < 40 && (clientA.length === before.a || clientB.length === before.b); i += 1) {
