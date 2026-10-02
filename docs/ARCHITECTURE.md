@@ -525,6 +525,61 @@ Two defects the gate found in MAULI's own shipped code:
    rule looked at it. Markers are now scanned raw; only the code-shaped signals keep the
    comment-stripped view.
 
+### DEPLOYMENT, IDENTITY, AND WHO IS THE RUNTIME CANDIDATE
+
+The gate above proved the code is a working app and that a run of that code can be judged.
+Two questions were still open, and both are ways a green pipeline can be meaningless:
+
+1. **Was the application that was tested actually deployed?** Running generated source inside
+   the acceptance process answers a different question than running the deployed product.
+2. **Whose evidence is this?** Evidence produced for project A, attached to project B, is a
+   pass for nothing.
+
+`src/generated-deployment.js` owns the deployment record:
+
+```js
+{ status: 'NOT_DEPLOYED|DEPLOYING|DEPLOYED|FAILED', url, deploymentId, deployedAt,
+  commit, environment, projectId, artifactId, errorCategory, errorMessage, attemptedAt }
+```
+
+A URL is only accepted when it is `https`, is **not** MAULI's own control-plane URL, and is
+the URL recorded on this project's deployment. `assertRuntimeIdentity()` closes the chain:
+
+```text
+Project ID ↔ Artifact ↔ Deployment ↔ Runtime Evidence ↔ Requirement Matrix ↔ Final Delivery
+```
+
+and refuses, as `runtime-identity-mismatch`, a run for another project, a deployment owned by
+another project, a URL that is not this project's, a source-level (`worker-runtime`) transport
+standing in for a deployed (`deployed-http`) one, and — the repair case — an acceptance whose
+`artifactId` is no longer the project's newest artifact.
+
+**Automatic, per project, no configured id.** `projectsNeedingRuntimeAcceptance()` is the
+candidate list: every project with generated code and no passing evidence. `sweepRuntimeAcceptance()`
+drives them through `MAULI_DEPLOY_EXECUTOR` → `MAULI_RUNTIME_EXECUTOR` → recorded verdict.
+`MAULI_RUNTIME_PROJECT` survives in CI only as an optional fixture filter; production
+acceptance never depends on it.
+
+**Honest states instead of fake ones.** A failed deployment yields `BLOCKED` with its error
+category, a redacted message and a timestamp. A missing executor yields
+`runtime-executor-unavailable`. A native project with no device yields
+`android-runtime-unavailable` — an APK build is not runtime evidence. Every per-requirement
+row now carries the endpoint, the request, the response, the database evidence, the journey
+step, the runtime timestamp and the deployment URL, so a PASS is auditable rather than
+asserted.
+
+**The harness learned the difference.** `scripts/accept-runtime.mjs` no longer defaults a
+founder key (a committed credential is a committed production secret), refuses a `--deployed`
+URL that is MAULI's own or belongs to another project (exit 4), probes the deployment before
+running, and refuses to record a run that did not go over the wire. The engine's own
+self-test now serves the generated Worker over a real HTTP server and drives the full
+acceptance through the network path, so "deployed-http" is demonstrated, not asserted.
+
+`tests/generated-deployment-identity.test.js` pins the verdict for the A–L matrix: backend+D1,
+backend+auth, external API, realtime, browser-only, executor unavailable, deployment failure,
+wrong URL, wrong project, missing critical evidence, repair→redeploy→retest, and a full green
+delivery — plus the delivery guard refusing the same project the moment one link is removed.
+
 ## 6. Upgradeability
 
 New agents, departments, tools, workflows, model providers, execution runtimes, and UI clients should be addable through interfaces/contracts rather than invasive changes to the core.

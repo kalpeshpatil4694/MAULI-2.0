@@ -63,6 +63,14 @@ jobs:
       - name: Production runtime acceptance engine
         run: npm run verify:runtime
 
+      # The deployment + identity contract: A backend + D1, B Backend + Auth,
+      # C external API, D realtime, E browser-only, F executor unavailable,
+      # G deployment failure, H wrong deployment URL, I wrong project identity,
+      # J critical requirement without evidence, K repair → redeploy → retest,
+      # L successful full delivery — plus the repair-loop bound.
+      - name: Generated deployment + identity matrix
+        run: npm run verify:deployment
+
       - name: Security + governance tests
         run: npm run test:security
 
@@ -119,10 +127,7 @@ jobs:
           exit 1
 
       # deploy → smoke → production runtime acceptance → final gate. The smoke proves the
-      # deployed Worker answers; the acceptance step runs the full production-like smoke test
-      # (health → API contract → auth → CRUD → persistence → journey) against a real project
-      # and POSTs the evidence to /api/projects/:id/runtime-acceptance. It is skipped when no
-      # project id is configured rather than reporting a PASS it did not earn.
+      # MAULI Worker itself answers after a deploy.
       - name: Post-deploy smoke test
         run: |
           set -euo pipefail
@@ -139,17 +144,52 @@ jobs:
         env:
           MAULI_BASE_URL: ${{ vars.MAULI_BASE_URL }}
 
-      - name: Production runtime acceptance (deployed Worker)
-        if: ${{ vars.MAULI_RUNTIME_PROJECT != '' }}
+      # Production runtime acceptance is AUTOMATIC and PER PROJECT. There is no fixed
+      # MAULI_RUNTIME_PROJECT here any more: the sweep asks MAULI itself which projects have
+      # generated code and no passing runtime evidence, and MAULI answers for each one by
+      # deploying it (when a deploy executor is configured) and running the acceptance over
+      # real HTTP against that project's own URL.
+      #
+      # It never reports a PASS it did not earn. A project with no runtime executor, no
+      # deploy executor or no credential comes back BLOCKED / DEPENDENCY_REQUIRED, and
+      # that is the honest end state — the gate, not this job, decides what may ship.
+      #
+      # `vars.MAULI_RUNTIME_PROJECT` survives ONLY as an optional single-project fixture
+      # filter for debugging; production acceptance does not depend on it.
+      - name: Production runtime acceptance (every generated project)
+        if: ${{ secrets.MAULI_FOUNDER_KEY != '' }}
         env:
           MAULI_BASE_URL: ${{ vars.MAULI_BASE_URL }}
-          MAULI_RUNTIME_PROJECT: ${{ vars.MAULI_RUNTIME_PROJECT }}
           MAULI_KEY: ${{ secrets.MAULI_FOUNDER_KEY }}
+          MAULI_RUNTIME_FIXTURE: ${{ vars.MAULI_RUNTIME_PROJECT }}
         run: |
           set -euo pipefail
-          node scripts/accept-runtime.mjs \
-            --project "${MAULI_RUNTIME_PROJECT}" \
-            --base "${MAULI_BASE_URL:-https://mauli-2-0.kalpeshpatil4694.workers.dev}"
+          BASE="${MAULI_BASE_URL:-https://mauli-2-0.kalpeshpatil4694.workers.dev}"
+          if [ -n "${MAULI_RUNTIME_FIXTURE:-}" ]; then
+            echo "::notice::Fixture mode: only project ${MAULI_RUNTIME_FIXTURE} is re-tested. Production acceptance is per project and does not use this variable."
+            BODY="{\"projectId\":\"${MAULI_RUNTIME_FIXTURE}\"}"
+          else
+            BODY='{"limit":25}'
+          fi
+          curl -fsS --max-time 600 -X POST "${BASE}/api/runtime-acceptance/sweep" \
+            -H "x-mauli-founder: ${MAULI_KEY}" -H 'content-type: application/json' \
+            -d "${BODY}" | tee /tmp/runtime-sweep.json
+          echo
+          node -e '
+            const r=JSON.parse(require("fs").readFileSync("/tmp/runtime-sweep.json","utf8"));
+            const d=r.data??r;
+            console.log(`  swept ${d.swept} project(s); runtime executor: ${d.executorConfigured}, deploy executor: ${d.deployExecutorConfigured}`);
+            let blocked=0;
+            for(const p of (d.projects??[])){
+              if(p.blocked) blocked++;
+              console.log(`  ${p.blocked?"BLOCKED":"EVIDENCE"} ${p.projectId} — ${p.verdict}${p.reason?" ("+p.reason+")":""}`);
+            }
+            // A blocked project is NOT a CI failure: the platform records it honestly and the
+            // production-runtime gate refuses delivery. Failing this job would hide the real
+            // verdict behind a red X that says nothing about which product was blocked.
+            if(!(d.projects??[]).length) console.log("  no generated project is awaiting a runtime acceptance run");
+            else console.log(`  ${blocked} project(s) BLOCKED on runtime evidence — their Final Delivery stays blocked.`);
+          '
 
 # Persistence stack is Workers + D1 + Durable Objects + Workers AI only. There is no
 # object-storage binding of any kind, so deployment and CI must never require one.

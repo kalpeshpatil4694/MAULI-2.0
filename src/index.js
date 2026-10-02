@@ -35,7 +35,8 @@ import { getFreeServices, getServicesByCategory, getServiceCategories, estimateF
 import { generateDesignCSS, getThemes, createDesignSystem } from './design-system.js';
 import { getAgentPatterns, getPatternForProject, getPatternCategories } from './agent-patterns.js';
 import { getD1UsageFromAPI, getWorkerAnalytics, getKVUsage, getFullUsageReport, checkLimits } from './cloudflare-api.js';
-import { recordRuntimeAcceptance, runtimeAcceptanceSummary, ensureRuntimeAcceptance } from './runtime-evidence.js';
+import { recordRuntimeAcceptance, runtimeAcceptanceSummary, ensureRuntimeAcceptance, recordGeneratedDeployment, ensureGeneratedDeployment, sweepRuntimeAcceptance } from './runtime-evidence.js';
+import { DEPLOYMENT_STATUS, normalizeDeployment } from './generated-deployment.js';
 import { isRuntimeAcceptanceReport, describeStoredRuntimeAcceptance } from './production-runtime.js';
 
 function artifactJson(artifact) { return artifact ? ok({ artifact }) : fail('Artifact not found',404); }
@@ -549,7 +550,12 @@ export default { async fetch(request, env, ctx) { try {
     const body=await json(request);
     const acceptance=body?.runtimeAcceptance??body?.acceptance??null;
     if(!isRuntimeAcceptanceReport(acceptance))return fail('runtimeAcceptance is not a valid acceptance run: it needs a status of passed|failed|blocked and a non-empty tests map',400);
-    try{recordRuntimeAcceptance(pid,acceptance);}catch(error){return fail(String(error?.message??error),400);}
+    try{recordRuntimeAcceptance(pid,acceptance,{},{env});}catch(error){
+      // A run produced for a DIFFERENT project is a conflict, not a bad request: the fix is
+      // to run the right project, not to change the payload (point 17).
+      const message=String(error?.message??error);
+      return fail(message,/produced for project/i.test(message)?409:400);
+    }
     const stored=store.get('projects',pid);
     return ok({projectId:pid,productionRuntime:runtimeAcceptanceSummary(stored),runtimeAcceptance:stored.runtimeAcceptance,recordedAt:stored.runtimeAcceptedAt});
   }
@@ -565,6 +571,52 @@ export default { async fetch(request, env, ctx) { try {
       return fail(`Production runtime acceptance could not be produced: ${outcome.reason}. Run node scripts/production-runtime.mjs against this project's code and POST the report to /api/projects/${pid}/runtime-acceptance, or configure MAULI_RUNTIME_EXECUTOR (the Node runner).`,424);
     }
     return ok({projectId:pid,recorded:true,productionRuntime:runtimeAcceptanceSummary(store.get('projects',pid))});
+  }
+  // ── GENERATED PROJECT DEPLOYMENT (points 2, 3, 14) ─────────────────────────
+  // A deployment is a record of something that happened to THIS project: its own URL, the
+  // artifact whose bytes were deployed, when, and — when it failed — the category and a
+  // secret-free message. It is never inferred from "the build succeeded".
+  if(request.method==='GET'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/deployment')){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const pid=url.pathname.split('/')[3];const project=store.get('projects',pid);
+    if(!project)return fail('Project not found',404);
+    return ok({projectId:pid,deployment:normalizeDeployment(project.runtimeDeployment??null),productionRuntime:runtimeAcceptanceSummary(project,{env})});
+  }
+  if(request.method==='POST'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/deployment')){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const pid=url.pathname.split('/')[3];const project=store.get('projects',pid);
+    if(!project)return fail('Project not found',404);
+    const body=await json(request);
+    const incoming=body?.deployment??body??null;
+    if(incoming?.projectId&&incoming.projectId!==pid)return fail(`Refusing to record a deployment for project ${incoming.projectId} on project ${pid}`,409);
+    try{recordGeneratedDeployment(pid,incoming);}catch(error){return fail(String(error?.message??error),400);}
+    return ok({projectId:pid,deployment:normalizeDeployment(store.get('projects',pid).runtimeDeployment??null),productionRuntime:runtimeAcceptanceSummary(store.get('projects',pid),{env})});
+  }
+  if(request.method==='POST'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/deploy')){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const pid=url.pathname.split('/')[3];const project=store.get('projects',pid);
+    if(!project)return fail('Project not found',404);
+    const outcome=await ensureGeneratedDeployment(pid,env);
+    const stored=store.get('projects',pid);
+    const deployment=normalizeDeployment(stored.runtimeDeployment??null);
+    // Point 14: a failed or impossible deployment is a BLOCKED state with its category and
+    // timestamp — never a fake success and never a silent skip.
+    if(!outcome.deployed)return fail(`Deployment did not succeed for ${pid}: ${outcome.reason??'unknown reason'}`,deployment.status===DEPLOYMENT_STATUS.FAILED?502:424);
+    return ok({projectId:pid,deployment,productionRuntime:runtimeAcceptanceSummary(stored,{env})});
+  }
+  // ── AUTOMATIC PER-PROJECT RUNTIME SWEEP (point 1, 13, 22) ──────────────────
+  // Production acceptance is not pinned to one configured project. This walks every
+  // project that has generated code and no passing evidence and asks the runners for one.
+  if(request.method==='POST'&&url.pathname==='/api/runtime-acceptance/sweep'){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const body=await json(request);
+    const only=body?.projectId??url.searchParams.get('projectId');
+    const limit=Number(body?.limit??url.searchParams.get('limit')??25);
+    if(only){
+      const outcome=await ensureRuntimeAcceptance(only,env);
+      return ok({projects:[{projectId:only,recorded:outcome.recorded===true,blocked:outcome.recorded!==true,reason:outcome.reason??null,verdict:runtimeAcceptanceSummary(only,{env}).label}],swept:1});
+    }
+    return ok(await sweepRuntimeAcceptance(env,{limit:Number.isFinite(limit)&&limit>0?Math.min(limit,100):25}));
   }
   // Project Detail: full lifecycle JSON for any project
   if(request.method==='GET'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/detail')){
@@ -594,7 +646,7 @@ export default { async fetch(request, env, ctx) { try {
     // Point 16: the founder must never see a bare "QA Passed". The runtime verdict, its
     // tested-at stamp, the deployment/API/database/auth/journey statuses, the critical
     // pass/fail counts and the exact blocking reason ride on the detail payload.
-    productionRuntime:runtimeAcceptanceSummary(project),summary:{totalTasks:tasks.length,completedTasks:completedCount,failedTasks:failedCount,runningTasks:runningCount,pendingTasks:tasks.length-completedCount-failedCount-runningCount,progressPct:tasks.length>0?Math.round((completedCount/tasks.length)*100):0,totalTimeMs,totalTimeFormatted:totalTimeMs>0?fmt(totalTimeMs):'In progress',estimatedDurationMs,estimatedDurationFormatted:fmt(estimatedDurationMs),remainingDurationMs,remainingDurationFormatted:fmt(remainingDurationMs),commandReceivedAt:project.commandReceivedAt||project.createdAt,commandStartedAt:started,commandCompletedAt:end,createdAt:project.createdAt,completedAt:project.completedAt||null,failedAt:project.failedAt||null,state:project.state,errors:tasks.filter(t=>t.error).map(t=>({task:t.title,error:t.error,at:t.updatedAt})),fixes:tasks.filter(t=>t.attempts>1).map(t=>({task:t.title,attempts:t.attempts,at:t.updatedAt}))}};
+    productionRuntime:runtimeAcceptanceSummary(project,{env}),runtimeDeployment:normalizeDeployment(project.runtimeDeployment??null),summary:{totalTasks:tasks.length,completedTasks:completedCount,failedTasks:failedCount,runningTasks:runningCount,pendingTasks:tasks.length-completedCount-failedCount-runningCount,progressPct:tasks.length>0?Math.round((completedCount/tasks.length)*100):0,totalTimeMs,totalTimeFormatted:totalTimeMs>0?fmt(totalTimeMs):'In progress',estimatedDurationMs,estimatedDurationFormatted:fmt(estimatedDurationMs),remainingDurationMs,remainingDurationFormatted:fmt(remainingDurationMs),commandReceivedAt:project.commandReceivedAt||project.createdAt,commandStartedAt:started,commandCompletedAt:end,createdAt:project.createdAt,completedAt:project.completedAt||null,failedAt:project.failedAt||null,state:project.state,errors:tasks.filter(t=>t.error).map(t=>({task:t.title,error:t.error,at:t.updatedAt})),fixes:tasks.filter(t=>t.attempts>1).map(t=>({task:t.title,attempts:t.attempts,at:t.updatedAt}))}};
     return ok({detail});
   }
   // Documentation API

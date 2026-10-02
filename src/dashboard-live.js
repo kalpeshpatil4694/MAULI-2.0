@@ -27,14 +27,17 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     const bg=label==='PASS'?'rgba(0,200,120,.12)':label==='FAILED'?'rgba(255,80,80,.12)':'rgba(255,190,60,.12)';
     const j=v=>v===undefined||v===null?'—':esc(v);
     const meta=[
-      rt.testedAt?('tested '+esc(stamp(rt.testedAt))):'not run yet',
+      'Deployment '+j(rt.deploymentStatus),
+      rt.runtimeUrl?('URL '+esc(rt.runtimeUrl)):('tested '+(rt.testedAt?esc(stamp(rt.testedAt)):'not run yet')),
       'API '+j(rt.api), 'DB '+j(rt.database), 'Auth '+j(rt.authentication),
-      'Journey '+j(rt.userJourney),
-      'critical '+(Number(rt.criticalPassed)||0)+' pass / '+(Number(rt.criticalFailed)||0)+' fail'
+      'Journey '+j(rt.userJourney), 'Transport '+j(rt.transport),
+      'critical '+(Number(rt.criticalPassed)||0)+' pass / '+(Number(rt.criticalFailed)||0)+' fail',
+      'Final Delivery '+j(rt.finalDelivery)
     ].join(' · ');
     return '<div style="grid-column:1/-1;margin-top:6px;padding:7px 8px;border-radius:6px;background:'+bg+';color:'+color+';line-height:1.5">'+
       '<b>Production Runtime: '+esc(label)+'</b>'+
       '<div style="font-size:9.5px;opacity:.9;margin-top:2px">'+meta+'</div>'+
+      (rt.deploymentError?'<div style="font-size:9.5px;margin-top:3px">Deployment '+esc(rt.deploymentError.category)+': '+esc(rt.deploymentError.message)+'</div>':'')+
       (rt.reason?'<div style="font-size:9.5px;margin-top:3px">'+esc(rt.reason)+'</div>':'')+
       '</div>';
   }
@@ -140,10 +143,14 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       if(rt){
         txt+='  Tested at: '+(rt.testedAt||'not run yet')+'\n';
         txt+='  Environment: '+(rt.environment||'—')+'\n';
-        txt+='  Deployment: '+(rt.deployment||'—')+'\n';
+        txt+='  Deployment: '+(rt.deploymentStatus||'NOT_DEPLOYED')+'\n';
+        txt+='  Runtime URL: '+(rt.runtimeUrl||'—')+'\n';
+        txt+='  Transport: '+(rt.transport||'—')+'\n';
+        if(rt.deploymentError)txt+='  Deployment error: '+rt.deploymentError.category+' — '+rt.deploymentError.message+'\n';
         txt+='  API: '+(rt.api||'—')+' | Database: '+(rt.database||'—')+'\n';
         txt+='  Authentication: '+(rt.authentication||'—')+' | User journey: '+(rt.userJourney||'—')+'\n';
         txt+='  Critical requirements passed: '+(Number(rt.criticalPassed)||0)+' | failed: '+(Number(rt.criticalFailed)||0)+'\n';
+        txt+='  FINAL DELIVERY: '+(rt.finalDelivery||'BLOCKED')+'\n';
         if(rt.missingTests&&rt.missingTests.length)txt+='  Missing runtime tests: '+rt.missingTests.join(', ')+'\n';
         if(rt.failedTests&&rt.failedTests.length)txt+='  Failed runtime tests: '+rt.failedTests.join(', ')+'\n';
         if(rt.blockingReason)txt+='  Blocking reason: '+rt.blockingReason+'\n';

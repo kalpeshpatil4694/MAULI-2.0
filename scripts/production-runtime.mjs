@@ -30,6 +30,12 @@ import { analyzeGeneratedApp } from '../src/generated-app-quality.js';
 
 const CALL_TIMEOUT_MS = 8000;
 
+// The REAL network fetch, captured at import time — before the generated-app runtime can
+// install its own `globalThis.fetch` shim (which answers from the loaded Worker instead of
+// the network). A deployed acceptance run MUST go over the wire, so it uses this one even
+// when the harness has an in-process runtime loaded alongside it.
+const NATIVE_FETCH = typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null;
+
 // Generated code is executed in this process. An app with a broken promise chain produces an
 // unhandled rejection, and Node's default reaction is to kill the process — which would take
 // the whole acceptance run (and the CI job) down with it and report nothing at all. The guard
@@ -148,10 +154,12 @@ function readRecord(payload) {
  */
 export async function runProductionRuntimeAcceptance(files, {
   spec = {}, architecture = null, objective = '', requirements = [], api = null,
-  env = {}, baseUrl = null, fetchImpl = null, credentials = {}, testedAt = null
+  env = {}, baseUrl = null, fetchImpl = null, credentials = {}, testedAt = null,
+  projectId = null, deployment = null, artifactId = null, platform = null, androidRunner = null
 } = {}) {
   const list = (Array.isArray(files) ? files : []).filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string');
   const backend = architecture ? architecture.backend === true : hasBackendEntryPoint(list);
+  const nativeTarget = ['android', 'ios', 'desktop'].includes(String(platform ?? spec?.platform ?? '').toLowerCase()) || architecture?.native === true;
   const authRequired = architecture?.auth === true || spec?.authentication?.required === true;
   const realtimeRequired = architecture?.realtime === true || spec?.realtime?.required === true;
   const externalServices = spec?.externalServices ?? [];
@@ -193,7 +201,7 @@ export async function runProductionRuntimeAcceptance(files, {
     try {
       let response;
       if (baseUrl) {
-        const send = fetchImpl ?? fetch;
+        const send = fetchImpl ?? NATIVE_FETCH ?? fetch;
         response = await Promise.race([send(new URL(path, baseUrl).toString(), init), timeout]);
       } else {
         if (!worker?.handler) return { ok: false, status: 0, body: null, error: 'no backend entry point exposes a fetch handler' };
@@ -332,13 +340,16 @@ export async function runProductionRuntimeAcceptance(files, {
       { request: `GET ${recordsPath}`, responseStatus: after.status });
 
     // A static JSON body answers the same payload before and after a write. That is a fake
-    // API no matter how healthy its status code looks.
+    // API no matter how healthy its status code looks. Over HTTP the row count of the
+    // harness's own D1 shim is not evidence — the evidence is that a SEPARATE network
+    // request saw the write, an update, and then nothing after the delete.
     const staticBody = JSON.stringify(beforeRows) === JSON.stringify(afterRows);
-    record('fake-check', !staticBody && rowsAfter !== null && rowsAfter > (rowsBefore ?? 0) && fakeRuntimeSignals(list).length === 0,
+    const rowCountProof = baseUrl ? true : (rowsAfter !== null && rowsAfter > (rowsBefore ?? 0));
+    record('fake-check', !staticBody && rowCountProof && fakeRuntimeSignals(list).length === 0,
       staticBody
         ? 'the record list was byte-identical before and after a create — the endpoint serves a static body'
-        : `the list changed after the write and D1 holds ${rowsAfter} row(s); no fake/mock signal in the source`,
-      { request: `GET ${recordsPath} (before/after)`, responseStatus: after.status, persisted: rowsAfter !== null && rowsAfter > (rowsBefore ?? 0) });
+        : `the list changed after the write${baseUrl ? ' and a separate HTTP request served the new row' : ` and D1 holds ${rowsAfter} row(s)`}; no fake/mock signal in the source`,
+      { request: `GET ${recordsPath} (before/after)`, responseStatus: after.status, persisted: rowCountProof });
 
     if (id !== null) {
       const updated = await callApi('PUT', `${recordsPath}/${id}`, { body: { title: 'Acceptance record edited', detail: 'updated' }, token });
@@ -373,7 +384,18 @@ export async function runProductionRuntimeAcceptance(files, {
     record('refresh', again.ok && stillThere, `a later request sees the earlier write: ${stillThere} (D1 holds ${rowsInDb()} row(s))`,
       { request: `GET ${recordsPath} after write`, responseStatus: reread.status, persisted: stillThere });
 
-    record('database', (rowsInDb() ?? 0) > 0, `D1 holds ${rowsInDb()} row(s) written through the API`, { persisted: (rowsInDb() ?? 0) > 0 });
+    // Real database persistence. In-process the evidence is the D1 shim's own row count. Over a
+    // deployment it is the network lifecycle itself: a row was created, a SEPARATE request
+    // read it back, an update was visible to another request, a delete removed it and the
+    // following read found nothing. A harness-side in-memory map proves nothing here, and
+    // is deliberately not counted (point 6).
+    const crudObserved = ['create', 'read', 'update', 'delete', 'read-missing', 'refresh']
+      .every((id) => tests[id]?.status === 'PASS');
+    record('database', baseUrl ? crudObserved : (rowsInDb() ?? 0) > 0,
+      baseUrl
+        ? `D1 CRUD observed over real HTTP against the deployment: create → read → update → read → delete → read-missing all passed`
+        : `D1 holds ${rowsInDb()} row(s) written through the API`,
+      { persisted: baseUrl ? crudObserved : (rowsInDb() ?? 0) > 0 });
 
     // Logout and the post-logout refusal. "GET /login returned 200" is not authentication:
     // the old session must stop working, and the read must prove it.
@@ -385,6 +407,23 @@ export async function runProductionRuntimeAcceptance(files, {
       record('post-logout', dead, `the old session now reads ${recordsPath} → ${afterLogout.status}`, { request: `GET ${recordsPath} (after logout)`, responseStatus: afterLogout.status });
       token = null;
     }
+  }
+
+  // -- 6b. native / android: a build is not a runtime ------------------------------
+  // Point 12. An APK or AAB that compiled proves nothing about whether the app launches,
+  // asks for its permission, reaches its API or survives a restart. `androidRunner` is the
+  // device/emulator harness; without one this stays MISSING so the engine reports
+  // ANDROID_RUNTIME = BLOCKED instead of quietly accepting the build.
+  if (nativeTarget) {
+    let proof = null;
+    if (typeof androidRunner === 'function') {
+      proof = await androidRunner({ files: list, spec, architecture, objective }).catch((error) => ({ passed: false, detail: String(error?.message ?? error) }));
+    }
+    record('android-launch', proof?.passed === true,
+      proof?.passed === true
+        ? (proof.detail ?? 'the packaged app was installed and launched, and its primary feature completed')
+        : (proof?.detail ?? 'no device or emulator is available to install and launch the built package; an APK/AAB build alone is not runtime evidence'),
+      { persisted: proof?.persisted ?? null });
   }
 
   // -- 7. error handling ---------------------------------------------------------------
@@ -461,8 +500,17 @@ export async function runProductionRuntimeAcceptance(files, {
     status: failedAfterRuntime.length === 0 ? 'passed' : 'failed',
     runtimeErrors,
     transport,
+    // ── identity: who this run is FOR, and WHERE it ran ─────────────────────
+    projectId: projectId ?? null,
+    artifactId: artifactId ?? null,
+    deployment: {
+      url: baseUrl ?? (typeof deployment === 'string' ? deployment : (deployment?.url ?? null)),
+      deploymentId: deployment?.deploymentId ?? null,
+      deployedAt: deployment?.deployedAt ?? null,
+      commit: deployment?.commit ?? null,
+      environment: baseUrl ? 'deployed' : (backend ? 'local-worker-runtime' : 'dom-runtime')
+    },
     environment: backend ? (baseUrl ? `deployed worker at ${baseUrl} + D1` : 'production-like worker runtime + D1') : 'generated app + device store',
-    deployment: baseUrl ?? (backend ? 'generated Worker executed against a real D1 binding' : 'generated app executed in the DOM runtime'),
     testedAt: testedAtStamp,
     api: recordsPath,
     contractPaths: contractCalls.map((c) => `${c.method} ${c.path}`),
@@ -494,7 +542,7 @@ export async function runSelfTest() {
   const requirements = spec.requirements.map((r) => ({ id: r.id, title: r.title, category: r.category, critical: r.critical }));
 
   const report = await runProductionRuntimeAcceptance(built.files, { spec, architecture, objective: command, requirements, api: `/api/${built.table}s` });
-  check(report.status === 'passed', 'a real generated product passes production runtime acceptance', report.failures.join('; ') || `transport=${report.transport}`);
+  check(report.status === 'passed', 'a real generated product passes the runtime executor (local fixture)', report.failures.join('; ') || `transport=${report.transport}`);
   check(report.tests.create?.status === 'PASS' && report.tests.database?.status === 'PASS', 'the D1 create/read/database evidence is real, not a 200', JSON.stringify(report.tests.database));
   check(report.tests['fake-check']?.status === 'PASS', 'the anti-fake check passes for a backend that really writes rows');
   check(report.tests['duplicate-register']?.status === 'PASS', 'duplicate registration is rejected');
@@ -502,13 +550,78 @@ export async function runSelfTest() {
   check(report.tests['post-logout']?.status === 'PASS' || report.journey?.steps?.some((s) => s.id === 'logout' && s.status === 'PASS'), 'logout kills the session');
   check(report.tests.realtime?.status === 'PASS', 'the real-time two-client proof ran', JSON.stringify(report.tests.realtime));
 
-  const verdict = evaluateRuntimeAcceptance({ files: built.files, architecture, spec, requirements, acceptance: report, hasBackend: true, credentials: {} });
-  check(verdict.status === 'passed', 'the gate accepts a complete acceptance run', verdict.blockingReason ?? '');
-  check(verdict.criticalFailed.length === 0, 'no critical requirement is left without runtime evidence', JSON.stringify(verdict.criticalFailed));
+  // ── the deployed-http run ────────────────────────────────────────────────
+  // Everything above executed the generated Worker IN THIS PROCESS. That is a fixture, and
+  // the gate refuses to call it production evidence. So the same product is now served over
+  // a real HTTP server and driven again through the network path: a genuine deployed run.
+  const { createServer } = await import('node:http');
+  const httpRuntime = createRuntime({ env: {} });
+  const loaded = await loadWorker(built.files, httpRuntime);
+  let listening = null;
+  try {
+    const server = createServer((req, res) => {
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', async () => {
+        const raw = Buffer.concat(chunks);
+        const request = new Request(`http://127.0.0.1${req.url}`, {
+          method: req.method,
+          headers: Object.entries(req.headers).map(([k, v]) => [k, String(v)]),
+          body: raw.length ? raw.toString() : undefined
+        });
+        try {
+          const response = await loaded.handler(request, loaded.env ?? httpRuntime.env, {});
+          res.statusCode = response.status;
+          response.headers?.forEach?.((v, k) => res.setHeader(k, v));
+          // No keep-alive: the run issues many short requests and a pooled socket left
+          // half-read when the harness closes makes undici throw on process exit.
+          res.setHeader('Connection', 'close');
+          res.end(Buffer.from(await response.arrayBuffer()));
+        } catch (error) {
+          res.statusCode = 500;
+          res.end(String(error?.message ?? error));
+        }
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    server.unref();
+    listening = server;
+    const deployedUrl = `http://127.0.0.1:${server.address().port}`;
+    const deployedRun = await runProductionRuntimeAcceptance(built.files, {
+      spec, architecture, objective: command, requirements, api: `/api/${built.table}s`, baseUrl: deployedUrl,
+      fetchImpl: NATIVE_FETCH
+    });
+    check(deployedRun.transport === 'deployed-http', 'the deployed run really used network HTTP', deployedRun.transport);
+    check(deployedRun.tests.deployment?.status === 'PASS' && deployedRun.tests.health?.status === 'PASS', 'the deployed endpoint answers over HTTP', JSON.stringify(deployedRun.tests.health ?? {}));
+    check(deployedRun.tests.create?.status === 'PASS' && deployedRun.tests.database?.status === 'PASS', 'D1 CRUD is real over the network, not an in-process shortcut', JSON.stringify(deployedRun.tests.database ?? {}));
+    check(deployedRun.tests['read-missing']?.status === 'PASS', 'a deleted record is absent on a later network read', JSON.stringify(deployedRun.tests['read-missing'] ?? {}));
+
+    const deployment = {
+      status: 'DEPLOYED', url: deployedUrl, deploymentId: 'dep_selftest',
+      deployedAt: '2026-10-02T00:00:00.000Z', environment: 'production', projectId: 'project_selftest'
+    };
+    deployedRun.projectId = 'project_selftest';
+    const verdict = evaluateRuntimeAcceptance({
+      files: built.files, architecture, spec, requirements, acceptance: deployedRun,
+      hasBackend: true, credentials: {}, deployment, projectId: 'project_selftest', executorConfigured: true
+    });
+    check(verdict.status === 'passed', 'the gate accepts a complete DEPLOYED acceptance run', verdict.blockingReason ?? '');
+    check(verdict.criticalFailed.length === 0, 'no critical requirement is left without runtime evidence', JSON.stringify(verdict.criticalFailed));
+
+    // The SAME product, run from source in this process, is not production evidence.
+    const localVerdict = evaluateRuntimeAcceptance({
+      files: built.files, architecture, spec, requirements, acceptance: report,
+      hasBackend: true, credentials: {}, deployment, projectId: 'project_selftest', executorConfigured: true
+    });
+    check(localVerdict.status === 'blocked', 'a source-level run is refused as production acceptance for a deployed backend', `${localVerdict.status} ${localVerdict.blockingCode ?? ''}`);
+  } finally {
+    try { listening?.closeAllConnections?.(); listening?.close(); } catch (_) { /* already closed */ }
+    httpRuntime.disposeGlobals?.();
+  }
 
   // A backend project with NO acceptance run must BLOCK, never pass.
   const noEvidence = evaluateRuntimeAcceptance({ files: built.files, architecture, spec, requirements, acceptance: null, hasBackend: true, credentials: {} });
-  check(noEvidence.status === 'blocked' && noEvidence.blockingCode === 'runtime-evidence-missing', 'a backend project without runtime evidence is BLOCKED', noEvidence.blockingReason ?? '');
+  check(noEvidence.status === 'blocked' && ['runtime-evidence-missing', 'deployment-missing'].includes(noEvidence.blockingCode), 'a backend project without runtime evidence is BLOCKED', `${noEvidence.blockingCode} ${noEvidence.blockingReason}`);
 
   // A static page that answers the same JSON twice must be caught.
   const fake = [
@@ -523,6 +636,16 @@ export async function runSelfTest() {
   check(fakeReport.tests['fake-check']?.status === 'FAIL', 'a static JSON backend is caught as fake', JSON.stringify(fakeReport.tests['fake-check']));
   const fakeVerdict = evaluateRuntimeAcceptance({ files: fake, architecture: fakeArch, spec: fakeSpec, acceptance: fakeReport, hasBackend: true, credentials: {} });
   check(fakeVerdict.status !== 'passed', 'the gate refuses a fake backend', `${fakeVerdict.status} ${fakeVerdict.blockingCode ?? ''}`);
+
+  // A run produced for ANOTHER project is refused, even when it is otherwise perfect.
+  const impersonation = evaluateRuntimeAcceptance({
+    files: built.files, architecture, spec, requirements,
+    acceptance: { ...report, projectId: 'project_someone_else', transport: 'deployed-http', deployment: { url: 'http://127.0.0.1:9' } },
+    hasBackend: true, credentials: {},
+    deployment: { status: 'DEPLOYED', url: 'http://127.0.0.1:9', projectId: 'project_selftest' },
+    projectId: 'project_selftest', executorConfigured: true
+  });
+  check(impersonation.status === 'blocked' && impersonation.blockingCode === 'runtime-identity-mismatch', "another project's run can never be attached to this one", `${impersonation.status} ${impersonation.blockingCode}`);
 
   // An external dependency with no credential is a declared dependency, not a pass.
   const weatherSpec = extractRequirementSpec({ command: 'Build a weather dashboard app that shows the forecast for my city', platform: 'web' });

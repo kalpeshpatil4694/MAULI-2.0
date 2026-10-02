@@ -23,6 +23,10 @@ import {
   describeRuntimeAcceptance, hasBackendEntryPoint, runtimeExecutorConfigured,
   dispatchRuntimeAcceptance
 } from './production-runtime.js';
+import {
+  DEPLOYMENT_STATUS, normalizeDeployment, assertRuntimeIdentity, deployExecutorConfigured,
+  dispatchGeneratedDeployment, runtimeDeploymentKind
+} from './generated-deployment.js';
 
 /** The project's stored acceptance run, when it is shaped like one. */
 export function currentRuntimeAcceptance(project) {
@@ -74,8 +78,12 @@ function credentialsFor(project) {
 /**
  * Judge a project's stored acceptance run against its own files, specification and
  * architecture. Pure — reads nothing but what it is given, so a read route may call it.
+ *
+ * `options.env` is read for exactly two booleans — whether a runtime executor and a deploy
+ * executor are configured — plus the control-plane URLs used by the identity check. No
+ * value is ever recorded.
  */
-export function judgeRuntimeAcceptance(project, files = null) {
+export function judgeRuntimeAcceptance(project, files = null, { env = null, controlPlaneUrls = [] } = {}) {
   if (!project) return null;
   const merged = Array.isArray(files) ? files : mergedProjectFiles(project.id);
   const fidelity = merged.length
@@ -89,7 +97,15 @@ export function judgeRuntimeAcceptance(project, files = null) {
     acceptance: currentRuntimeAcceptance(project),
     fidelity,
     credentials: credentialsFor(project),
-    hasBackend: hasBackendEntryPoint(merged)
+    hasBackend: hasBackendEntryPoint(merged),
+    deployment: project.runtimeDeployment ?? null,
+    projectId: project.id ?? null,
+    platform: project.platform ?? null,
+    executorConfigured: runtimeExecutorConfigured(env),
+    // The artifact the project has NOW. A run produced against an older artifact is stale
+    // evidence after a repair, and the identity check refuses to honour it.
+    currentArtifactId: latestCodeArtifactId(project.id),
+    controlPlaneUrls: controlPlaneUrls.length ? controlPlaneUrls : [env?.MAULI_BASE].filter(Boolean)
   });
 }
 
@@ -98,17 +114,24 @@ export function judgeRuntimeAcceptance(project, files = null) {
  * Throws on a report that is not shaped like an acceptance run — a partial or hand-written
  * object must never become the evidence a delivery is approved on.
  */
-export function recordRuntimeAcceptance(projectId, acceptance, extra = {}) {
+export function recordRuntimeAcceptance(projectId, acceptance, extra = {}, { env = null, controlPlaneUrls = [] } = {}) {
   const project = store.get('projects', projectId);
   if (!project) throw new Error(`Cannot record runtime acceptance: project ${projectId} does not exist`);
   if (!isRuntimeAcceptanceReport(acceptance)) throw new Error('Cannot record runtime acceptance: the report is not a valid acceptance run');
+  // Identity, enforced at the WRITE, not only at judgement. A run produced for another
+  // project is refused here so it can never become evidence for this one.
+  if (acceptance.projectId && acceptance.projectId !== projectId) {
+    throw new Error(`Cannot record runtime acceptance: this run was produced for project ${acceptance.projectId}, not ${projectId}`);
+  }
   const safe = scrubSecrets(acceptance);
   const files = mergedProjectFiles(projectId);
+  const deployment = deploymentFromRun(project, safe);
   return store.put('projects', {
     ...project,
     runtimeAcceptance: safe,
+    runtimeDeployment: deployment,
     runtimeEvidence: toRuntimeEvidenceProjection(safe),
-    runtimeAcceptanceReport: judgeRuntimeAcceptance({ ...project, runtimeAcceptance: safe }, files),
+    runtimeAcceptanceReport: judgeRuntimeAcceptance({ ...project, runtimeAcceptance: safe, runtimeDeployment: deployment }, files, { env, controlPlaneUrls }),
     runtimeAcceptedAt: safe.testedAt ?? new Date().toISOString(),
     ...extra,
     id: projectId
@@ -116,17 +139,111 @@ export function recordRuntimeAcceptance(projectId, acceptance, extra = {}) {
 }
 
 /**
+ * Fold the deployment the run actually used into the project's deployment record.
+ *
+ * The run is the authority here: an executor that reports `deployed-http` against
+ * https://x.workers.dev has just told us this project lives there. A DEPLOYED record with
+ * no url (the executor ran the source in-process instead) is DOWNGRADED to NOT_DEPLOYED,
+ * because "it ran somewhere" is not "it is deployed" — and point 4 exists precisely to stop
+ * source-level execution being read as production acceptance.
+ */
+export function deploymentFromRun(project, acceptance) {
+  const existing = normalizeDeployment(project?.runtimeDeployment);
+  const kind = runtimeDeploymentKind({ architecture: project?.architecture ?? null, platform: project?.platform ?? null });
+  if (kind !== 'backend') return existing;
+  const runUrl = typeof acceptance?.deployment === 'string'
+    ? acceptance.deployment
+    : (acceptance?.deployment?.url ?? null);
+  const realHttp = acceptance?.transport === 'deployed-http' && Boolean(runUrl && /^https?:\/\//i.test(runUrl));
+  if (!realHttp) return existing;
+  // A run may only CONFIRM this project's deployment, never redefine it. When the project
+  // already has a deployment recorded and the run points somewhere else, the record stands
+  // and the identity check refuses the run at judgement time.
+  if (existing.url && existing.url !== runUrl) return existing;
+  const identity = assertRuntimeIdentity({
+    projectId: project?.id ?? null,
+    deployment: normalizeDeployment({ ...existing, status: DEPLOYMENT_STATUS.DEPLOYED, url: runUrl, projectId: project?.id ?? null }),
+    required: false
+  });
+  if (!identity.ok) return existing;
+  return normalizeDeployment({
+    ...existing,
+    status: DEPLOYMENT_STATUS.DEPLOYED,
+    url: runUrl,
+    deploymentId: acceptance?.deployment?.deploymentId ?? existing.deploymentId ?? null,
+    deployedAt: acceptance?.deployment?.deployedAt ?? acceptance?.testedAt ?? new Date().toISOString(),
+    commit: acceptance?.deployment?.commit ?? existing.commit ?? null,
+    environment: acceptance?.deployment?.environment ?? existing.environment ?? null,
+    projectId: project?.id ?? null,
+    artifactId: acceptance?.artifactId ?? existing.artifactId ?? null
+  });
+}
+
+/**
+ * Persist a deployment record produced by the deploy runner (or by a founder/CI reporting a
+ * real `wrangler deploy`). Only ever a record of something that happened; the shape is
+ * normalised and every error message is redacted before it is written.
+ */
+export function recordGeneratedDeployment(projectId, deployment) {
+  const project = store.get('projects', projectId);
+  if (!project) throw new Error(`Cannot record a deployment: project ${projectId} does not exist`);
+  const record = normalizeDeployment({
+    ...(deployment ?? {}),
+    projectId: (deployment?.projectId ?? projectId)
+  });
+  return store.put('projects', { ...project, runtimeDeployment: record, runtimeDeployedAt: record.deployedAt ?? record.attemptedAt ?? new Date().toISOString(), id: projectId });
+}
+
+/**
+ * Deploy the generated project through the configured deploy runner.
+ * No runner → a NOT_DEPLOYED record naming the dependency. Never a silent success.
+ */
+export async function ensureGeneratedDeployment(projectId, env = null) {
+  const project = store.get('projects', projectId);
+  if (!project) return { deployed: false, reason: 'project not found' };
+  const kind = runtimeDeploymentKind({ architecture: project.architecture ?? null, platform: project.platform ?? null });
+  if (kind !== 'backend') return { deployed: false, skipped: true, reason: `${kind} architecture owes no Worker deployment` };
+  const existing = normalizeDeployment(project.runtimeDeployment);
+  if (existing.status === DEPLOYMENT_STATUS.DEPLOYED && existing.url) {
+    return { deployed: true, deployment: existing, reason: 'already deployed' };
+  }
+  const out = await dispatchGeneratedDeployment(env, {
+    project,
+    files: mergedProjectFiles(projectId),
+    architecture: project.architecture ?? null,
+    artifactId: latestCodeArtifactId(projectId)
+  });
+  recordGeneratedDeployment(projectId, out.deployment);
+  return { deployed: out.deployed, deployment: out.deployment, reason: out.reason };
+}
+
+/** The artifact whose bytes were deployed — the identity link between code and URL. */
+export function latestCodeArtifactId(projectId) {
+  const list = listProjectArtifacts(projectId)
+    .filter((a) => a?.type === 'code-workspace' && Array.isArray(a.content?.files) && a.content.files.length)
+    // Two artifacts written in the same millisecond must still order deterministically,
+    // otherwise "the newest artifact" flips and a repair's evidence could look current.
+    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')) || String(b.id ?? '').localeCompare(String(a.id ?? '')));
+  return list[0]?.id ?? null;
+}
+
+/**
  * The founder-facing projection of a project's runtime acceptance (point 16).
  * Returns the same shape for every project, including one that has never been run, so the
  * dashboard always has something honest to print: BLOCKED + the exact reason.
  */
-export function runtimeAcceptanceSummary(projectOrId) {
+export function runtimeAcceptanceSummary(projectOrId, { env = null } = {}) {
   const project = typeof projectOrId === 'string' ? store.get('projects', projectOrId) : projectOrId;
   if (!project) return describeRuntimeAcceptance(null);
   const stored = project.runtimeAcceptanceReport && isRuntimeAcceptanceReport(project.runtimeAcceptance)
     ? project.runtimeAcceptanceReport
     : null;
-  return describeRuntimeAcceptance(stored ?? judgeRuntimeAcceptance(project));
+  // Re-judged on read, not served from the cached verdict. A cached PASS would go on
+  // reporting PASS after a repair regenerated the code or moved the deployment — which is
+  // exactly the stale-evidence bug point 18 forbids. The stored report stays as a fallback.
+  let report = null;
+  try { report = judgeRuntimeAcceptance(project, null, { env }); } catch (_) { report = null; }
+  return describeRuntimeAcceptance(report ?? stored);
 }
 
 /**
@@ -140,19 +257,72 @@ export async function ensureRuntimeAcceptance(projectId, env = null) {
   if (!project) return { dispatched: false, recorded: false, reason: 'project not found' };
   if (currentRuntimeAcceptance(project)) return { dispatched: false, recorded: false, reason: 'acceptance already recorded' };
   if (!runtimeExecutorConfigured(env)) {
-    return { dispatched: false, recorded: false, reason: 'no runtime executor configured (MAULI_RUNTIME_EXECUTOR)' };
+    // Point 13: for a project that owes a deployed backend this is a BLOCKED dependency,
+    // reported as such so it can never read as a silent skip.
+    const kind = runtimeDeploymentKind({ architecture: project.architecture ?? null, platform: project.platform ?? null });
+    return {
+      dispatched: false, recorded: false, blocked: kind !== 'browser',
+      reason: 'no runtime executor configured (MAULI_RUNTIME_EXECUTOR) — production runtime acceptance is BLOCKED for this project, not skipped'
+    };
+  }
+  // Deploy first when the project owes a deployment: the acceptance run must be told WHICH
+  // URL to hit, and running the source in-process is a local fixture, not production proof.
+  const deployment = normalizeDeployment(project.runtimeDeployment);
+  let target = deployment;
+  if (deployment.status !== DEPLOYMENT_STATUS.DEPLOYED) {
+    const deployed = await ensureGeneratedDeployment(projectId, env);
+    target = normalizeDeployment(deployed?.deployment ?? deployment);
   }
   const files = mergedProjectFiles(projectId);
   const out = await dispatchRuntimeAcceptance(env, {
-    project,
+    project: { ...project, runtimeDeployment: target },
     files,
     spec: project.requirementSpec ?? null,
     architecture: project.architecture ?? null,
     requirements: project.requirementSpec?.requirements ?? []
   });
-  if (!out.acceptance) return { dispatched: out.dispatched, recorded: false, reason: out.reason ?? 'the runner returned no valid acceptance report' };
+  if (!out.acceptance) return { dispatched: out.dispatched, recorded: false, reason: out.reason ?? 'the runner returned no valid acceptance report', deployment: target };
   recordRuntimeAcceptance(projectId, out.acceptance);
-  return { dispatched: true, recorded: true, reason: null };
+  return { dispatched: true, recorded: true, reason: null, deployment: target };
+}
+
+/**
+ * Every project that has generated code and no passing production runtime evidence.
+ *
+ * This is what makes acceptance AUTOMATIC: there is no configured project id, no fixture and
+ * no manual list. Whatever founder command created the project, it appears here the moment
+ * its code exists, and the runtime sweep has to account for it.
+ */
+export function projectsNeedingRuntimeAcceptance({ limit = 25 } = {}) {
+  return store.list('projects')
+    .filter((p) => p && p.id && mergedProjectFiles(p.id).length > 0)
+    .filter((p) => {
+      const report = p.runtimeAcceptanceReport;
+      return !(report && isRuntimeAcceptanceReport(p.runtimeAcceptance) && report.status === 'passed');
+    })
+    .slice(0, limit)
+    .map((p) => ({ id: p.id, name: p.name ?? null, objective: p.objective ?? null, platform: p.platform ?? null }));
+}
+
+/**
+ * Run the deployment + acceptance sweep over every project that owes it.
+ * The caller (the pipeline gate, a cron trigger, or CI) gets one row per project, and no
+ * project can be skipped quietly: `blocked` names the dependency, it is never a pass.
+ */
+export async function sweepRuntimeAcceptance(env = null, { limit = 25 } = {}) {
+  const projects = projectsNeedingRuntimeAcceptance({ limit });
+  const results = [];
+  for (const project of projects) {
+    const outcome = await ensureRuntimeAcceptance(project.id, env);
+    results.push({
+      projectId: project.id,
+      recorded: outcome.recorded === true,
+      blocked: outcome.blocked === true || outcome.recorded !== true,
+      reason: outcome.reason ?? null,
+      verdict: runtimeAcceptanceSummary(project.id).label
+    });
+  }
+  return { projects: results, swept: results.length, executorConfigured: runtimeExecutorConfigured(env), deployExecutorConfigured: deployExecutorConfigured(env) };
 }
 
 /**
@@ -160,7 +330,7 @@ export async function ensureRuntimeAcceptance(projectId, env = null) {
  * `credentials` is a map of env-var NAME → boolean availability; a value is never read or
  * recorded, only whether the binding is present.
  */
-export function runtimeAcceptanceFor({ project = null, files = [], hasBackend = false, fidelity = null, credentials = {} } = {}) {
+export function runtimeAcceptanceFor({ project = null, files = [], hasBackend = false, fidelity = null, credentials = {}, env = null, controlPlaneUrls = [] } = {}) {
   const acceptance = currentRuntimeAcceptance(project);
   const report = evaluateRuntimeAcceptance({
     files,
@@ -170,7 +340,13 @@ export function runtimeAcceptanceFor({ project = null, files = [], hasBackend = 
     acceptance,
     fidelity,
     hasBackend,
-    credentials
+    credentials,
+    deployment: project?.runtimeDeployment ?? null,
+    projectId: project?.id ?? null,
+    platform: project?.platform ?? null,
+    executorConfigured: runtimeExecutorConfigured(env),
+    currentArtifactId: project ? latestCodeArtifactId(project.id) : null,
+    controlPlaneUrls
   });
   return { acceptance, report };
 }

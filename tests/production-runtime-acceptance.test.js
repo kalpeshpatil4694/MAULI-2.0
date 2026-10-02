@@ -25,6 +25,16 @@ const BACKEND_FILES = [
   { path: 'www/index.html', content: '<!DOCTYPE html><html><body><h1>Orders</h1><script src="app.js"></script></body></html>' }
 ];
 const BACKEND_COMMAND = 'Build a team coffee order app with staff login';
+// Production acceptance is judged against a REAL deployment of the generated project. These
+// are the identity fixtures every backend scenario shares: the project's own URL (never
+// MAULI's control plane), the deployment id, and the artifact whose bytes were deployed.
+const FIXTURE_PROJECT_ID = 'mauli_runtime_fixture';
+const DEPLOYED_URL = 'https://orders-app-mauli-2-0.kalpeshpatil4694.workers.dev';
+const DEPLOYED = {
+  status: 'DEPLOYED', url: DEPLOYED_URL, deploymentId: 'dep_mauli_runtime_fixture',
+  deployedAt: '2026-10-02T00:00:00.000Z', environment: 'production',
+  projectId: FIXTURE_PROJECT_ID, artifactId: 'artifact_fixture'
+};
 
 /** The product MAULI actually generates for this command — what the gates really judge. */
 async function builtBackend() {
@@ -39,8 +49,8 @@ function backendSpec() {
   return extractRequirementSpec({ command: BACKEND_COMMAND, platform: 'web' });
 }
 
-/** A run where every test the architecture owes was observed and passed. */
-function passingRun(architecture, spec) {
+/** A run where every test the architecture owes was observed and passed, over real HTTP. */
+function passingRun(architecture, spec, { projectId = FIXTURE_PROJECT_ID, url = DEPLOYED_URL, transport = 'deployed-http' } = {}) {
   const obligations = runtimeObligations({ architecture, spec, files: BACKEND_FILES, hasBackend: true });
   const tests = {};
   for (const id of obligations.requiredTests) {
@@ -48,9 +58,11 @@ function passingRun(architecture, spec) {
   }
   return {
     status: 'passed',
-    transport: 'worker-runtime',
-    environment: 'production-like worker runtime + D1',
-    deployment: 'generated Worker executed against a real D1 binding',
+    transport,
+    projectId,
+    artifactId: DEPLOYED.artifactId,
+    environment: transport === 'deployed-http' ? `deployed worker at ${url} + D1` : 'production-like worker runtime + D1',
+    deployment: { url: transport === 'deployed-http' ? url : null, deploymentId: DEPLOYED.deploymentId, deployedAt: DEPLOYED.deployedAt, commit: 'abc1234', environment: 'production' },
     testedAt: '2026-10-02T00:00:00.000Z',
     tests,
     failures: [],
@@ -59,12 +71,18 @@ function passingRun(architecture, spec) {
   };
 }
 
-function judge(acceptance, { spec = backendSpec(), architecture = selectArchitecture(backendSpec()), files = BACKEND_FILES, credentials = {} } = {}) {
+function judge(acceptance, {
+  spec = backendSpec(), architecture = selectArchitecture(backendSpec()), files = BACKEND_FILES,
+  credentials = {}, deployment = DEPLOYED, projectId = FIXTURE_PROJECT_ID,
+  executorConfigured = true, controlPlaneUrls = ['https://mauli-2-0.kalpeshpatil4694.workers.dev']
+} = {}) {
   const requirements = spec.requirements.map((r) => ({ id: r.id, title: r.title, category: r.category, critical: r.critical }));
   return evaluateRuntimeAcceptance({
     files, architecture, spec, requirements, acceptance,
     fidelity: { passed: true, violations: [], score: 100 },
-    credentials, hasBackend: hasBackendEntryPoint(files)
+    credentials, hasBackend: hasBackendEntryPoint(files),
+    deployment, projectId, executorConfigured, controlPlaneUrls,
+    expectedArtifactId: DEPLOYED.artifactId
   });
 }
 
@@ -157,6 +175,15 @@ test('a backend project with no acceptance run is BLOCKED, never passed', () => 
   assert.equal(report.blockingCode, RUNTIME_BLOCKING.EVIDENCE_MISSING);
   assert.match(report.blockingReason, /no production runtime acceptance run exists/i);
   assert.ok(report.criticalFailed.length > 0, 'critical requirements must be listed as without evidence');
+});
+
+test('a backend project that was never deployed is BLOCKED before anything is run', () => {
+  const spec = backendSpec();
+  const architecture = selectArchitecture(spec);
+  const report = judge(passingRun(architecture, spec), { spec, architecture, deployment: null });
+  assert.equal(report.status, 'blocked');
+  assert.equal(report.blockingCode, RUNTIME_BLOCKING.NO_DEPLOYMENT);
+  assert.match(report.blockingReason, /has not been deployed/i);
 });
 
 test('a complete acceptance run passes and evidences every critical requirement', () => {
@@ -269,12 +296,17 @@ test('recording an acceptance run persists the run, the legacy projection and th
     requirementSpec: spec,
     architecture
   });
-  registerArtifact({ projectId: project.id, taskId: null, type: 'code-workspace', content: { files } });
+  // The deployment arrives WITH the run: before the run the project owns no URL at all.
+  store.put('projects', { ...project, runtimeDeployment: { status: 'NOT_DEPLOYED' }, id: project.id });
+  const artifact = registerArtifact({ projectId: project.id, taskId: null, type: 'code-workspace', content: { files } });
 
-  const run = passingRun(architecture, spec);
+  // Identity travels with the run: it names the artifact it actually tested, so a later
+  // regeneration invalidates it instead of leaving a standing PASS behind.
+  const run = passingRun(architecture, spec, { projectId: project.id, url: DEPLOYED_URL });
+  run.artifactId = artifact.id;
   run.secret = 'sk-live-should-not-be-persisted';
   run.tests.login = { ...run.tests.login, accessToken: 'Bearer should-not-be-persisted' };
-  recordRuntimeAcceptance(project.id, run);
+  recordRuntimeAcceptance(project.id, run, {}, { env: { MAULI_RUNTIME_EXECUTOR: 'https://runner.example/accept' } });
 
   const stored = store.get('projects', project.id);
   assert.ok(isRuntimeAcceptanceReport(stored.runtimeAcceptance));
@@ -286,7 +318,9 @@ test('recording an acceptance run persists the run, the legacy projection and th
   assert.equal(stored.runtimeEvidence.evidence.auth_login, true);
   assert.equal(stored.runtimeAcceptanceReport.status, 'passed');
 
-  const summary = runtimeAcceptanceSummary(project.id);
+  // Re-judged on read, so the executor configuration is part of the answer: a deployed backend
+  // with no runtime executor is BLOCKED, never a cached PASS.
+  const summary = runtimeAcceptanceSummary(project.id, { env: { MAULI_RUNTIME_EXECUTOR: 'https://runner.example/accept' } });
   assert.equal(summary.label, 'PASS');
   assert.equal(summary.testedAt, '2026-10-02T00:00:00.000Z');
   assert.equal(summary.criticalFailed, 0);
@@ -304,12 +338,16 @@ test('a project that has never been run reports BLOCKED with the exact reason', 
     requirementSpec: spec,
     architecture
   });
+  store.put('projects', { ...project, runtimeDeployment: { ...DEPLOYED, projectId: project.id }, id: project.id });
   registerArtifact({ projectId: project.id, taskId: null, type: 'code-workspace', content: { files } });
 
-  const summary = runtimeAcceptanceSummary(project.id);
+  const summary = runtimeAcceptanceSummary(project.id, { env: { MAULI_RUNTIME_EXECUTOR: 'https://runner.example/accept' } });
   assert.equal(summary.status, 'BLOCKED');
   assert.equal(summary.label, 'BLOCKED');
   assert.match(summary.blockingReason, /no production runtime acceptance run/i);
+  // The deployment IS recorded — so the blocker is the missing run, not a missing URL.
+  assert.equal(summary.runtimeUrl, DEPLOYED_URL);
+  assert.equal(summary.deploymentStatus, 'DEPLOYED');
 
   // The cheap list projection never invents a PASS either.
   const listed = describeStoredRuntimeAcceptance(store.get('projects', project.id));
