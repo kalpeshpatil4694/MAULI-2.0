@@ -138,7 +138,9 @@ test('the generated Durable Object extends the runtime base class it is declared
   const built = generateFullStackApp(spec, architecture, { objective: command });
   const worker = built.files.find((f) => f.path === 'worker/index.js');
   const config = built.files.find((f) => f.path === 'wrangler.jsonc').content;
-  assert.match(config, /"new_sqlite_classes":\s*\["LiveConnections"\]/);
+  const parsed = JSON.parse(config);
+  assert.equal(parsed.exports.LiveConnections.type, 'durable-object');
+  assert.equal(parsed.exports.LiveConnections.storage, 'sqlite');
   assert.match(worker.content, /export class LiveConnections extends DurableObject/,
     'a new_sqlite_classes DO that does not extend DurableObject deploys but never binds');
 
