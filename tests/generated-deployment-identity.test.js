@@ -36,6 +36,10 @@ import {
   projectsNeedingRuntimeAcceptance, ensureGeneratedDeployment
 } from '../src/runtime-evidence.js';
 import { repairUntilRuntimeAcceptance } from '../scripts/repair-loop.mjs';
+import { stageProject } from '../scripts/deploy-executor.mjs';
+import { mkdtemp, readFile as readFileFs } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const CONTROL_PLANE = 'https://mauli-2-0.kalpeshpatil4694.workers.dev';
 const EXECUTOR_ENV = { MAULI_RUNTIME_EXECUTOR: 'https://runner.example/accept', MAULI_BASE: CONTROL_PLANE };
@@ -458,4 +462,16 @@ test('the repair loop stops at its bound and reports failure rather than spinnin
   assert.equal(outcome.passed, false);
   assert.equal(outcome.attempts, 1);
   assert.equal(outcome.runs.length, 1);
+});
+
+test('deployment executor isolates each project database and rejects path traversal', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mauli-stage-test-'));
+  const written = await stageProject([
+    { path: 'worker/index.js', content: 'ok' },
+    { path: '../outside.txt', content: 'must-not-write' },
+    { path: 'nested/../../outside2.txt', content: 'must-not-write' }
+  ], { root });
+  assert.equal(written, 1);
+  assert.equal(await readFileFs(join(root, 'worker/index.js'), 'utf8'), 'ok');
+  await assert.rejects(() => readFileFs(join(root, '../outside.txt'), 'utf8'));
 });
