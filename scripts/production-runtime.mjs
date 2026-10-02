@@ -800,11 +800,14 @@ export async function runProductionRuntimeAcceptance(files, {
     // is deliberately not counted (point 6).
     const crudObserved = ['create', 'read', 'update', 'delete', 'read-missing', 'refresh']
       .every((id) => tests[id]?.status === 'PASS');
-    record('database', baseUrl ? crudObserved : (rowsInDb() ?? 0) > 0,
+    const databasePassed = baseUrl ? crudObserved : (rowsInDb() ?? 0) > 0;
+    record('database', databasePassed,
       baseUrl
-        ? `D1 CRUD observed over real HTTP against the deployment: create → read → update → read → delete → read-missing all passed`
+        ? (crudObserved
+          ? 'D1 CRUD was observed over real HTTP against the deployment: create → read → update → read → delete → read-missing all passed'
+          : 'real HTTP did not complete the full CRUD lifecycle, so D1 persistence is not proven')
         : `D1 holds ${rowsInDb()} row(s) written through the API`,
-      { persisted: baseUrl ? crudObserved : (rowsInDb() ?? 0) > 0 });
+      { persisted: databasePassed });
 
     // Logout and the post-logout refusal. "GET /login returned 200" is not authentication:
     // the old session must stop working, and the read must prove it.
