@@ -153,13 +153,14 @@ function splitScripts(files) {
  *   missingHandlers:Array, invoked:Array, mutatedElements:number, storageChanged:boolean,
  *   handlers:number, quality:object}}
  */
-export function verifyGeneratedApp(files, { objective = '', requirements = [], timeoutMs = SCRIPT_TIMEOUT_MS, fetchImpl = null, env = {} } = {}) {
+export function verifyGeneratedApp(files, { objective = '', requirements = [], timeoutMs = SCRIPT_TIMEOUT_MS, fetchImpl = null, env = {}, storage = null } = {}) {
   const list = (Array.isArray(files) ? files : []).filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string');
   const quality = analyzeGeneratedApp(list, { objective, requirements });
   const { inline, external, html } = splitScripts(list);
   const elements = elementsFromHtml(html);
 
-  const storage = new Map();
+  // A browser reload creates a new DOM/JS context but preserves localStorage.
+  const storageStore = storage instanceof Map ? storage : new Map();
   const errors = [];
   const timers = [];
   // Window/document listeners are collected and fired after the scripts run, the way a
@@ -183,12 +184,12 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
   const sandbox = {
     document,
     localStorage: {
-      getItem: (k) => (storage.has(String(k)) ? storage.get(String(k)) : null),
-      setItem: (k, v) => storage.set(String(k), String(v)),
-      removeItem: (k) => storage.delete(String(k)),
-      clear: () => storage.clear(),
-      key: (i) => [...storage.keys()][i] ?? null,
-      get length() { return storage.size; }
+      getItem: (k) => (storageStore.has(String(k)) ? storageStore.get(String(k)) : null),
+      setItem: (k, v) => storageStore.set(String(k), String(v)),
+      removeItem: (k) => storageStore.delete(String(k)),
+      clear: () => storageStore.clear(),
+      key: (i) => [...storageStore.keys()][i] ?? null,
+      get length() { return storageStore.size; }
     },
     console: { log() {}, info() {}, warn() {}, error() {}, debug() {} },
     setTimeout: (fn) => { timers.push(fn); return timers.length; },
@@ -346,7 +347,7 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
     }
   }
 
-  const storageChanged = storage.size > 0;
+  const storageChanged = storageStore.size > 0;
   const threw = invoked.some((i) => i.status === 'threw');
   const didSomething = mutatedElements > 0 || storageChanged;
 
@@ -354,7 +355,7 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
   if (errors.length || missingHandlers.length || threw) verdict = 'broken';
   else if (!didSomething || invoked.every((i) => i.status !== 'mutated')) verdict = 'static';
 
-  return { verdict, executed, errors, missingHandlers, invoked, mutatedElements, storageChanged, handlers: ctxFns.length, quality, ctx, elements, storage, sandbox, timers };
+  return { verdict, executed, errors, missingHandlers, invoked, mutatedElements, storageChanged, handlers: ctxFns.length, quality, ctx, elements, storage: storageStore, sandbox, timers };
 }
 
 /**
