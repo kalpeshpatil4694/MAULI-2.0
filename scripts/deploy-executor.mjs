@@ -21,11 +21,19 @@
 import { createServer } from 'node:http';
 import { mkdtemp, writeFile, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve, relative, isAbsolute } from 'node:path';
+import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
 // Secrets must never appear in a deployment record, a log line or an API response.
+const WRANGLER_BIN = join(process.cwd(), 'node_modules', '.bin', 'wrangler');
+
+function wranglerCommand() {
+  if (!existsSync(WRANGLER_BIN)) throw new Error('the deploy executor has no local pinned Wrangler binary; run npm ci in the executor environment');
+  return WRANGLER_BIN;
+}
+
 const SECRET_VALUE_RE = /(?:bearer\s+)[A-Za-z0-9._~+/=-]{8,}|\b[A-Za-z0-9_-]{32,}\b|(?:token|key|secret|password)\s*[=:]\s*\S+/gi;
 export function redact(value) {
   return String(value ?? '').replace(SECRET_VALUE_RE, '[redacted]').slice(0, 400);
@@ -66,8 +74,10 @@ export async function stageProject(files, { root }) {
     if (!file || typeof file.path !== 'string' || typeof file.content !== 'string') continue;
     // A generated path must stay inside the staging directory; a `../` in a filename is a
     // traversal attempt, not a file layout.
-    const target = join(root, file.path);
-    if (!target.startsWith(root)) continue;
+    const rootAbs = resolve(root);
+    const target = resolve(rootAbs, file.path);
+    const rel = relative(rootAbs, target);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) continue;
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, file.content, 'utf8');
     written += 1;
@@ -87,7 +97,7 @@ export async function stageProject(files, { root }) {
  * a redeploy means.
  */
 async function provisionDatabase(root, databaseName) {
-  const listed = await run('npx', ['--yes', 'wrangler', 'd1', 'list', '--json'], { cwd: root });
+  const listed = await run(wranglerCommand(), ['d1', 'list', '--json'], { cwd: root });
   let existingId = null;
   if (listed.code === 0) {
     try {
@@ -98,7 +108,7 @@ async function provisionDatabase(root, databaseName) {
   }
   let databaseId = existingId;
   if (!databaseId) {
-    const created = await run('npx', ['--yes', 'wrangler', 'd1', 'create', databaseName], { cwd: root });
+    const created = await run(wranglerCommand(), ['d1', 'create', databaseName], { cwd: root });
     if (created.code !== 0) return { ok: false, message: redact(created.stderr || created.stdout) };
     databaseId = /database_id\s*=\s*"?([0-9a-f-]{32,})"?/i.exec(`${created.stdout}\n${created.stderr}`)?.[1]
       ?? /"database_id"\s*:\s*"([0-9a-f-]{32,})"/i.exec(created.stdout)?.[1]
@@ -148,7 +158,16 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
       const config = await readFile(configPath, 'utf8').catch(() => null);
       if (config) {
         const safe = String(projectId).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
-        await writeFile(configPath, config.replace(/("name"\s*:\s*)"[^"]*"/i, `$1"generated-${safe}"`), 'utf8');
+        // Every generated project gets its own Worker AND its own D1 database. Reusing a
+        // database by entity name (for example generated_order) would let two unrelated
+        // Founder commands see each other's rows. The name is deterministic so redeploys
+        // of the same project reuse the same database and preserve its data.
+        const workerName = `generated-${safe}`.slice(0, 63);
+        const databaseName = `generated-${safe}`.slice(0, 63);
+        const rewritten = config
+          .replace(/("name"\s*:\s*)"[^"]*"/i, `$1"${workerName}"`)
+          .replace(/("database_name"\s*:\s*)"[^"]*"/i, `$1"${databaseName}"`);
+        await writeFile(configPath, rewritten, 'utf8');
       }
     }
     const config = await readFile(join(root, 'wrangler.jsonc'), 'utf8').catch(() => null);
@@ -160,7 +179,7 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(db.message, ''), errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}` } };
       }
     }
-    const validation = await run('npx', ['--yes', 'wrangler', 'deploy', '--dry-run'], { cwd: root });
+    const validation = await run(wranglerCommand(), ['deploy', '--dry-run'], { cwd: root });
     if (validation.code !== 0) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(validation.stderr, validation.stdout), errorMessage: `wrangler validation failed before deployment: ${redact(validation.stderr || validation.stdout)}` } };
     }
@@ -168,7 +187,7 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     // repository pins, and passing it failed the deployment with "Unknown argument: json",
     // which is exactly the kind of infrastructure error that must not be read as a product
     // failure. The real URL and version id are read out of wrangler's own output.
-    const deployed = await run('npx', ['--yes', 'wrangler', 'deploy'], { cwd: root });
+    const deployed = await run(wranglerCommand(), ['deploy'], { cwd: root });
     if (deployed.code !== 0) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(deployed.stderr, deployed.stdout), errorMessage: redact(deployed.stderr || deployed.stdout) } };
     }
