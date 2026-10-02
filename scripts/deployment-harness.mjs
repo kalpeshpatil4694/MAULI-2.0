@@ -122,6 +122,19 @@ export async function startDeploymentHarness(files, { env = {}, host = '127.0.0.
         try { socket.write(textFrame(typeof data === 'string' ? data : String(data))); } catch (_) { /* the client went away */ }
         return originalSend(data);
       };
+      // When the real client disconnects, the Durable Object must be told. It keeps its own
+      // client set and drops a socket from it in its `close` handler — which nothing ever
+      // invoked, because the harness owns the TCP connection and the shim socket beside it
+      // never closes on its own. A departed client therefore stayed registered forever: every
+      // later broadcast was written into a dead socket, and the set grew without bound.
+      const dropClient = () => {
+        try {
+          if (typeof outbound.close === 'function' && !outbound.closed) outbound.close(1000, 'client disconnected');
+        } catch (_) { /* already gone */ }
+      };
+      socket.on('close', dropClient);
+      socket.on('end', dropClient);
+      socket.on('error', dropClient);
       // Anything the Durable Object sent BEFORE the runtime patched `send` never reached
       // the client. The generated channel confirms the connection from the server side the
       // moment it accepts the socket, so that confirmation is always sent too early and was

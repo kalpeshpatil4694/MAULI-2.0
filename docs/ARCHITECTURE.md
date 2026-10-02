@@ -561,6 +561,31 @@ evidence was a product that could not do the thing its specification promised.
 `tests/live-broadcast.test.js` pins all five behaviours, including the route agreement, and
 its negative control reverts the route and confirms the test fails.
 
+**The client must not be Node's built-in WebSocket.** A Durable Object confirms the connection
+the moment it accepts the socket, so that confirmation is almost always coalesced by TCP into
+the very read that completed the handshake. Node's parser discards those bytes as part of the
+response: the socket opens, every message is dropped, and the live channel looks connected
+while delivering nothing. `ws` coped; the built-in client did not, and `ws` is not a declared
+dependency — relying on it would have been luck. The acceptance client is a hand-rolled
+RFC 6455 handshake and frame parser over a raw `node:net` socket, which is also a truer
+picture of what a browser does. (Its `Sec-WebSocket-Accept` check was briefly written with a
+transposed GUID, which made every live connection look refused while the server answered
+`101` with a correct key.)
+
+**A departed client has to be told.** The Durable Object keeps its own client set and drops a
+socket in its `close` handler. The harness owns the TCP connection, and nothing ever invoked
+that handler, so a disconnected client stayed registered forever — every later broadcast was
+written into a dead socket and the set grew without bound. Reconnecting happened to keep
+working, which is exactly why this survived: the leak was invisible until the set was
+counted.
+
+`scripts/audit-live-channel.mjs` (`npm run verify:live`, and a CI step) drives a raw RFC 6455
+client against a real deployment harness and asserts six things end to end: the upgrade, the
+server-side confirmation, delivery to both connected clients **exactly once**, a disconnected
+client leaving the broadcast set, and a reconnected client receiving the next write. Its
+negative control — removing the disconnect notification — reproduces the leak, so the check
+cannot quietly stop testing anything.
+
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
 Everything above proves the code is a working app. None of it proved the app **ran**. The

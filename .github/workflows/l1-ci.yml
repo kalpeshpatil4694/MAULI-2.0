@@ -66,6 +66,15 @@ jobs:
       - name: Generated wrangler configuration (wrangler deploy --dry-run)
         run: npm run verify:wrangler
 
+      # The live channel, driven over a REAL TCP socket by a hand-rolled RFC 6455 client.
+      # Every defect this covers was silent: the socket opened, the deployment succeeded and
+      # every configuration check was green while the broadcast reached nobody. Confirms the
+      # upgrade, the server-side confirmation, delivery to both connected clients exactly
+      # once, a disconnected client being dropped, and a reconnected client receiving the
+      # next write.
+      - name: Live channel over a real WebSocket
+        run: npm run verify:live
+
       # Production Runtime Acceptance, the gate between Functional Fidelity and QA.
       # The engine's own contract: a real generated product passes, a static-JSON backend is
       # caught as fake, a backend with no evidence is BLOCKED, a missing external credential

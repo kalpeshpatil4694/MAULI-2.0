@@ -400,8 +400,9 @@ import { DurableObject } from 'cloudflare:workers';
 
 export class LiveConnections extends DurableObject {
   constructor(ctx, state) {
+    // Only the client set is kept: this Durable Object holds connections, not rows, so
+    // there is no storage to read, and an unused \`this.state\` would be dead code.
     super(ctx, state);
-    this.state = state;
     this.clients = new Set();
   }
   broadcast(message, sender = null) {
