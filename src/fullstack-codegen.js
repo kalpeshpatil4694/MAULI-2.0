@@ -276,7 +276,20 @@ ${auth ? `  if (path.startsWith('/api/') && !path.startsWith('/api/health')) {
   }
 ` : ''}
   if (path === '/api/health' && method === 'GET') {
-    return json({ ok: true, service: '${label}', time: new Date().toISOString() });
+    // Which bindings this Worker actually received. wrangler reports the bindings it
+    // ACCEPTED from the config; this reports the ones that ARRIVED at runtime. The two can
+    // differ, and only this one is evidence about the deployed product — a config that
+    // declares a Durable Object while the Worker answers 501 has nothing wrong with it that
+    // the config could have told you.
+    return json({
+      ok: true, service: '${label}', time: new Date().toISOString(),
+      bindings: {
+        database: Boolean(env && env.DB),
+        assets: Boolean(env && env.ASSETS),
+        live: Boolean(env && env.LIVE)${realtime ? `,
+        liveCallable: Boolean(env && env.LIVE && typeof env.LIVE.fetch === 'function')` : ''}
+      }
+    });
   }
 
   if (path === '${api}' && method === 'GET') {
