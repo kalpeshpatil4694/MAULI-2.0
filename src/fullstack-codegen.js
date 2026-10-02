@@ -396,12 +396,18 @@ ${realtime ? `
 import { DurableObject } from 'cloudflare:workers';
 
 export class LiveConnections extends DurableObject {
-  constructor(ctx, state) { super(ctx, state); this.state = state; }
+  constructor(ctx, state) { super(ctx, state); this.state = state; this.clients = new Set(); }
+  broadcast(message, sender = null) {
+    for (const socket of this.clients) {
+      if (socket === sender) continue;
+      try { socket.send(message); } catch (_) { this.clients.delete(socket); }
+    }
+  }
   async fetch(request, env) {
     const pathname = new URL(request.url).pathname;
     if (pathname === '/api/live/broadcast' && request.method === 'POST') {
       const message = await request.text();
-      broadcast(null, message);
+      this.broadcast(message);
       return new Response('ok');
     }
     if (pathname !== '/api/live') return new Response('Not found', { status: 404 });
@@ -409,14 +415,14 @@ export class LiveConnections extends DurableObject {
     const pair = new WebSocketPair();
     const client = pair[0];
     client.accept();
-    clients.set(client, { since: Date.now() });
+    this.clients.add(client);
     client.addEventListener('message', async (event) => {
       let payload;
       try { payload = JSON.parse(String(event.data)); } catch (_) { return; }
-      if (payload && payload.type === 'ping') broadcast(client, JSON.stringify({ type: 'pong', at: Date.now() }));
+      if (payload && payload.type === 'ping') this.broadcast(JSON.stringify({ type: 'pong', at: Date.now() }), client);
     });
-    client.addEventListener('close', () => { clients.delete(client); });
-    client.addEventListener('error', () => { clients.delete(client); });
+    client.addEventListener('close', () => { this.clients.delete(client); });
+    client.addEventListener('error', () => { this.clients.delete(client); });
     return new Response(null, { status: 101, webSocket: client });
   }
 }
