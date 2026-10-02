@@ -219,25 +219,15 @@ function broadcast(sender, message) {
 }
 
 async function broadcastLive(env, message) {
-  if (!env?.LIVE) return;
+  if (!env?.LIVE) return 0;
   if (typeof env.LIVE.idFromName === 'function' && typeof env.LIVE.get === 'function') {
     const id = env.LIVE.idFromName('global');
     const stub = env.LIVE.get(id);
-    await stub.fetch(new Request('https://mauli-live/api/live/broadcast', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: message
-    }));
-    return;
+    if (typeof stub.broadcast === 'function') return await stub.broadcast(message);
   }
   // Deterministic in-process harness fallback; never used by a real Cloudflare namespace.
-  if (typeof env.LIVE.fetch === 'function') {
-    await env.LIVE.fetch(new Request('https://mauli-live/api/live/broadcast', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: message
-    }), env);
-  }
+  if (typeof env.LIVE.broadcast === 'function') return env.LIVE.broadcast(message);
+  return 0;
 }
 ` : ''}
 async function route(request, env, url) {
@@ -331,8 +321,8 @@ ${auth ? `  if (path.startsWith('/api/') && !path.startsWith('/api/health')) {
       .bind(title, String(body.detail ?? '').trim(), amount, stamp, stamp${auth ? ', user.email' : ', null'}).run();
     const id = result?.meta?.last_row_id;
     const row = await env.DB.prepare('SELECT id, title, detail, amount, created_at, updated_at' + DUE + ' FROM ' + QT + ' WHERE id = ?').bind(id ?? 0).first();
-${realtime ? `    await broadcastLive(env, JSON.stringify({ type: '${table}.created', record: row }));` : ''}
-    return json({ ok: true, ${table}: row }, 201);
+${realtime ? `    const liveDelivered = await broadcastLive(env, JSON.stringify({ type: '${table}.created', record: row }));` : ''}
+    return json({ ok: true, ${table}: row${realtime ? ', liveDelivered' : ''} }, 201);
   }
 
   const itemMatch = path.match(new RegExp('^' + '${api}' + '/(\\\\d+)$'));
@@ -409,37 +399,41 @@ ${realtime ? `
 import { DurableObject } from 'cloudflare:workers';
 
 export class LiveConnections extends DurableObject {
-  constructor(ctx, state) { super(ctx, state); this.state = state; }
+  constructor(ctx, state) {
+    super(ctx, state);
+    this.state = state;
+    this.clients = new Set();
+  }
   broadcast(message, sender = null) {
-    const sockets = typeof this.ctx?.getWebSockets === 'function' ? this.ctx.getWebSockets() : [];
-    for (const socket of sockets) {
+    let delivered = 0;
+    for (const socket of this.clients) {
       if (socket === sender) continue;
-      try { socket.send(message); } catch (_) { /* runtime owns closed sockets */ }
+      try { socket.send(message); delivered++; } catch (_) { this.clients.delete(socket); }
     }
+    return delivered;
   }
   async fetch(request) {
     const pathname = new URL(request.url).pathname;
-    if (pathname === '/api/live/broadcast' && request.method === 'POST') {
-      const message = await request.text();
-      this.broadcast(message);
-      return new Response('ok');
-    }
     if (pathname !== '/api/live') return new Response('Not found', { status: 404 });
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade', { status: 426 });
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
-    if (typeof this.ctx?.acceptWebSocket === 'function') this.ctx.acceptWebSocket(server);
-    else server.accept();
+    server.accept();
+    this.clients.add(server);
+    server.addEventListener('message', (event) => {
+      let payload;
+      try { payload = JSON.parse(String(event.data)); } catch (_) { return; }
+      if (payload && payload.type === 'ping') this.broadcast(JSON.stringify({ type: 'pong', at: Date.now() }), server);
+    });
+    server.addEventListener('close', () => { this.clients.delete(server); });
+    server.addEventListener('error', () => { this.clients.delete(server); });
+    // Confirm the connection from the SERVER side. A client that merely completed the
+    // handshake has proven the socket opened, not that this Durable Object accepted it and
+    // will broadcast to it -- and those are different failures. Without this confirmation a
+    // channel that accepts the upgrade and then delivers nothing looks connected.
+    try { server.send(JSON.stringify({ type: 'connected', at: Date.now() })); } catch (_) { /* the client vanished immediately */ }
     return new Response(null, { status: 101, webSocket: client });
-  }
-  webSocketMessage(ws, message) {
-    let payload;
-    try { payload = JSON.parse(String(message)); } catch (_) { return; }
-    if (payload && payload.type === 'ping') this.broadcast(JSON.stringify({ type: 'pong', at: Date.now() }), ws);
-  }
-  webSocketClose(ws) {
-    try { ws.close(1000, 'Durable Object is closing WebSocket'); } catch (_) { /* already closed */ }
   }
 }
 ` : ''}

@@ -18,6 +18,10 @@
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import { createRuntime, loadWorker } from './generated-runtime.mjs';
+// The runtime installs its own setTimeout on globalThis for the duration of a run. The
+// harness flushes a deferred WebSocket frame through it, and a queued callback would never
+// run against a runtime that is about to be disposed. The native timer is captured first.
+import { setTimeout as nativeSetTimeout } from 'node:timers';
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
@@ -91,13 +95,19 @@ export async function startDeploymentHarness(files, { env = {}, host = '127.0.0.
         return;
       }
       // Which half does the generated Worker hand back? A Durable Object that uses the
-      // hibernation API registers the SERVER half with ctx.acceptWebSocket() and returns the
-      // CLIENT half to the runtime, so every broadcast is sent on `server` — while a plain
-      // implementation registers and returns the same half. Forwarding whichever half the
-      // DO actually broadcasts on is what keeps a real two-client proof honest.
-      const registered = workerEnv?.LIVE?.__sockets;
-      const candidates = registered ? [...registered] : [];
-      const outbound = candidates.find((s) => s !== shim) ?? shim;
+      // hibernation API registers the SERVER half and returns the CLIENT half, so every
+      // broadcast is sent on `server`. Forwarding whichever half the DO actually sends on is
+      // what keeps a real two-client proof honest.
+      // The Durable Object owns its client set (`this.clients`); the runtime shim publishes the
+      // same set as `__sockets`. Either is the set the DO actually sends on — and it is NOT
+      // the half it returns to the runtime, so forwarding `shim` alone sends every broadcast
+      // into a socket nobody is listening on.
+      const namespace = workerEnv?.LIVE;
+      const stub = namespace?.get && namespace.get() ? namespace.get(namespace.idFromName('global')) : null;
+      const owned = stub?.clients instanceof Set ? [...stub.clients] : null;
+      const published = namespace?.__sockets ? [...namespace.__sockets] : null;
+      const candidates = owned?.length ? owned : (published ?? []);
+      const outbound = candidates.find((s) => s !== shim) ?? candidates[0] ?? shim;
       // Exactly one blank line terminates the handshake. A second one is read by the client
       // as a stray frame and closes the socket with "invalid opcode".
       socket.write([
@@ -112,6 +122,30 @@ export async function startDeploymentHarness(files, { env = {}, host = '127.0.0.
         try { socket.write(textFrame(typeof data === 'string' ? data : String(data))); } catch (_) { /* the client went away */ }
         return originalSend(data);
       };
+      // Anything the Durable Object sent BEFORE the runtime patched `send` never reached
+      // the client. The generated channel confirms the connection from the server side the
+      // moment it accepts the socket, so that confirmation is always sent too early and was
+      // silently dropped — leaving the two-client proof waiting for a message that had
+      // already been written to a socket nobody was reading yet. Flush it now.
+      // Anything the Durable Object sent BEFORE the runtime patched `send` never reached
+      // the client. The generated channel confirms the connection from the server side the
+      // moment it accepts the socket, so that confirmation is always sent too early and was
+      // silently dropped — leaving the two-client proof waiting for a message that had
+      // already been written to a socket nobody was reading yet.
+      //
+      // It is flushed on the NEXT tick, not inline. A frame written in the same write as
+      // the handshake is coalesced by TCP into the very read the client uses to finish the
+      // handshake, and Node's WebSocket — unlike `ws` — discards those bytes as part of the
+      // response. The connection looks open and every message is gone. One tick later the
+      // client is past the handshake and reads the frame normally.
+      const early = [...(outbound.messages ?? [])].splice(0);
+      if (early.length) {
+        nativeSetTimeout(() => {
+          for (const message of early) {
+            try { socket.write(textFrame(String(message))); } catch (_) { /* the client went away */ }
+          }
+        }, 0);
+      }
       // The generated channel is server→client, so the only client frame that matters is
       // the close handshake. Answering it keeps undici's parser from being left waiting on a
       // socket the server has already gone away from — which used to surface as an

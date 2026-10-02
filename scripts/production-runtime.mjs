@@ -24,6 +24,10 @@
 
 import { createRuntime, loadWorker, ShimClientWebSocket } from './generated-runtime.mjs';
 import { startDeploymentHarness } from './deployment-harness.mjs';
+// The live-channel client speaks RFC 6455 over a raw socket rather than using Node's built-in
+// WebSocket — see openLiveSocket() for the two failures that motivated it.
+import net from 'node:net';
+import { createHash, randomBytes } from 'node:crypto';
 
 /**
  * Run generated FRONTEND code with a client WebSocket that records instead of dialling.
@@ -381,65 +385,109 @@ export function judgeDeployedJourney({ spec = {}, architecture = {}, tests = {},
  * does anyway: connect, receive frames, close.
  */
 async function openLiveSocket(url, sink, timeoutMs) {
-  const { request: httpRequest } = await import('node:http');
-  const { randomBytes } = await import('node:crypto');
   return new Promise((resolve, reject) => {
+    // A raw TCP socket with a hand-rolled RFC 6455 handshake, NOT Node's built-in
+    // WebSocket. Two independent reasons, both observed here:
+    //
+    //   * Node's parser leaves a timer behind when the server answers a close handshake, and
+    //     that timer throws AFTER the run has printed its verdict, failing CI for a run that
+    //     passed.
+    //   * It discards any frame that arrives in the same TCP read that completed the
+    //     handshake. A Durable Object confirms the connection the moment it accepts the
+    //     socket, so that confirmation is almost always coalesced with the 101 — the socket
+    //     opened, every message was silently dropped, and the live channel looked connected.
+    //
+    // A real socket with an explicit close frame has neither problem, and it is a truer
+    // picture of what a browser does: connect, receive frames, close.
     const target = new URL(String(url).replace(/^ws/i, 'http'));
     const key = randomBytes(16).toString('base64');
-    const req = httpRequest({
-      hostname: target.hostname,
-      port: target.port,
-      path: `${target.pathname}${target.search}`,
-      headers: {
-        Connection: 'Upgrade',
-        Upgrade: 'websocket',
-        'Sec-WebSocket-Key': key,
-        'Sec-WebSocket-Version': '13'
+    const socket = net.connect(Number(target.port || 80), target.hostname, () => {
+      socket.write([
+        `GET ${target.pathname}${target.search} HTTP/1.1`,
+        `Host: ${target.host}`,
+        'Upgrade: websocket',
+        'Connection: Upgrade',
+        `Sec-WebSocket-Key: ${key}`,
+        'Sec-WebSocket-Version: 13',
+        '', ''
+      ].join('\r\n'));
+    });
+    let settled = false;
+    let handshakeDone = false;
+    let buffered = Buffer.alloc(0);
+    // RFC 6455's GUID. Transposed once here, which made every live connection look like the
+    // server had refused to upgrade even while it answered 101 with a correct accept key.
+    const expect = createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+    socket.on('error', () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`the live socket at ${url} could not be opened`));
+    });
+    socket.on('data', (chunk) => {
+      buffered = Buffer.concat([buffered, chunk]);
+      if (!handshakeDone) {
+        const end = buffered.indexOf('\r\n\r\n');
+        if (end < 0) return;
+        const head = buffered.subarray(0, end).toString('utf8');
+        buffered = buffered.subarray(end + 4);
+        if (!/^HTTP\/1\.1 101/.test(head) || !head.includes(expect)) {
+          if (!settled) {
+            settled = true;
+            reject(new Error(`the live socket at ${url} answered ${head.split('\r\n')[0]} instead of upgrading`));
+          }
+          socket.destroy();
+          return;
+        }
+        handshakeDone = true;
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({
+          send(text) {
+            const payload = Buffer.from(String(text), 'utf8');
+            const mask = randomBytes(4);
+            let header;
+            if (payload.length < 126) { header = Buffer.alloc(2); header[1] = 0x80 | payload.length; }
+            else if (payload.length < 65536) { header = Buffer.alloc(4); header[1] = 0x80 | 126; header.writeUInt16BE(payload.length, 2); }
+            else { header = Buffer.alloc(10); header[1] = 0x80 | 127; header.writeBigUInt64BE(BigInt(payload.length), 2); }
+            header[0] = 0x81;
+            const masked = Buffer.from(payload);
+            for (let i = 0; i < masked.length; i += 1) masked[i] ^= mask[i % 4];
+            try { socket.write(Buffer.concat([header, mask, masked])); } catch (_) { /* the socket went away */ }
+          },
+          close() {
+            // A masked close frame, then a real FIN: no timer is left behind.
+            const mask = randomBytes(4);
+            try {
+              socket.write(Buffer.concat([Buffer.from([0x88, 0x80]), mask]));
+              socket.end();
+            } catch (_) { /* already gone */ }
+          }
+        });
+      }
+      // Frames the server sent after the handshake. Server frames are never masked.
+      while (buffered.length >= 2) {
+        const opcode = buffered[0] & 0x0f;
+        let length = buffered[1] & 0x7f;
+        let offset = 2;
+        if (length === 126) { if (buffered.length < 4) break; length = buffered.readUInt16BE(2); offset = 4; }
+        else if (length === 127) { if (buffered.length < 10) break; length = Number(buffered.readBigUInt64BE(2)); offset = 10; }
+        if (buffered.length < offset + length) break;
+        const payload = buffered.subarray(offset, offset + length).toString('utf8');
+        buffered = buffered.subarray(offset + length);
+        if (opcode === 0x1 || opcode === 0x2) sink.push(payload);
+        if (opcode === 0x8) { try { socket.end(); } catch (_) { /* closed */ } }
       }
     });
-    const fail = (message) => { try { req.destroy(); } catch (_) { /* gone */ } reject(new Error(message)); };
-    const timer = setTimeout(() => fail(`the live socket at ${url} did not open before the timeout`), timeoutMs);
-    req.on('error', (error) => { clearTimeout(timer); fail(`the live socket at ${url} errored: ${error.message}`); });
-    req.on('response', (res) => { clearTimeout(timer); fail(`the live socket at ${url} answered HTTP ${res.statusCode} instead of upgrading`); });
-    req.on('upgrade', (res, socket) => {
-      clearTimeout(timer);
-      if (res.statusCode !== 101) { socket.destroy(); fail(`the live socket at ${url} answered HTTP ${res.statusCode} instead of 101`); return; }
-      let buffered = Buffer.alloc(0);
-      socket.on('data', (chunk) => {
-        buffered = Buffer.concat([buffered, chunk]);
-        // Server→client frames are never masked; only the length needs decoding.
-        for (;;) {
-          if (buffered.length < 2) break;
-          const opcode = buffered[0] & 0x0f;
-          let length = buffered[1] & 0x7f;
-          let offset = 2;
-          if (length === 126) { if (buffered.length < 4) break; length = buffered.readUInt16BE(2); offset = 4; }
-          else if (length === 127) { if (buffered.length < 10) break; length = Number(buffered.readBigUInt64BE(2)); offset = 10; }
-          if (buffered.length < offset + length) break;
-          const payload = buffered.subarray(offset, offset + length).toString('utf8');
-          buffered = buffered.subarray(offset + length);
-          if (opcode === 0x1 || opcode === 0x2) sink.push(payload);
-          if (opcode === 0x8) { try { socket.end(); } catch (_) { /* closed */ } }
-        }
-      });
-      socket.on('error', () => { /* the server went away */ });
-      resolve({
-        close() {
-          try {
-            // A masked close frame, then a real FIN. The server answers and both ends go
-            // quietly, with no timer left to fire after the verdict has been printed.
-            const mask = randomBytes(4);
-            const frame = Buffer.concat([Buffer.from([0x88, 0x80]), mask]);
-            socket.write(frame);
-            socket.end();
-          } catch (_) { /* already gone */ }
-        }
-      });
-    });
-    req.end();
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch (_) { /* already gone */ }
+      reject(new Error(`the live socket at ${url} did not open before the timeout`));
+    }, timeoutMs);
+    return;
   });
 }
-
 /**
  * Point 11. TWO INDEPENDENT CLIENTS of the ACTUAL deployment: connect both to the live
  * route, make one write through the HTTP API, and require BOTH sockets to receive the
@@ -456,6 +504,14 @@ export async function runDeployedRealtimeTwoClient({ baseUrl, recordsPath, token
   try {
     socketA = await openLiveSocket(url, clientA, timeoutMs);
     socketB = await openLiveSocket(url, clientB, timeoutMs);
+    for (let i = 0; i < 40 && (!clientA.some((m) => m.includes('"type":"connected"')) || !clientB.some((m) => m.includes('"type":"connected"'))); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const connectedA = clientA.some((m) => m.includes('"type":"connected"'));
+    const connectedB = clientB.some((m) => m.includes('"type":"connected"'));
+    if (!connectedA || !connectedB) {
+      return { passed: false, detail: `the live handshake opened but the server-side WebSocket confirmation was missing (A: ${connectedA}, B: ${connectedB})`, clients: 2, received: 0 };
+    }
     const before = { a: clientA.length, b: clientB.length };
     const write = await callApi('POST', recordsPath, { body: { title: 'realtime two-client proof', detail: 'broadcast probe' }, token });
     if (!write.ok) return { passed: false, detail: `the write that should broadcast → ${write.status}`, clients: 2, received: 0 };
@@ -471,7 +527,7 @@ export async function runDeployedRealtimeTwoClient({ baseUrl, recordsPath, token
       received: Number(gotA) + Number(gotB),
       detail: gotA && gotB
         ? `both independently connected clients received the write made over HTTP (A: ${clientA.length - before.a} message(s), B: ${clientB.length - before.b} message(s))`
-        : `client A received ${clientA.length - before.a}, client B received ${clientB.length - before.b} — a change on one client did not reach the other through the deployment`,
+        : `client A received ${clientA.length - before.a}, client B received ${clientB.length - before.b}, Worker-reported liveDelivered=${write.body?.liveDelivered ?? 'unknown'} — a change on one client did not reach the other through the deployment`,
       payload
     };
   } catch (error) {
