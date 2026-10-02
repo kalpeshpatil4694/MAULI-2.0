@@ -381,72 +381,40 @@ export function judgeDeployedJourney({ spec = {}, architecture = {}, tests = {},
  * does anyway: connect, receive frames, close.
  */
 async function openLiveSocket(url, sink, timeoutMs) {
-  const { request: httpRequest } = await import('node:http');
-  const { randomBytes } = await import('node:crypto');
   return new Promise((resolve, reject) => {
-    const target = new URL(String(url).replace(/^ws/i, 'http'));
-    const key = randomBytes(16).toString('base64');
-    const req = httpRequest({
-      hostname: target.hostname,
-      port: target.port,
-      path: `${target.pathname}${target.search}`,
-      headers: {
-        Connection: 'Upgrade',
-        Upgrade: 'websocket',
-        'Sec-WebSocket-Key': key,
-        'Sec-WebSocket-Version': '13'
-      }
-    });
-    const fail = (message) => { try { req.destroy(); } catch (_) { /* gone */ } reject(new Error(message)); };
-    const timer = setTimeout(() => fail(`the live socket at ${url} did not open before the timeout`), timeoutMs);
-    req.on('error', (error) => { clearTimeout(timer); fail(`the live socket at ${url} errored: ${error.message}`); });
-    req.on('response', (res) => { clearTimeout(timer); fail(`the live socket at ${url} answered HTTP ${res.statusCode} instead of upgrading`); });
-    req.on('upgrade', (res, socket) => {
+    const WebSocketClient = globalThis.WebSocket;
+    if (typeof WebSocketClient !== 'function') {
+      reject(new Error('Node WebSocket client is unavailable in this runner'));
+      return;
+    }
+    let settled = false;
+    const socket = new WebSocketClient(String(url));
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { socket.close(); } catch (_) { /* already closed */ }
+      reject(new Error(`the live socket at ${url} did not open before the timeout`));
+    }, timeoutMs);
+    socket.addEventListener('open', () => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      if (res.statusCode !== 101) { socket.destroy(); fail(`the live socket at ${url} answered HTTP ${res.statusCode} instead of 101`); return; }
-      let buffered = Buffer.alloc(0);
-      socket.on('data', (chunk) => {
-        buffered = Buffer.concat([buffered, chunk]);
-        // Server→client frames are never masked; only the length needs decoding.
-        for (;;) {
-          if (buffered.length < 2) break;
-          const opcode = buffered[0] & 0x0f;
-          let length = buffered[1] & 0x7f;
-          let offset = 2;
-          if (length === 126) { if (buffered.length < 4) break; length = buffered.readUInt16BE(2); offset = 4; }
-          else if (length === 127) { if (buffered.length < 10) break; length = Number(buffered.readBigUInt64BE(2)); offset = 10; }
-          if (buffered.length < offset + length) break;
-          const payload = buffered.subarray(offset, offset + length).toString('utf8');
-          buffered = buffered.subarray(offset + length);
-          if (opcode === 0x1 || opcode === 0x2) sink.push(payload);
-          if (opcode === 0x8) { try { socket.end(); } catch (_) { /* closed */ } }
-        }
-      });
-      socket.on('error', () => { /* the server went away */ });
       resolve({
-        send(text) {
-          const payload = Buffer.from(String(text), 'utf8');
-          if (payload.length >= 126) throw new Error('test WebSocket payload is unexpectedly large');
-          const mask = randomBytes(4);
-          const header = Buffer.from([0x81, 0x80 | payload.length]);
-          const masked = Buffer.alloc(payload.length);
-          for (let i = 0; i < payload.length; i++) masked[i] = payload[i] ^ mask[i % 4];
-          socket.write(Buffer.concat([header, mask, masked]));
-        },
-        close() {
-          try {
-            // A masked close frame, then a real FIN. The server answers and both ends go
-            // quietly, with no timer left to fire after the verdict has been printed.
-            const mask = randomBytes(4);
-            const frame = Buffer.concat([Buffer.from([0x88, 0x80]), mask]);
-            socket.write(frame);
-            socket.end();
-          } catch (_) { /* already gone */ }
-        }
+        send(text) { socket.send(String(text)); },
+        close() { try { socket.close(1000, 'acceptance complete'); } catch (_) { /* closed */ } }
       });
     });
-    req.end();
+    socket.addEventListener('message', (event) => {
+      sink.push(typeof event.data === 'string' ? event.data : String(event.data));
+    });
+    socket.addEventListener('error', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`the live socket at ${url} failed to open`));
+    });
   });
+}
 }
 
 /**
