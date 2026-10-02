@@ -414,15 +414,16 @@ export class LiveConnections extends DurableObject {
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade', { status: 426 });
     const pair = new WebSocketPair();
     const client = pair[0];
-    client.accept();
-    this.clients.add(client);
-    client.addEventListener('message', async (event) => {
+    const server = pair[1];
+    server.accept();
+    this.clients.add(server);
+    server.addEventListener('message', async (event) => {
       let payload;
       try { payload = JSON.parse(String(event.data)); } catch (_) { return; }
-      if (payload && payload.type === 'ping') this.broadcast(JSON.stringify({ type: 'pong', at: Date.now() }), client);
+      if (payload && payload.type === 'ping') this.broadcast(JSON.stringify({ type: 'pong', at: Date.now() }), server);
     });
-    client.addEventListener('close', () => { this.clients.delete(client); });
-    client.addEventListener('error', () => { this.clients.delete(client); });
+    server.addEventListener('close', () => { this.clients.delete(server); });
+    server.addEventListener('error', () => { this.clients.delete(server); });
     return new Response(null, { status: 101, webSocket: client });
   }
 }
