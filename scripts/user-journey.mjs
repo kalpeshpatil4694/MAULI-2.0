@@ -291,7 +291,19 @@ export async function runUserJourney(files, { spec = {}, architecture = {}, env 
       }
       const submit = elements.find(([, el]) => el.tagName === 'BUTTON' && !el.hidden
         && /save|add|create|submit|record|log|entry/i.test(String(el.textContent ?? el.value ?? '')));
-      await interact(app, { fill, click: submit?.[0], call: pickCreateHandler(app) ?? undefined });
+      // The generated frontend is intentionally wrapped in an IIFE, so its saveItem()
+      // function is not a window/global handler. A real browser activates the form listener
+      // by submitting the form; dispatch that same event instead of guessing a global name.
+      const form = app.elements.get('mauli-create-form');
+      if (form?.dispatchEvent) {
+        for (const [id, value] of Object.entries(fill)) {
+          const el = app.elements.get(id);
+          if (el) el.value = String(value);
+        }
+        form.dispatchEvent({ type: 'submit', target: form, preventDefault() {} });
+      } else {
+        await interact(app, { fill, click: submit?.[0], call: pickCreateHandler(app) ?? undefined });
+      }
       await drainMicrotasks(app);
       const before = app.storage.size;
       push(findStep('create'), before > 0, `offline app wrote ${before} localStorage key(s)`);
