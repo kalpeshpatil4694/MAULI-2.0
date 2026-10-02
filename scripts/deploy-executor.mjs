@@ -260,6 +260,17 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(db.message, ''), errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}` } };
       }
     }
+    // A newly provisioned remote D1 is empty. Generated Workers also create their schema
+    // defensively on first request, but production acceptance must not depend on request-time
+    // DDL: apply the generated migration to the exact database bound to this Worker before
+    // deployment. This prevents a valid generated API from reaching a real D1 with no schema.
+    const migrationDir = join(root, 'migrations');
+    if (existsSync(migrationDir) && dbName) {
+      const migrated = await run(wranglerCommand(), ['d1', 'migrations', 'apply', dbName, '--remote', '--yes'], { cwd: root });
+      if (migrated.code !== 0) {
+        return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(migrated.stderr, migrated.stdout), errorMessage: `the generated project's D1 migrations could not be applied: ${redact(migrated.stderr || migrated.stdout)}` } };
+      }
+    }
     const validation = await run(wranglerCommand(), ['deploy', '--dry-run'], { cwd: root });
     if (validation.code !== 0) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(validation.stderr, validation.stdout), errorMessage: `wrangler validation failed before deployment: ${redact(validation.stderr || validation.stdout)}` } };
