@@ -157,13 +157,19 @@ jobs:
       # `vars.MAULI_RUNTIME_PROJECT` survives ONLY as an optional single-project fixture
       # filter for debugging; production acceptance does not depend on it.
       - name: Production runtime acceptance (every generated project)
-        if: ${{ secrets.MAULI_FOUNDER_KEY != '' }}
         env:
           MAULI_BASE_URL: ${{ vars.MAULI_BASE_URL }}
           MAULI_KEY: ${{ secrets.MAULI_FOUNDER_KEY }}
           MAULI_RUNTIME_FIXTURE: ${{ vars.MAULI_RUNTIME_PROJECT }}
         run: |
           set -euo pipefail
+          # No founder key means the sweep cannot authenticate. That is a configuration gap,
+          # not a product failure, so it is reported and the step ends without claiming
+          # anything. (A step-level `if` cannot read `secrets` — hence the guard in-script.)
+          if [ -z "${MAULI_KEY:-}" ]; then
+            echo "::notice::MAULI_FOUNDER_KEY is not configured; the per-project runtime sweep is skipped and every generated project stays BLOCKED on runtime evidence."
+            exit 0
+          fi
           BASE="${MAULI_BASE_URL:-https://mauli-2-0.kalpeshpatil4694.workers.dev}"
           if [ -n "${MAULI_RUNTIME_FIXTURE:-}" ]; then
             echo "::notice::Fixture mode: only project ${MAULI_RUNTIME_FIXTURE} is re-tested. Production acceptance is per project and does not use this variable."
