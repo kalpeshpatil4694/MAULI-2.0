@@ -99,4 +99,47 @@ function regressionsAcross(repairs, finalResult) {
  */
 export { planJourney, DIAGNOSIS };
 
+/**
+ * The same bounded loop, one stage further out: after every rebuild the WHOLE production
+ * runtime acceptance is re-run, not just the journey.
+ *
+ * Point 18: a repair regenerates the code and redeploys it, so the acceptance that passed
+ * before the repair described bytes that no longer exist. This loop therefore refuses to
+ * reuse an earlier verdict — each attempt earns its own evidence, and only the run that
+ * finally passes is the one that may be recorded.
+ *
+ * @param {() => Promise<Array>} buildFiles - produces the candidate implementation
+ * @param {object} options
+ * @param {(files:Array, ctx:{attempt:number, diagnosis:object|null}) => Promise<{passed:boolean, report?:object}>} options.accept
+ *        re-deploys and re-runs the acceptance for a rebuilt application
+ * @returns {{passed:boolean, attempts:number, repairs:Array, runs:Array, accepted:object|null}}
+ */
+export async function repairUntilRuntimeAcceptance(buildFiles, {
+  maxAttempts = 2, accept
+} = {}) {
+  if (typeof accept !== 'function') throw new Error('repairUntilRuntimeAcceptance needs an accept() that redeploys and re-runs the acceptance');
+  const repairs = [];
+  const runs = [];
+  let files = await buildFiles(0);
+  let attempt = 0;
+  let outcome = await accept(files, { attempt, diagnosis: null });
+
+  while (outcome?.passed !== true && attempt < maxAttempts) {
+    attempt++;
+    const diagnosis = {
+      attempt,
+      failedTests: (outcome?.report?.failedTests ?? []).map((f) => f.test ?? f),
+      blockingCode: outcome?.report?.blockingCode ?? null,
+      causes: [outcome?.report?.blockingReason ?? 'the acceptance run did not pass'].filter(Boolean)
+    };
+    repairs.push(diagnosis);
+    // Rebuild → redeploy → re-run the WHOLE acceptance. The previous evidence is discarded
+    // here on purpose: it described the previous build.
+    files = await buildFiles(attempt, diagnosis);
+    outcome = await accept(files, { attempt, diagnosis });
+    runs.push({ attempt, passed: outcome?.passed === true, blockingCode: outcome?.report?.blockingCode ?? null });
+  }
+  return { passed: outcome?.passed === true, attempts: attempt, repairs, runs, accepted: outcome?.report ?? null };
+}
+
 export default repairUntilTheJourneyPasses;

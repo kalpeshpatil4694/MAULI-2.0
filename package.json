@@ -11,6 +11,8 @@
     "test:routes": "node scripts/dryrun-durable-routes.mjs",
     "test:runtime": "node scripts/verify-generated-app.mjs --self-test",
     "verify:runtime": "node scripts/production-runtime.mjs --self-test",
+    "verify:deployment": "node --test tests/generated-deployment-identity.test.js tests/production-runtime-acceptance.test.js",
+    "sweep:runtime": "node scripts/accept-runtime.mjs",
     "accept:runtime": "node scripts/accept-runtime.mjs",
     "verify:journey": "node --test tests/generated-app-runtime.test.js tests/functional-fidelity-2.test.js",
     "verify:app": "node scripts/verify-generated-app.mjs --verify",

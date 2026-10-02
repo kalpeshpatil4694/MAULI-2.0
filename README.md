@@ -103,13 +103,46 @@ error path → user journey), never from reading its source:
 
 ```bash
 npm run verify:runtime    # the engine's own contract: a real product passes, a fake is caught
-npm run accept:runtime -- --project <projectId> --base <url>   # record the run on the project
+npm run verify:deployment # the A–L deployment/identity scenario matrix
+npm run accept:runtime -- --project <projectId> --key <founder key> --deployed <generated app url>
 ```
 
 The verdict is stored on the project (`runtimeAcceptance`), rendered in the Founder Command
 Center as **Production Runtime: PASS / FAILED / BLOCKED** with tested-at, deployment, API,
 database, authentication, journey and the blocking reason, and re-checked by Final Delivery.
 Secrets are never persisted: the store redacts credential-shaped keys before writing.
+
+### Deploy first, then prove it over the network
+
+A backend product is proved by running **its own deployed URL**, so the deployment is part of
+the evidence rather than a detail beside it. Every generated project carries a deployment
+record — `status`, `url`, `deploymentId`, `deployedAt`, `commit`, `environment` and the id of
+the exact artifact that was deployed:
+
+```text
+generated source → install → build → wrangler validation → deploy → actual URL
+  → real HTTP E2E → real D1 CRUD → authentication journey → per-requirement runtime evidence
+```
+
+- **Automatic and per project.** `POST /api/runtime-acceptance/sweep` walks every project with
+  generated code and no passing evidence. There is no `MAULI_RUNTIME_PROJECT` in production;
+  the variable survives only as an optional single-project fixture filter for debugging.
+- **No runner, no silent skip.** With no `MAULI_DEPLOY_EXECUTOR` / `MAULI_RUNTIME_EXECUTOR` a
+  backend project is **BLOCKED / DEPENDENCY_REQUIRED**, never passed and never skipped.
+- **Source-level execution is not production.** A run made by executing the source in-process
+  is a fixture; against a deployed backend the gate refuses it.
+- **Identity is checked, not assumed.** Project ↔ artifact ↔ deployment ↔ evidence ↔ matrix ↔
+  delivery must be one chain. A run produced for another project is refused at the write
+  (HTTP 409), a URL that is MAULI's own control plane is refused, and a repair that
+  regenerates the code invalidates the previous PASS until the new build is re-accepted.
+- **Honest failures.** A failed deployment records its category (`credentials`, `quota`,
+  `build`, `deployment`, `network`), a redacted message and a timestamp; QA, Integrity and
+  Final Delivery all stay blocked behind it.
+
+Browser-only projects are not forced through a Worker deployment they never owed: they are
+judged on UI interaction, on-device persistence and requirement evidence in a real runtime.
+Native projects owe `android-launch` — an APK/AAB that merely builds is
+`ANDROID_RUNTIME = BLOCKED`.
 
 
 ## CI/CD

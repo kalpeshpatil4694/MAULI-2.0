@@ -548,7 +548,7 @@ function projRealState(p){const t=S.tasks.filter(t=>t.projectId===p.id);if(!t.le
 function renderProjects(){
   const search=($('projSearch')?.value||'').toLowerCase();const filter=$('projFilter')?.value||'';
   let list=S.projects;if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>projRealState(p)===filter);
-  let h='<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Production Runtime</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
+  let h='<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Deployment</th><th>Production Runtime</th><th>Runtime URL</th><th>Final Delivery</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
   // hasCode comes from the server (it can see every artifact); the capped local sample
   // is only a fallback, which is why the download/preview/build buttons used to vanish
   // for finished projects whose artifact sat outside /api/state's newest 100.
@@ -557,7 +557,18 @@ function renderProjects(){
     // PASS / FAILED / BLOCKED next to the project state instead of having to open it and
     // find a "QA Passed" badge that says nothing about whether the product was ever run.
     const rt=p.productionRuntime||null;const rtLabel=String((rt&&rt.label)||'NOT RUN');const rtCls=rtLabel==='PASS'?'g':rtLabel==='FAILED'?'r':rtLabel==='LOCAL'?'a':'y';
-    h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(rs)+'">'+esc(rs)+'</span></td><td><span class="badge badge-'+rtCls+'" title="'+esc(rt&&rt.reason?rt.reason:'No production runtime acceptance run has been recorded for this project.')+'">'+esc(rtLabel)+'</span></td><td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
+    // Point 21: deployment, runtime URL and final-delivery readiness are their OWN columns.
+    // Folding them into a single "QA Passed" is what let a never-deployed product read as
+    // finished, so the table can no longer show runtime without saying where it ran.
+    const dep=String((rt&&rt.deploymentStatus)||'NOT_DEPLOYED');const depCls=dep==='DEPLOYED'?'g':dep==='FAILED'?'r':'y';
+    const url=(rt&&rt.runtimeUrl)||null;
+    const fd=(rt&&rt.finalDelivery)||'BLOCKED';
+    h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(rs)+'">'+esc(rs)+'</span></td>'+
+    '<td><span class="badge badge-'+depCls+'" title="'+esc((rt&&rt.deploymentError)?(rt.deploymentError.category+': '+rt.deploymentError.message):dep)+'">'+esc(dep)+'</span></td>'+
+    '<td><span class="badge badge-'+rtCls+'" title="'+esc(rt&&rt.reason?rt.reason:'No production runtime acceptance run has been recorded for this project.')+'">'+esc(rtLabel)+'</span></td>'+
+    '<td style="font-size:10px">'+(url?'<a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(url.slice(url.indexOf('://')+3))+'</a>':'<span style="color:var(--text2)">—</span>')+'</td>'+
+    '<td><span class="badge badge-'+(fd==='READY'?'g':'r')+'">'+esc(fd)+'</span></td>'+
+    '<td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
     h+='<button class="btn btn-a btn-s proj-detail" data-pid="'+p.id+'">📄 Details</button>';
     h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥</button>';
     // A class, not an inline window.open(): /api/preview-app is founder-protected and a new tab cannot send the key header, so this button used to open a 401 page. The injected live layer (DASHBOARD_LIVE_SCRIPT) handles .pv-btn with the key attached.

@@ -27,7 +27,14 @@
 // acceptance run, carries the stages the architecture actually owes, and every critical
 // requirement has a named runtime test behind it.
 
-export const PRODUCTION_RUNTIME_VERSION = 1;
+// The deployment record is the input that makes "it ran" mean "it ran WHERE". Both modules
+// are pure and Worker-safe, so the Worker applies exactly the rules CI's executor reported.
+import {
+  DEPLOYMENT_STATUS, DEPLOYMENT_BLOCKING, normalizeDeployment, assertRuntimeIdentity,
+  runtimeDeploymentKind
+} from './generated-deployment.js';
+
+export const PRODUCTION_RUNTIME_VERSION = 2;
 
 // The mandatory order the pipeline must respect:
 //   Build → Tests → Requirements → Security → Functional Fidelity → Production Runtime
@@ -48,7 +55,15 @@ export const RUNTIME_BLOCKING = {
   EVIDENCE_INCOMPLETE: 'runtime-evidence-incomplete',
   RUNTIME_FAILED: 'runtime-failed',
   DEPENDENCY_REQUIRED: 'dependency-required',
-  NO_FALSE_PASS: 'no-false-pass-violation'
+  NO_FALSE_PASS: 'no-false-pass-violation',
+  // The deployment contract. These are distinct from "no evidence": they say WHAT is
+  // missing before an acceptance run can even mean anything.
+  DEPLOYMENT_FAILED: 'deployment-failed',
+  NO_DEPLOYMENT: 'deployment-missing',
+  NO_DEPLOYMENT_URL: 'deployment-url-missing',
+  IDENTITY_MISMATCH: 'runtime-identity-mismatch',
+  EXECUTOR_UNAVAILABLE: 'runtime-executor-unavailable',
+  ANDROID_RUNTIME_UNAVAILABLE: 'android-runtime-unavailable'
 };
 
 // ---------------------------------------------------------------------------
@@ -66,6 +81,7 @@ export const RUNTIME_STAGES = [
   { id: 'crud-lifecycle', label: 'create → read → update → read → delete → read missing', scope: 'data' },
   { id: 'error-handling', label: 'Errors surface instead of a fabricated success', scope: 'always' },
   { id: 'user-journey', label: 'The founder journey completes', scope: 'always' },
+  { id: 'android-runtime', label: 'The packaged app runs on a real device or emulator', scope: 'native' },
   { id: 'evidence', label: 'Runtime evidence recorded per critical requirement', scope: 'always' }
 ];
 
@@ -75,8 +91,10 @@ export const RUNTIME_TESTS = [
   'deployment', 'health', 'api-contract',
   'unauthorized', 'register', 'duplicate-register', 'login', 'invalid-login', 'session',
   'invalid-input', 'create', 'read', 'update', 'delete', 'read-missing', 'refresh',
+  'database',
   'realtime', 'logout', 'post-logout', 'error-path', 'fake-check', 'user-journey',
-  'ui-interaction', 'local-persistence', 'external-service'
+  'ui-interaction', 'local-persistence', 'external-service',
+  'android-launch'
 ];
 
 const TEST_LABEL = {
@@ -96,6 +114,7 @@ const TEST_LABEL = {
   delete: 'a delete removes the stored record',
   'read-missing': 'reading the deleted record returns nothing (404/absent)',
   refresh: 'data written earlier is still present on a later request',
+  database: 'the real database holds the rows the API wrote through it',
   realtime: 'a write reaches a second connected client live',
   logout: 'logout invalidates the session',
   'post-logout': 'the old session is refused after logout (401)',
@@ -104,7 +123,8 @@ const TEST_LABEL = {
   'user-journey': 'the founder journey completes end to end',
   'ui-interaction': 'the UI has bound controls that change real state',
   'local-persistence': 'records persist on the device and survive a reload',
-  'external-service': 'the external service is called for real'
+  'external-service': 'the external service is called for real',
+  'android-launch': 'the built app installs and launches on a real device or emulator'
 };
 
 export function testLabel(id) { return TEST_LABEL[id] ?? id; }
@@ -185,8 +205,9 @@ export function requiredTestsForRequirement(requirement, architecture = null) {
  * A browser-only app is not forced to invent D1 endpoints; a backend app is not allowed to
  * substitute a page for them (spec item 9).
  */
-export function runtimeObligations({ architecture = null, spec = null, files = [], hasBackend = false } = {}) {
+export function runtimeObligations({ architecture = null, spec = null, files = [], hasBackend = false, platform = null, deployment = null } = {}) {
   const backend = architecture ? architecture.backend === true : Boolean(hasBackend);
+  const deploymentKind = runtimeDeploymentKind({ architecture, platform });
   const auth = architecture?.auth === true || spec?.authentication?.required === true;
   const realtime = architecture?.realtime === true || spec?.realtime?.required === true;
   const externalServices = spec?.externalServices ?? [];
@@ -197,7 +218,7 @@ export function runtimeObligations({ architecture = null, spec = null, files = [
 
   if (backend) {
     for (const id of ['deployment', 'health', 'api-contract', 'core-operation', 'database', 'crud-lifecycle', 'error-handling', 'user-journey', 'evidence']) stages.add(id);
-    for (const id of ['deployment', 'health', 'api-contract', 'create', 'read', 'update', 'delete', 'read-missing', 'refresh', 'error-path', 'fake-check', 'user-journey']) tests.add(id);
+    for (const id of ['deployment', 'health', 'api-contract', 'create', 'read', 'update', 'delete', 'read-missing', 'refresh', 'database', 'error-path', 'fake-check', 'user-journey']) tests.add(id);
     if (auth) {
       stages.add('authentication');
       for (const id of ['unauthorized', 'register', 'duplicate-register', 'login', 'invalid-login', 'session', 'logout', 'post-logout']) tests.add(id);
@@ -214,6 +235,13 @@ export function runtimeObligations({ architecture = null, spec = null, files = [
   }
   if (realtime && backend) tests.add('realtime');
   if (externalServices.length) tests.add('external-service');
+  // Point 12. An APK/AAB that merely BUILDS is not runtime evidence: the packaged app has
+  // to install and launch somewhere and reach its API. With no device or emulator the
+  // honest verdict is ANDROID_RUNTIME = BLOCKED, so the test is owed and never silently met.
+  if (deploymentKind === 'native') {
+    stages.add('android-runtime');
+    tests.add('android-launch');
+  }
 
   // The obligations must be the SUPERSET of what any requirement in this specification will
   // demand as evidence. Deriving them from the architecture alone left `invalid-input` (and,
@@ -232,6 +260,11 @@ export function runtimeObligations({ architecture = null, spec = null, files = [
     auth,
     realtime,
     data,
+    // What kind of deployment this project owes: a real Worker URL, an installed package,
+    // or no server at all. `deploymentRequired` is what the gate checks the record against.
+    deploymentKind,
+    deploymentRequired: deploymentKind === 'backend' || deploymentKind === 'native',
+    deploymentStatus: normalizeDeployment(deployment).status,
     externalServices: externalServices.map((s) => ({ key: s.key, label: s.label, envVar: s.envVar })),
     environment: backend ? 'production-like worker + D1' : 'generated app + device store',
     stages: RUNTIME_STAGES.filter((s) => stages.has(s.id)).map((s) => s.id),
@@ -292,6 +325,16 @@ export function fakeRuntimeSignals(files = []) {
  */
 export function runtimeRequirementEvidence({ requirements = [], acceptance = null, architecture = null } = {}) {
   const tests = acceptance?.tests ?? null;
+  // Point 8 asks for a row, not a badge: which endpoint was called, what was sent, what came
+  // back, what the database did, which journey step this was, when, and against WHICH
+  // deployment. Every one of those is read out of the run the executor already produced.
+  const testedUrl = typeof acceptance?.deployment === 'string'
+    ? acceptance.deployment
+    : (acceptance?.deployment?.url ?? null);
+  const testedAt = acceptance?.testedAt ?? null;
+  const journeySteps = new Map((acceptance?.journey?.steps ?? []).map((s) => [s.id, s]));
+  const deploymentRef = acceptance?.deployment?.deploymentId ?? acceptance?.deploymentId ?? testedUrl;
+
   return (Array.isArray(requirements) ? requirements : []).map((requirement) => {
     const required = requiredTestsForRequirement(requirement, architecture);
     const observed = [];
@@ -333,6 +376,12 @@ export function runtimeRequirementEvidence({ requirements = [], acceptance = nul
     const missing = observed.some((o) => o.status === 'MISSING');
     const failed = observed.some((o) => o.status === 'FAIL');
     status = failed ? 'FAIL' : missing ? 'BLOCKED' : 'PASS';
+    // The single richest observed test is the one quoted in the row: the endpoint/action,
+    // the request that was issued and the response that came back.
+    const primary = observed.filter((o) => o.status === 'PASS').pop() ?? observed[0] ?? null;
+    const primaryTest = primary ? tests?.[primary.test] : null;
+    const journeyStep = primary ? (journeySteps.get(primary.test) ?? journeySteps.get('core-operation') ?? null) : null;
+    const persistedTests = observed.filter((o) => tests?.[o.test]?.persisted === true);
     return {
       requirementId: requirement.id ?? null,
       description: requirement.title ?? String(requirement.id ?? ''),
@@ -341,7 +390,18 @@ export function runtimeRequirementEvidence({ requirements = [], acceptance = nul
       runtimeTest: required.join(', '),
       runtimeEvidence: observed.map((o) => `${o.test}:${o.status}`).join(', '),
       status,
-      failureReason: status === 'PASS' ? null : failureReason
+      failureReason: status === 'PASS' ? null : failureReason,
+      // ── the evidence itself, so a founder can audit the claim ──────────────
+      endpoint: primaryTest?.request ?? null,
+      response: primaryTest ? `HTTP ${primaryTest.responseStatus ?? '—'}${primaryTest.detail ? ` — ${primaryTest.detail}` : ''}` : null,
+      responseStatus: primaryTest?.responseStatus ?? null,
+      databaseEvidence: persistedTests.length
+        ? persistedTests.map((o) => `${o.test}: persisted in the database`).join('; ')
+        : (primaryTest?.persisted === false ? 'the write was not observed in the database' : null),
+      journeyStep: journeyStep ? `${journeyStep.id}: ${journeyStep.status}` : null,
+      runtimeTimestamp: testedAt,
+      deploymentUrl: testedUrl,
+      deploymentRef
     };
   });
 }
@@ -363,7 +423,21 @@ export const NO_FALSE_PASS_RULES = [
   { code: 'journey-failed', why: 'the critical user journey failed' },
   { code: 'api-contract-mismatch', why: 'the API contract does not match the generated frontend' },
   { code: 'persistence-failed', why: 'database persistence failed' },
-  { code: 'auth-flow-failed', why: 'the authentication flow failed' }
+  { code: 'auth-flow-failed', why: 'the authentication flow failed' },
+  // ── point 16: the full "never call this a PASS" contract ──────────────────────
+  { code: 'no-actual-deployment', why: 'the generated project was never deployed' },
+  { code: 'no-actual-url', why: 'the deployment produced no runtime URL' },
+  { code: 'no-deployed-backend', why: 'a backend is required but no backend was deployed' },
+  { code: 'executor-unavailable', why: 'no runtime executor was available to produce evidence' },
+  { code: 'no-actual-http-test', why: 'the acceptance run did not issue real HTTP requests' },
+  { code: 'no-d1-verification', why: 'D1 is required but was not verified against a real deployment' },
+  { code: 'no-auth-journey', why: 'authentication is required but its full journey was not run' },
+  { code: 'no-external-api-test', why: 'an external API is required but was never called for real' },
+  { code: 'no-realtime-e2e', why: 'real-time is required but no two-client proof was produced' },
+  { code: 'generated-tested-mismatch', why: 'the app that was tested is not the app that was generated' },
+  { code: 'wrong-deployment-url', why: 'the deployment URL belongs to another project' },
+  { code: 'mock-response', why: 'a mocked response was reported as production behaviour' },
+  { code: 'android-runtime-missing', why: 'a native build was not run on a device or emulator' }
 ];
 
 /**
@@ -438,10 +512,13 @@ export function noFalsePassViolations({
  */
 export function evaluateRuntimeAcceptance({
   files = [], architecture = null, spec = null, requirements = [], acceptance = null,
-  fidelity = null, credentials = {}, hasBackend = false
+  fidelity = null, credentials = {}, hasBackend = false,
+  deployment = null, projectId = null, platform = null,
+  executorConfigured = null, controlPlaneUrls = [], expectedArtifactId = null, currentArtifactId = null
 } = {}) {
   const list = (Array.isArray(files) ? files : []).filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string');
-  const obligations = runtimeObligations({ architecture, spec, files: list, hasBackend });
+  const deploymentRecord = normalizeDeployment(deployment);
+  const obligations = runtimeObligations({ architecture, spec, files: list, hasBackend, platform, deployment: deploymentRecord });
   const evidence = runtimeRequirementEvidence({ requirements, acceptance, architecture });
 
   const missingTests = obligations.requiredTests.filter((id) => !acceptance?.tests?.[id]);
@@ -465,7 +542,14 @@ export function evaluateRuntimeAcceptance({
     version: PRODUCTION_RUNTIME_VERSION,
     status: RUNTIME_STATUS.BLOCKED,
     environment: obligations.environment,
-    deployment: acceptance?.deployment ?? (obligations.backend ? 'not deployed for acceptance' : 'generated app executed in the local runtime'),
+    // The deployment RECORD, not a sentence. The URL the run used, when it was deployed, which
+    // artifact was deployed, and — when it failed — the category and a safe message.
+    deploymentRecord,
+    deploymentKind: obligations.deploymentKind,
+    deployment: acceptance?.deployment ?? (obligations.backend
+      ? (deploymentRecord.url ?? 'not deployed for acceptance')
+      : 'generated app executed in the local runtime'),
+    runtimeUrl: deploymentRecord.url,
     transport: acceptance?.transport ?? null,
     testedAt: acceptance?.testedAt ?? null,
     health: acceptance?.tests?.health?.status ?? (obligations.backend ? 'NOT TESTED' : 'N/A'),
@@ -516,6 +600,59 @@ export function evaluateRuntimeAcceptance({
   if (unmetDependencies.length) {
     report.blockingCode = RUNTIME_BLOCKING.DEPENDENCY_REQUIRED;
     report.blockingReason = unmetDependencies.map((d) => d.reason).join('; ');
+    report.failures.push(report.blockingReason);
+    return report;
+  }
+  // ── the deployment contract ───────────────────────────────────────────────
+  // A backend project's acceptance run means nothing without the URL it ran against, and
+  // nothing at all without the project the URL belongs to. Each of these is BLOCKED (not
+  // FAILED) because nothing has been proven wrong with the product yet — the proof was
+  // never produced. Deployment failure names the category and a safe, secret-free message.
+  if (obligations.deploymentRequired) {
+    if (deploymentRecord.status === DEPLOYMENT_STATUS.FAILED) {
+      report.blockingCode = RUNTIME_BLOCKING.DEPLOYMENT_FAILED;
+      report.blockingReason = `The generated project failed to deploy — ${deploymentRecord.errorCategory ?? 'unknown error'}: ${deploymentRecord.errorMessage ?? 'the deploy runner reported a failure'}`;
+      report.failures.push(report.blockingReason);
+      return report;
+    }
+    if (deploymentRecord.status !== DEPLOYMENT_STATUS.DEPLOYED) {
+      report.blockingCode = RUNTIME_BLOCKING.NO_DEPLOYMENT;
+      report.blockingReason = `The generated project has not been deployed (deployment status: ${deploymentRecord.status}). A backend product is proved by running its own deployed URL, not its source.`;
+      report.failures.push(report.blockingReason);
+      return report;
+    }
+    if (!deploymentRecord.url) {
+      report.blockingCode = RUNTIME_BLOCKING.NO_DEPLOYMENT_URL;
+      report.blockingReason = 'The deployment reported DEPLOYED but produced no URL, so there is nothing to send real HTTP requests to.';
+      report.failures.push(report.blockingReason);
+      return report;
+    }
+    // Point 13: an unconfigured executor must never mean a silent skip. For a project that
+    // owes a deployed backend it is an explicit BLOCKED, named as a dependency.
+    if (executorConfigured === false) {
+      report.blockingCode = RUNTIME_BLOCKING.EXECUTOR_UNAVAILABLE;
+      report.blockingReason = 'No runtime executor is configured (MAULI_RUNTIME_EXECUTOR), so no real HTTP run can be produced for this deployed backend project. This is BLOCKED, never a skip and never a PASS.';
+      report.failures.push(report.blockingReason);
+      return report;
+    }
+  }
+  // Point 17: project ↔ artifact ↔ deployment ↔ evidence ↔ matrix ↔ delivery must be one
+  // chain. A run produced for another project, a URL that is not this project's, or a
+  // source-level run standing in for a deployed one, is BLOCKED.
+  const identity = assertRuntimeIdentity({
+    projectId, acceptance, deployment: deploymentRecord,
+    controlPlaneUrls, expectedArtifactId, currentArtifactId, required: obligations.deploymentRequired
+  });
+  if (!identity.ok) {
+    report.blockingCode = RUNTIME_BLOCKING.IDENTITY_MISMATCH;
+    report.blockingReason = `Generated project identity check failed: ${identity.violations.map((v) => `${v.code} (${v.why})`).join('; ')}`;
+    report.failures.push(...identity.violations.map((v) => v.code));
+    return report;
+  }
+  // Point 12: a native build that was never installed is not runtime evidence.
+  if (obligations.deploymentKind === 'native' && acceptance && acceptance.tests?.['android-launch']?.status !== 'PASS') {
+    report.blockingCode = RUNTIME_BLOCKING.ANDROID_RUNTIME_UNAVAILABLE;
+    report.blockingReason = `ANDROID_RUNTIME is BLOCKED: the package${acceptance.tests['android-launch'] ? ' was built but never launched on a device or emulator' : ' was built but no device or emulator is available to run it on'}. An APK/AAB build is not runtime evidence.`;
     report.failures.push(report.blockingReason);
     return report;
   }
@@ -597,17 +734,30 @@ export function describeRuntimeAcceptance(record) {
   if (!record) {
     return {
       status: 'BLOCKED', label: 'BLOCKED', reason: 'Production runtime acceptance has not run for this project.',
-      testedAt: null, deployment: null, api: null, database: null, authentication: null, userJourney: null,
-      criticalPassed: 0, criticalFailed: 0, blockingReason: 'Production runtime acceptance has not run for this project.'
+      testedAt: null, deployment: null, deploymentStatus: DEPLOYMENT_STATUS.NOT_DEPLOYED, runtimeUrl: null,
+      api: null, database: null, authentication: null, userJourney: null,
+      criticalPassed: 0, criticalFailed: 0, finalDelivery: 'BLOCKED',
+      blockingReason: 'Production runtime acceptance has not run for this project.'
     };
   }
   const passed = record.status === RUNTIME_STATUS.PASSED;
+  const dep = record.deploymentRecord ?? normalizeDeployment(record.deployment);
   return {
     status: String(record.status ?? 'blocked').toUpperCase(),
     label: passed ? 'PASS' : record.status === RUNTIME_STATUS.FAILED ? 'FAILED' : 'BLOCKED',
     reason: record.blockingReason ?? (passed ? 'Every critical requirement has passing runtime evidence.' : null),
     testedAt: record.testedAt ?? null,
     deployment: record.deployment ?? null,
+    // Point 21: the founder sees deployment and the actual URL as their own lines, never
+    // folded into "QA passed".
+    deploymentStatus: dep.status,
+    runtimeUrl: dep.url ?? (typeof record.deployment === 'string' ? record.deployment : null),
+    deploymentId: dep.deploymentId ?? null,
+    deployedAt: dep.deployedAt ?? null,
+    deploymentError: dep.errorMessage ? { category: dep.errorCategory, message: dep.errorMessage } : null,
+    transport: record.transport ?? null,
+    // Point 21: Final Delivery READY / BLOCKED, stated next to the runtime verdict.
+    finalDelivery: passed ? 'READY' : 'BLOCKED',
     api: record.api ?? null,
     database: record.database ?? null,
     authentication: record.authentication ?? null,
@@ -634,15 +784,30 @@ export function describeRuntimeAcceptance(record) {
 export function describeStoredRuntimeAcceptance(project) {
   if (!project) return describeRuntimeAcceptance(null);
   if (project.runtimeAcceptanceReport) return describeRuntimeAcceptance(project.runtimeAcceptanceReport);
+  // No verdict stored yet. Whether that is a normal "not run yet" or an actual blocker
+  // depends on the deployment the project owes, and the founder can see which.
+  const dep = normalizeDeployment(project.runtimeDeployment);
+  const projected = {
+    ...describeRuntimeAcceptance(null),
+    deploymentStatus: dep.status,
+    runtimeUrl: dep.url,
+    deployment: dep.url ?? dep.errorMessage ?? dep.status
+  };
   if (project.architecture && project.architecture.backend === false) {
     return {
-      ...describeRuntimeAcceptance(null),
+      ...projected,
       status: 'not-run',
       label: 'LOCAL',
       reason: 'Browser-only architecture: there is no server to deploy. The production-runtime gate judges UI interaction, persistence and requirement evidence from executed source — open Project Details for the verdict.'
     };
   }
-  return describeRuntimeAcceptance(null);
+  if (dep.status === DEPLOYMENT_STATUS.FAILED) {
+    return { ...projected, reason: `Deployment failed (${dep.errorCategory ?? 'unknown'}): ${dep.errorMessage ?? 'see the deployment record'}`, blockingReason: projected.reason };
+  }
+  if (dep.status === DEPLOYMENT_STATUS.NOT_DEPLOYED) {
+    return { ...projected, reason: 'Not deployed yet — a backend project must be deployed before its runtime acceptance can be produced.' };
+  }
+  return projected;
 }
 
 /**
@@ -723,6 +888,9 @@ export async function dispatchRuntimeAcceptance(env, { project, files, spec, arc
     platform: project?.platform ?? null,
     architecture: architecture ?? null,
     spec: spec ?? null,
+    // The runner must test THIS project's deployed URL. Without it the runner falls back to
+    // executing the source locally, which is a fixture — the engine then BLOCKEDs it.
+    deployment: normalizeDeployment(project?.runtimeDeployment ?? null),
     requirements: requirements.map((r) => ({ id: r.id, title: r.title, category: r.category, critical: r.critical === true })),
     files: (files ?? []).map((f) => ({ path: f.path, content: f.content }))
   };

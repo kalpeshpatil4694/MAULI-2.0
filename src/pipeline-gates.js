@@ -5,8 +5,9 @@ import { selectAgents, seedAgents } from './agents.js';
 import { listProjectArtifacts } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
 import { buildRequirementMatrix, scoreGeneratedAppQuality, dualStatus } from './requirement-matrix.js';
-import { hasBackendEntryPoint, describeRuntimeAcceptance } from './production-runtime.js';
+import { hasBackendEntryPoint, describeRuntimeAcceptance, runtimeExecutorConfigured } from './production-runtime.js';
 import { runtimeAcceptanceFor, ensureRuntimeAcceptance } from './runtime-evidence.js';
+import { DEPLOYMENT_STATUS, normalizeDeployment, runtimeDeploymentKind } from './generated-deployment.js';
 import { now } from './core.js';
 
 // Build → Tests → Requirements → Security → Functional Fidelity → Production Runtime → QA
@@ -277,13 +278,17 @@ async function gateResult(task,gateEnv=null){
       externalServices.map(s=>[s.envVar,Boolean(gateEnv?.[s.envVar]??(project?.runtimeCredentials??{})[s.envVar])])
     );
     const {acceptance,report}=runtimeAcceptanceFor({
-      project, files, hasBackend:hasBackendEntryPoint(files), credentials,
+      project, files, hasBackend:hasBackendEntryPoint(files), credentials, env:gateEnv,
       // Same fidelity verdict the functional-fidelity gate used: without it the no-false-PASS
       // rules would judge a placeholder app as clean here while that gate refused it.
       fidelity:files.length?analyzeGeneratedApp(files,{objective:project?.objective??'',requirements:project?.requirements??[]}):null
     });
     return {
       project, files, acceptance, report, credentials,
+      deployment:normalizeDeployment(project?.runtimeDeployment??null),
+      // The same rule the engine uses to decide what this project owes a deployment, so the
+      // gate cannot demand a Worker URL from a browser-only app (or skip one for a backend).
+      deploymentRequired:runtimeDeploymentKind({architecture:project?.architecture??null,platform:project?.platform??null})!=='browser',
       runtimeRequired:project?.architecture?.backend===true||hasBackendEntryPoint(files),
       status:describeRuntimeAcceptance(report)
     };
@@ -347,12 +352,31 @@ async function gateResult(task,gateEnv=null){
     await ensureRuntimeAcceptance(pid,gateEnv);
     const ctx=runtimeContext();
     check('functional_fidelity_gate_passed',f?.state==='completed'&&(f?.result?.passed??true)!==false,'The functional fidelity gate has not passed');
+    // ── deployment, before anything can be called runtime evidence ──────────
+    // A backend product that was never deployed has nothing to run against. This check is
+    // explicit so the gate names WHICH link is missing rather than reporting a generic
+    // "no acceptance run", and so a FAILED deploy carries its category and a safe message.
+    if(ctx.deploymentRequired){
+      const dep=ctx.deployment;
+      check('generated_project_deployed',dep.status!==DEPLOYMENT_STATUS.FAILED,
+        `The generated project failed to deploy (${dep.errorCategory??'unknown'}): ${dep.errorMessage??'see the deployment record'}`);
+      check('deployment_url_captured',dep.status===DEPLOYMENT_STATUS.DEPLOYED&&Boolean(dep.url),
+        dep.errorMessage?`Deployment failed: ${dep.errorMessage}`:'The generated project has not been deployed, so there is no URL to run real HTTP requests against');
+      check('deployment_identity_matches_project',!dep.url||Boolean(dep.projectId===pid||ctx.report.status!=='passed'),
+        `The deployment URL ${dep.url??''} is not recorded as belonging to this project`);
+      check('runtime_executor_available',!runtimeExecutorConfigured(gateEnv)&&ctx.runtimeRequired?false:true,
+        'MAULI_RUNTIME_EXECUTOR is not configured, so no real HTTP runtime acceptance can be produced for this deployed backend project');
+    }
     if(ctx.runtimeRequired){
       check('runtime_acceptance_recorded',Boolean(ctx.acceptance),'No production runtime acceptance run has been recorded for this project');
       check('production_runtime_passed',ctx.report.status==='passed',ctx.report.blockingReason??'Production runtime acceptance did not pass');
       check('critical_requirements_runtime_verified',ctx.report.criticalFailed.length===0,ctx.report.criticalFailed.length?('Critical requirement(s) without passing runtime evidence: '+ctx.report.criticalFailed.join(', ')):'');
       check('no_false_pass',ctx.report.noFalsePass.length===0,ctx.report.noFalsePass.length?('No false PASS: '+ctx.report.noFalsePass.map(v=>`${v.code} (${v.detail})`).join('; ')):'');
       check('external_dependencies_declared',ctx.report.dependenciesRequired.length===0,ctx.report.dependenciesRequired.map(d=>d.reason).join('; '));
+      // Point 4: production acceptance for a deployed backend is real network HTTP. A run
+      // that executed the source in-process is a local fixture and never counts.
+      check('real_http_acceptance_run',ctx.acceptance?.transport==='deployed-http',
+        `the acceptance run used the "${ctx.acceptance?.transport??'none'}" transport; a deployed backend project must be tested over real HTTP against ${ctx.deployment.url??'its deployed URL'}`);
     } else {
       // Browser-only / local architecture (point 9). There is no server to deploy and no D1 to
       // round-trip, so the bar is the one this architecture actually owes — and it is not

@@ -5,6 +5,7 @@ import { registerArtifact } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
 import { buildRequirementMatrix, buildTraceability, scoreGeneratedAppQuality, dualStatus } from './requirement-matrix.js';
 import { hasBackendEntryPoint, describeRuntimeAcceptance } from './production-runtime.js';
+import { DEPLOYMENT_STATUS, normalizeDeployment } from './generated-deployment.js';
 import { runtimeAcceptanceFor } from './runtime-evidence.js';
 import { describePlatform } from './platforms.js';
 
@@ -109,10 +110,27 @@ export function buildFinalDelivery(project,{enforceGates=false,env=null}={}) {
     (project.requirementSpec?.externalServices ?? []).map((s) => [s.envVar, Boolean(env?.[s.envVar] ?? (project.runtimeCredentials ?? {})[s.envVar])])
   );
   const runtimeReport = runtimeRequired
-    ? runtimeAcceptanceFor({ project, files: mergedFiles, hasBackend: backendOwed, fidelity, credentials }).report
+    ? runtimeAcceptanceFor({ project, files: mergedFiles, hasBackend: backendOwed, fidelity, credentials, env }).report
     : null;
   if (runtimeRequired && runtimeReport.status !== 'passed') {
     throw new Error(`Delivery blocked: PRODUCTION RUNTIME ${String(runtimeReport.status).toUpperCase()} (${runtimeReport.blockingCode}) — ${runtimeReport.blockingReason}`);
+  }
+  // Point 20: the deployment is a delivery precondition of its own. A backend project with
+  // no deployment record, or a FAILED one, is BLOCKED before any artifact is registered —
+  // so no ZIP can exist for a product that was never deployed.
+  if (enforceGates && backendOwed) {
+    const deployment = normalizeDeployment(project.runtimeDeployment ?? runtimeReport?.deploymentRecord ?? null);
+    if (deployment.status === DEPLOYMENT_STATUS.FAILED) {
+      throw new Error(`Delivery blocked: DEPLOYMENT FAILED (${deployment.errorCategory ?? 'unknown'}) — ${deployment.errorMessage ?? 'the deploy runner reported a failure'}`);
+    }
+    if (deployment.status !== DEPLOYMENT_STATUS.DEPLOYED || !deployment.url) {
+      throw new Error(`Delivery blocked: the generated project was never deployed (status ${deployment.status}), so there is no runtime to deliver`);
+    }
+    // The acceptance run must have hit THAT url — not a fixture, not another project.
+    const tested = runtimeReport?.runtimeUrl ?? deployment.url;
+    if (runtimeReport && runtimeReport.status === 'passed' && runtimeReport.transport && runtimeReport.transport !== 'deployed-http') {
+      throw new Error(`Delivery blocked: production runtime evidence was produced by the "${runtimeReport.transport}" transport; a deployed backend must be proven over real HTTP against ${deployment.url} (tested: ${tested})`);
+    }
   }
   // Architecture obligations are delivery obligations. A specification that selected a
   // Worker API must not be satisfied by a page: the gates judge the UNION of every agent's
@@ -233,6 +251,10 @@ export function buildFinalDelivery(project,{enforceGates=false,env=null}={}) {
       status: runtimeReport.status,
       environment: runtimeReport.environment,
       deployment: runtimeReport.deployment,
+      deploymentKind: runtimeReport.deploymentKind ?? null,
+      deploymentRecord: runtimeReport.deploymentRecord ?? null,
+      runtimeUrl: runtimeReport.runtimeUrl ?? null,
+      transport: runtimeReport.transport ?? null,
       testedAt: runtimeReport.testedAt,
       health: runtimeReport.health,
       api: runtimeReport.api,
