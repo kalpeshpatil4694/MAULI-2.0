@@ -4,12 +4,16 @@ import { d1Get, hasD1 } from './db.js';
 import { registerArtifact } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
 import { buildRequirementMatrix, buildTraceability, scoreGeneratedAppQuality, dualStatus } from './requirement-matrix.js';
-import { hasBackendEntryPoint } from './functional-code-executor.js';
+import { hasBackendEntryPoint, describeRuntimeAcceptance } from './production-runtime.js';
+import { runtimeAcceptanceFor } from './runtime-evidence.js';
 import { describePlatform } from './platforms.js';
 
-const REQUIRED_GATES=['build','test','requirements','security','qa','integrity'];
+// Final Delivery is allowed only after every mandatory gate, INCLUDING the two new ones.
+// The order is the point: Functional Fidelity proves the code is a working app, Production
+// Runtime proves the app was RUN, and only then may QA, Integrity and delivery happen.
+const REQUIRED_GATES=['build','test','requirements','security','functional-fidelity','production-runtime','qa','integrity'];
 
-export function buildFinalDelivery(project,{enforceGates=false}={}) {
+export function buildFinalDelivery(project,{enforceGates=false,env=null}={}) {
   if (!project?.id) throw new Error('project is required');
 
   const tasks = store.list('tasks').filter(t => t.projectId === project.id);
@@ -57,6 +61,19 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
   }
   const gates = new Map(tasks.filter(t => t.pipelineGate && t.gateType).map(t => [t.gateType,t]));
 
+  // A gate that RAN and reported `passed:false` must block delivery. Until now a gate's
+  // verdict lived only in its result row and the task state still read 'completed', so a
+  // failed gate could sit behind a completed project. "Tests passed" is not "the gate passed".
+  if(enforceGates){
+    const failedGates=REQUIRED_GATES
+      .map(type=>({type,gate:gates.get(type)}))
+      .filter(({gate})=>gate&&((gate.result??gate.output??null)?.passed===false));
+    if(failedGates.length){
+      const detail=failedGates.map(({type,gate})=>{const r=gate.result??gate.output??{};return `${type} (${r.blockingReason??r.summary??'gate reported a failure'})`;}).join('; ');
+      throw new Error(`Delivery blocked: mandatory gate(s) FAILED — ${detail}`);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // THE REQUIREMENT MATRIX GATE.
   //
@@ -68,6 +85,35 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
   const spec = project.requirementSpec ?? null;
   const specRequirements = spec?.requirements ?? [];
   const runtime = project.runtimeEvidence ?? null;
+
+  // ---------------------------------------------------------------------------
+  // PRODUCTION RUNTIME ACCEPTANCE GATE (points 6, 8 and 17).
+  //
+  // "Tests passed" is not "the product runs". A project built from a founder
+  // specification — or any project whose delivered code carries a backend — is judged on the
+  // runtime acceptance it actually recorded. A missing report, a failed report or a critical
+  // requirement without passing runtime evidence means Deliver Status: BLOCKED, with the
+  // exact reason, and no ZIP is produced.
+  //
+  // Legacy projects with neither a specification nor a backend entry point keep the
+  // historical path: there is no architectural obligation to enforce for them.
+  // ---------------------------------------------------------------------------
+  const backendOwed = project.architecture?.backend === true || hasBackendEntryPoint(mergedFiles);
+  // Only the authoritative, gate-enforcing path (the scheduler) requires the acceptance run,
+  // and only where the architecture owes a deployable server. Direct/legacy execution stays
+  // compatible, exactly as the mandatory-gate check below already does. A browser-only app
+  // is held to its own architecture's bar by the production-runtime gate (UI interaction +
+  // persistence + requirement evidence), not to a D1 round trip it was never owed.
+  const runtimeRequired = enforceGates && backendOwed;
+  const credentials = Object.fromEntries(
+    (project.requirementSpec?.externalServices ?? []).map((s) => [s.envVar, Boolean(env?.[s.envVar] ?? (project.runtimeCredentials ?? {})[s.envVar])])
+  );
+  const runtimeReport = runtimeRequired
+    ? runtimeAcceptanceFor({ project, files: mergedFiles, hasBackend: backendOwed, fidelity, credentials }).report
+    : null;
+  if (runtimeRequired && runtimeReport.status !== 'passed') {
+    throw new Error(`Delivery blocked: PRODUCTION RUNTIME ${String(runtimeReport.status).toUpperCase()} (${runtimeReport.blockingCode}) — ${runtimeReport.blockingReason}`);
+  }
   // Architecture obligations are delivery obligations. A specification that selected a
   // Worker API must not be satisfied by a page: the gates judge the UNION of every agent's
   // artifact, so one agent's static page must not quietly become the whole product.
@@ -85,9 +131,22 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
   // The matrix judges a PRODUCT. "Research a travel destination" generates no code and
   // rightly has no code requirements; gating it on "no placeholder implementation" would
   // refuse a completed research commission for shipping nothing.
-  const buildsProduct = mergedFiles.length > 0 || project.architecture?.backend === true || Boolean(spec?.productType);
+  //
+  // `productType` alone is not enough to run it: a command can name a product and still be a
+  // plan-only commission with no code task at all. The matrix runs when code exists, when the
+  // architecture owes a server, or when the plan itself scheduled a code task — and in that
+  // last case missing code is exactly what it is here to catch (every row goes BLOCKED).
+  const owesCode = tasks.some((t) =>
+    ['internal.code', 'internal.native', 'internal.pdf'].includes(t.executor)
+    || (Array.isArray(t.acceptance) && t.acceptance.some((a) => a?.field === 'type' && a?.equals === 'code')));
+  const buildsProduct = mergedFiles.length > 0 || project.architecture?.backend === true || owesCode;
   const matrix = specRequirements.length && buildsProduct
-    ? buildRequirementMatrix({ requirements: specRequirements, files: mergedFiles, fidelity, runtime, architecture: project.architecture ?? null })
+    ? buildRequirementMatrix({
+      requirements: specRequirements, files: mergedFiles, fidelity, runtime,
+      architecture: project.architecture ?? null,
+      acceptance: runtimeReport ? (project.runtimeAcceptance ?? null) : null,
+      runtimeRequired: Boolean(runtimeReport)
+    })
     : null;
   if (matrix && !matrix.deliverable) {
     const failed = matrix.criticalFailed.map(r => `${r.id} ${r.title}`).join('; ');
@@ -168,6 +227,27 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
     traceability,
     qualityScore: quality,
     status: dualStatus({ matrix, runtime, fidelity }),
+    // The runtime acceptance evidence store (point 15), and the one question the whole stage
+    // exists to answer. A delivery is only ever built with these present and PASSED.
+    productionRuntime: runtimeReport ? {
+      status: runtimeReport.status,
+      environment: runtimeReport.environment,
+      deployment: runtimeReport.deployment,
+      testedAt: runtimeReport.testedAt,
+      health: runtimeReport.health,
+      api: runtimeReport.api,
+      database: runtimeReport.database,
+      authentication: runtimeReport.authentication,
+      userJourney: runtimeReport.userJourney,
+      realtime: runtimeReport.realtime,
+      external: runtimeReport.external,
+      criticalPassed: runtimeReport.criticalPassed,
+      criticalFailed: runtimeReport.criticalFailed,
+      blockingReason: runtimeReport.blockingReason,
+      requirements: runtimeReport.requirements,
+      evidence: runtimeReport.evidence
+    } : null,
+    deliveryStatus: 'FINAL DELIVERY READY',
     functionalFidelity:fidelity?{
       passed:fidelity.passed,
       score:fidelity.score,
@@ -212,8 +292,12 @@ export function buildFinalDelivery(project,{enforceGates=false}={}) {
       platform: project.platform ?? null,
       platformLabel: describePlatform(project.platform),
       generatedBy: 'mauli-l1-delivery',
-      gate: 'build+test+requirements+security+qa+integrity',
-      mandatoryGatesPassed:true
+      gate: REQUIRED_GATES.join('+'),
+      mandatoryGatesPassed:true,
+      // The founder-facing delivery verdict (point 17). The artifact only exists when every
+      // gate, including Production Runtime, has passed — so this is READY, never BLOCKED.
+      deliveryStatus: 'FINAL DELIVERY READY',
+      productionRuntime: describeRuntimeAcceptance(runtimeReport)
     }
   });
 

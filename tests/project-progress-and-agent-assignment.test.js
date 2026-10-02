@@ -163,8 +163,10 @@ test('the detail pipeline creates gates the roster can actually staff', async ()
 
   const result = ensureProjectPipeline(pid);
   assert.ok(result && result.gates.length >= GATES.length, 'all gates must be created');
+  // Build → Tests → Requirements → Security → Functional Fidelity → Production Runtime
+  // → QA → Integrity, plus the two mandatory runtime gates (point 8).
   assert.deepEqual(result.gates.map((g) => g.type).sort(),
-    ['build', 'integrity', 'qa', 'requirements', 'security', 'test'].sort());
+    ['build', 'integrity', 'qa', 'requirements', 'security', 'test', 'functional-fidelity', 'production-runtime'].sort());
 
   const unstaffable = new Set();
   // Drive the chain the way the scheduler does: attempt every gate, complete what gets

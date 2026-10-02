@@ -16,6 +16,28 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   const ACTIVE_KEY='mauli_active_project';
   const rememberProject=pid=>{try{pid?sessionStorage.setItem(ACTIVE_KEY,pid):sessionStorage.removeItem(ACTIVE_KEY);}catch(_){}};
   const rememberedProject=()=>{try{return sessionStorage.getItem(ACTIVE_KEY)||null;}catch(_){return null;}};
+  // Point 16: Production Runtime is a first-class status, not a footnote under "QA Passed".
+  // The card always shows a verdict — PASS / FAILED / BLOCKED — with the exact reason, the
+  // tested-at stamp and the per-stage statuses the founder asked for.
+  function runtimeLine(pr){
+    const rt=pr&&pr.productionRuntime;
+    if(!rt)return '';
+    const label=String(rt.label||'BLOCKED');
+    const color=label==='PASS'?'var(--green)':label==='FAILED'?'var(--red)':'var(--yellow)';
+    const bg=label==='PASS'?'rgba(0,200,120,.12)':label==='FAILED'?'rgba(255,80,80,.12)':'rgba(255,190,60,.12)';
+    const j=v=>v===undefined||v===null?'—':esc(v);
+    const meta=[
+      rt.testedAt?('tested '+esc(stamp(rt.testedAt))):'not run yet',
+      'API '+j(rt.api), 'DB '+j(rt.database), 'Auth '+j(rt.authentication),
+      'Journey '+j(rt.userJourney),
+      'critical '+(Number(rt.criticalPassed)||0)+' pass / '+(Number(rt.criticalFailed)||0)+' fail'
+    ].join(' · ');
+    return '<div style="grid-column:1/-1;margin-top:6px;padding:7px 8px;border-radius:6px;background:'+bg+';color:'+color+';line-height:1.5">'+
+      '<b>Production Runtime: '+esc(label)+'</b>'+
+      '<div style="font-size:9.5px;opacity:.9;margin-top:2px">'+meta+'</div>'+
+      (rt.reason?'<div style="font-size:9.5px;margin-top:3px">'+esc(rt.reason)+'</div>':'')+
+      '</div>';
+  }
   function showProject(p,progress){
     if(!p)return;
     const pr=progress||{}; const timing=pr.timing||{};
@@ -34,6 +56,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       '<span>Agent: <b>'+esc(pr.currentAgent?.name||pr.currentAgent?.id||'—')+'</b></span><span>Next: <b>'+esc(next)+'</b></span>'+ '<span>Command: <b>'+esc(stamp(pr.commandReceivedAt))+'</b></span><span>Elapsed: <b>'+esc(timing.elapsedFormatted||'0s')+'</b></span>'+ '<span>Estimated: <b>'+esc(timing.estimatedDurationFormatted||'—')+'</b></span><span>Remaining: <b>'+esc(timing.remainingFormatted||'—')+'</b></span>'+
       '<span>Tasks: <b>'+n(ti.completed)+'/'+(n(ti.total)||'—')+'</b></span><span>Running: <b>'+n(ti.running??ti.working)+'</b></span>'+
       '<span>Queued: <b>'+n(ti.queued)+'</b></span><span>Failed: <b>'+n(ti.failed)+'</b></span>'+
+      runtimeLine(pr)+
       (cur?'<div style="grid-column:1/-1;margin-top:4px;color:var(--text2)">Current task: <b style="color:var(--text)">'+esc(cur.title)+'</b>'+(cur.agentName?' — '+esc(cur.agentName):'')+'</div>':'')+
       '</div>'+
       (p.state==='awaiting_approval'?'<div style="margin-top:8px;color:var(--yellow);font-weight:600">⏳ Founder approval प्रतीक्षेत — Approvals मध्ये "Approve" करा आणि मग हा command चालू होईल.</div>':'')+
@@ -110,6 +133,24 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       if(p.completedAt)txt+='Completed: '+p.completedAt+'\n';
       if(p.failedAt)txt+='Failed: '+p.failedAt+'\n';
       txt+='Duration: '+(s.totalTimeFormatted||'In progress')+'\n\n';
+      // The runtime verdict sits ABOVE the progress numbers: a founder reading this screen
+      // must see whether the product was actually run before they read that QA passed.
+      const rt=det.productionRuntime;
+      txt+='PRODUCTION RUNTIME: '+(rt?rt.label:'BLOCKED')+'\n';
+      if(rt){
+        txt+='  Tested at: '+(rt.testedAt||'not run yet')+'\n';
+        txt+='  Environment: '+(rt.environment||'—')+'\n';
+        txt+='  Deployment: '+(rt.deployment||'—')+'\n';
+        txt+='  API: '+(rt.api||'—')+' | Database: '+(rt.database||'—')+'\n';
+        txt+='  Authentication: '+(rt.authentication||'—')+' | User journey: '+(rt.userJourney||'—')+'\n';
+        txt+='  Critical requirements passed: '+(Number(rt.criticalPassed)||0)+' | failed: '+(Number(rt.criticalFailed)||0)+'\n';
+        if(rt.missingTests&&rt.missingTests.length)txt+='  Missing runtime tests: '+rt.missingTests.join(', ')+'\n';
+        if(rt.failedTests&&rt.failedTests.length)txt+='  Failed runtime tests: '+rt.failedTests.join(', ')+'\n';
+        if(rt.blockingReason)txt+='  Blocking reason: '+rt.blockingReason+'\n';
+        else if(rt.reason)txt+='  '+rt.reason+'\n';
+      }
+      if(p.blockedReason)txt+='DELIVERY STATUS: BLOCKED — '+p.blockedReason+'\n';
+      txt+='\n';
       txt+='PROGRESS: '+s.completedTasks+'/'+s.totalTasks+' tasks ('+s.progressPct+'%)\n';
       txt+='Completed: '+s.completedTasks+' | Running: '+s.runningTasks+' | Failed: '+s.failedTasks+' | Pending: '+s.pendingTasks+'\n\n';
       if(s.errors&&s.errors.length>0){txt+='ERRORS:\n';for(const e of s.errors)txt+='  - '+e.task+': '+e.error+'\n';txt+='\n';}

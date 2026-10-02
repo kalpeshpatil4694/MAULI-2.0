@@ -548,12 +548,16 @@ function projRealState(p){const t=S.tasks.filter(t=>t.projectId===p.id);if(!t.le
 function renderProjects(){
   const search=($('projSearch')?.value||'').toLowerCase();const filter=$('projFilter')?.value||'';
   let list=S.projects;if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>projRealState(p)===filter);
-  let h='<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
+  let h='<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Production Runtime</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
   // hasCode comes from the server (it can see every artifact); the capped local sample
   // is only a fallback, which is why the download/preview/build buttons used to vanish
   // for finished projects whose artifact sat outside /api/state's newest 100.
   for(const p of list){const hasCode=('hasCode' in p)?!!p.hasCode:S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');const canBuild=('canBuild' in p)?!!p.canBuild:hasCode;const rs=projRealState(p);const tasks=S.tasks.filter(t=>t.projectId===p.id);const done=tasks.filter(t=>t.state==='completed').length;const total=tasks.length;
-    h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(rs)+'">'+esc(rs)+'</span></td><td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
+    // Point 16: the runtime verdict is a column of its own, so the founder reads
+    // PASS / FAILED / BLOCKED next to the project state instead of having to open it and
+    // find a "QA Passed" badge that says nothing about whether the product was ever run.
+    const rt=p.productionRuntime||null;const rtLabel=String((rt&&rt.label)||'NOT RUN');const rtCls=rtLabel==='PASS'?'g':rtLabel==='FAILED'?'r':rtLabel==='LOCAL'?'a':'y';
+    h+='<tr><td><b>'+esc(p.name||p.objective||p.id)+'</b></td><td><span class="badge badge-'+badge(rs)+'">'+esc(rs)+'</span></td><td><span class="badge badge-'+rtCls+'" title="'+esc(rt&&rt.reason?rt.reason:'No production runtime acceptance run has been recorded for this project.')+'">'+esc(rtLabel)+'</span></td><td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
     h+='<button class="btn btn-a btn-s proj-detail" data-pid="'+p.id+'">📄 Details</button>';
     h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥</button>';
     // A class, not an inline window.open(): /api/preview-app is founder-protected and a new tab cannot send the key header, so this button used to open a 401 page. The injected live layer (DASHBOARD_LIVE_SCRIPT) handles .pv-btn with the key attached.

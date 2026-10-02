@@ -74,7 +74,8 @@ Delivery is gated. A project cannot be marked complete until every task is compl
 mandatory pipeline gates pass (`src/pipeline-gates.js`), in order:
 
 ```text
-build → test → requirements → security → qa → integrity
+build → test → requirements → security → functional-fidelity → production-runtime
+      → qa → integrity
 ```
 
 Each command run upserts exactly one `command_results` row keyed by its `runId`, so a retry
@@ -425,6 +426,104 @@ Two more were caught by `wrangler deploy --dry-run` while every unit test passed
 duplicate keys in the synonym map (the later entry silently wins), and an assignment to a
 destructured `const` that would have thrown inside the Worker at exactly the moment the
 model produced a browser-only page.
+
+### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
+
+Everything above proves the code is a working app. None of it proved the app **ran**. The
+runtime branch of the requirement matrix read `project.runtimeEvidence`, which nothing ever
+wrote; `runtimeRequired` was `false` on every path that reached delivery; and the pipeline
+ended at `build → test → requirements → security → qa → integrity`. A project could reach
+`completed` with a `REQUIREMENT NOT VERIFIED` badge and a QA row that said "passed".
+
+A mandatory gate now sits between Functional Fidelity and QA:
+
+```text
+build → test → requirements → security → functional-fidelity
+      → production-runtime → qa → integrity → Final Delivery
+```
+
+It answers one question, in code:
+
+> Founder ने command दिल्यावर MAULI ने तयार केलेला application त्याच्या वास्तविक requirements
+> प्रमाणे deploy होतो, चालतो, data persist करतो, user journey पूर्ण करतो आणि प्रत्येक critical
+> requirement साठी runtime evidence देतो का?
+
+**Three modules, one verdict.** `src/production-runtime.js` is pure and Worker-safe: it
+knows which stages and tests an architecture owes (`runtimeObligations`), which runtime test
+evidences each requirement (`runtimeRequirementEvidence`), the fourteen no-false-PASS rules,
+and the verdict itself (`evaluateRuntimeAcceptance`). `src/runtime-evidence.js` is the store:
+it merges the same code artifacts the gates judge, records a run, and projects it for the
+dashboard. `scripts/production-runtime.mjs` is the only thing that PRODUCES evidence — it
+executes the generated Worker against a real in-memory D1, real WebCrypto and a real
+`WebSocketPair`, or, with `baseUrl`, over real HTTP against a deployed Worker.
+
+```text
+DEPLOYED WORKER → Health → API contract → Authentication → Core business operation
+  → D1 persistence → create → read → update → read → delete → read-missing
+  → Error handling → User journey → Runtime evidence → PASS / BLOCKED
+```
+
+**The report is never allowed to claim more than it observed.** A test that did not run is
+absent, which the gate reads as BLOCKED; a test that observed a static body is FAIL. The
+strongest check is anti-fake: the record list is captured *before* and *after* a create, and
+an endpoint that answers the same bytes to both is a hardcoded JSON body whatever its status
+code says. Unhandled rejections from the generated app are collected as evidence against the
+app rather than being allowed to kill the run.
+
+**Obligations are the superset of what the specification demands.** Deriving the required
+tests from the architecture alone left `invalid-input` out while a critical security
+requirement demanded exactly that test — so every app that owed input validation was
+permanently BLOCKED by a test nobody had asked the run to perform. `runtimeObligations` now
+unions the architecture's stages with `requiredTestsForRequirement()` for every requirement
+in the specification.
+
+**A local app is held to its own bar, not a server's** (spec item 9). A browser-only
+architecture owes `ui-interaction`, `local-persistence` and `user-journey` — evidence its own
+executor records — and the requirement vocabulary is *translated* rather than trimmed:
+"create a record" on a device-store app is proven by the UI creating one, not by a 404 it was
+never given a server for. Fake detection for a local app still runs, statically, over the
+delivered source. `tests/production-runtime-acceptance.test.js` executes a calculator through
+the real executor to keep both halves honest.
+
+**External dependencies are declared, never faked** (spec item 10). A weather, maps, payment,
+SMS, email or AI requirement whose credential is absent yields `blocked / dependency-required`
+naming the env var — never a hardcoded success.
+
+**Requirement → runtime evidence** (points 6 and 7). Every row of the matrix now carries
+`runtimeTest`, `runtimeEvidence`, `runtimeStatus` and `failureReason`, so a critical
+requirement with no passing runtime test is `BLOCKED`, and `summary.runtimeVerified` counts
+only rows an executed test actually proved — a structural row's explanatory text is not a
+PASS.
+
+**The verdict is enforced twice.** The gate refuses to pass without a recorded run; Final
+Delivery independently throws `Delivery blocked: PRODUCTION RUNTIME <STATUS> (<code>)` — and
+also refuses any required gate whose own result says `passed:false`, because a gate row is
+`completed` from verification's point of view while its verdict is a refusal. QA reads the
+same refusal explicitly, so a completed QA row can never be read as "runtime was fine".
+
+**Recording.** `POST /api/projects/:id/runtime-acceptance` (founder key) stores a run;
+`POST .../runtime-acceptance/run` asks the configured `MAULI_RUNTIME_EXECUTOR` runner for one
+and answers `424 Failed Dependency` when none is configured — a dependency failure, not a
+pass. `scripts/accept-runtime.mjs --project <id>` is the harness: download the project's
+code, run the smoke test, post the evidence, exit with the verdict. Credential-shaped keys
+are redacted by the store before anything is written, so no secret is ever persisted.
+
+**The founder sees it** (point 16): the Projects table has a Production Runtime column, the
+live command card prints PASS / FAILED / BLOCKED with tested-at, API, DB, auth, journey and
+critical pass/fail counts, and Project Details adds the blocking reason and any missing or
+failed runtime tests above the progress numbers — never a bare "QA Passed".
+
+Two defects the gate found in MAULI's own shipped code:
+
+1. **The calculator template called `eval()`.** The security gate had always flagged it;
+   nothing enforced the gate's verdict, so the delivery check that now refuses a
+   `passed:false` gate turned a working-looking product into a blocked delivery. The template
+   parses the expression instead of evaluating it — the gate was right and the product was
+   fixed, rather than the rule being softened.
+2. **`fakeRuntimeSignals` scanned with comments removed**, so `// TODO finish this` — the
+   literal unfinished-work marker a user sees in the shipped source — was stripped before the
+   rule looked at it. Markers are now scanned raw; only the code-shaped signals keep the
+   comment-stripped view.
 
 ## 6. Upgradeability
 

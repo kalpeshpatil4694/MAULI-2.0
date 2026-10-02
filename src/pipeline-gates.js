@@ -5,15 +5,27 @@ import { selectAgents, seedAgents } from './agents.js';
 import { listProjectArtifacts } from './artifacts.js';
 import { analyzeGeneratedApp, evaluateRequirementCoverage } from './generated-app-quality.js';
 import { buildRequirementMatrix, scoreGeneratedAppQuality, dualStatus } from './requirement-matrix.js';
+import { hasBackendEntryPoint, describeRuntimeAcceptance } from './production-runtime.js';
+import { runtimeAcceptanceFor, ensureRuntimeAcceptance } from './runtime-evidence.js';
 import { now } from './core.js';
 
-export const GATES = ['build','test','requirements','security','qa','integrity'];
+// Build → Tests → Requirements → Security → Functional Fidelity → Production Runtime → QA
+// → Integrity → Final Delivery. The two extra gates exist so that "the app works" and "the
+// app was actually RUN against a real database and a real user journey" are separate,
+// mandatory steps between Security and QA — not a check hidden inside QA that a completed
+// project could carry a warning for.
+export const GATES = ['build','test','requirements','security','functional-fidelity','production-runtime','qa','integrity'];
 export const CAP = {
   build:['testing','verification'], test:['testing','verification'], requirements:['verification'],
   // Security used to require ['security','verification']. No single agent holds both —
   // the Security Agent has security, the QA Agent has verification — so the security gate
   // was unassignable by design, and qa + integrity (which chain behind it) blocked too.
-  security:['security'], qa:['testing','verification'], integrity:['verification']
+  security:['security'],
+  // Both new gates are verification work: they read evidence and judge it. `verification`
+  // alone is deliberate — requiring two capabilities no single agent holds is exactly the
+  // unassignable-gate defect the security entry above documents.
+  'functional-fidelity':['verification'], 'production-runtime':['verification'],
+  qa:['testing','verification'], integrity:['verification']
 };
 
 function artifacts(projectId){ return listProjectArtifacts(projectId).filter(a => a.type === 'code-workspace' || a.type === 'final-delivery'); }
@@ -159,6 +171,22 @@ function parsePackage(files){
   }catch(_){ return {exists:true,valid:false,buildScript:false,testScript:false}; }
 }
 
+// One place that answers "does every requirement have evidence?", so the functional fidelity
+// and QA gates cannot drift apart on it.
+function evidenceComplete(pid,merged,matrix,project){
+  if(matrix) return matrix.rows.every(r=>r.status!=='FAIL'&&r.status!=='BLOCKED');
+  const coverage=evaluateRequirementCoverage(project?.requirements??[],merged);
+  return coverage.filter(c=>c.status==='MISSING').length===0;
+}
+function evidenceGap(pid,merged,matrix,project){
+  if(matrix){
+    const bad=matrix.rows.filter(r=>r.status==='FAIL'||r.status==='BLOCKED');
+    return bad.length?('Requirement(s) without evidence: '+bad.slice(0,6).map(r=>`${r.id} ${r.title} (${r.failureReason??r.basis})`).join(' | ')):'';
+  }
+  const unmet=evaluateRequirementCoverage(project?.requirements??[],merged).filter(c=>c.status==='MISSING');
+  return unmet.length?('No source evidence for: '+unmet.slice(0,5).map(c=>c.requirement).join(' | ')):'';
+}
+
 function qualityProblems(code){
   const problems=[];
   for(const a of code){
@@ -183,7 +211,7 @@ async function sha256(textValue){
   return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
-async function gateResult(task){
+async function gateResult(task,gateEnv=null){
   const pid=task.projectId, type=task.gateType, arts=artifacts(pid), code=codeArtifacts(pid);
   let passed=true, checks=[];
   const check=(name,value,reason)=>{ checks.push({name,passed:Boolean(value),...(value?{}:{reason})}); if(!value) passed=false; };
@@ -208,6 +236,23 @@ async function gateResult(task){
   // The structured specification's own matrix. Requirement ids, criticality and per-row
   // evidence come from the founder's command, not from plan prose, so the gate reports on
   // exactly what was asked for.
+  // The functional fidelity of the MERGED code, computed once per gate result. REQ-009 ("No
+  // stub, mock or fake-success implementation") is evidenced by this gate, not by a word in
+  // the source, so the matrix must be handed the verdict — without it every spec-driven
+  // project reported a critical requirement FAIL and only escaped notice because a gate's
+  // `passed:false` was never enforced.
+  let fidelityCache=null;
+  const fidelityFor=()=>{
+    if(fidelityCache) return fidelityCache;
+    const project=store.get('projects',pid);
+    fidelityCache=analyzeGeneratedApp(mergedCodeArtifacts(pid),{objective:project?.objective??'',requirements:project?.requirements??[]});
+    return fidelityCache;
+  };
+
+  // The structured specification's own matrix. Requirement ids, criticality and per-row
+  // evidence come from the founder's command, not from plan prose, so the gate reports on
+  // exactly what was asked for. Runtime enforcement is the production-runtime gate's job:
+  // this matrix judges the source, that gate judges the executed run.
   const specMatrix=()=>{
     const project=store.get('projects',pid);
     const spec=project?.requirementSpec;
@@ -216,8 +261,32 @@ async function gateResult(task){
     if(!files.length) return null;
     return buildRequirementMatrix({
       requirements:spec.requirements, files, architecture:project?.architecture??null,
-      runtime:project?.runtimeEvidence??null
+      runtime:project?.runtimeEvidence??null, fidelity:fidelityFor()
     });
+  };
+
+  // The production runtime acceptance the pipeline judges: the stored run, judged by the
+  // engine against the architecture, the requirements and the available credentials.
+  // `env` is needed for one thing only — whether an external service's credential binding is
+  // present. Its value is never read and never recorded.
+  const runtimeContext=()=>{
+    const project=store.get('projects',pid);
+    const files=mergedCodeArtifacts(pid);
+    const externalServices=project?.requirementSpec?.externalServices??[];
+    const credentials=Object.fromEntries(
+      externalServices.map(s=>[s.envVar,Boolean(gateEnv?.[s.envVar]??(project?.runtimeCredentials??{})[s.envVar])])
+    );
+    const {acceptance,report}=runtimeAcceptanceFor({
+      project, files, hasBackend:hasBackendEntryPoint(files), credentials,
+      // Same fidelity verdict the functional-fidelity gate used: without it the no-false-PASS
+      // rules would judge a placeholder app as clean here while that gate refused it.
+      fidelity:files.length?analyzeGeneratedApp(files,{objective:project?.objective??'',requirements:project?.requirements??[]}):null
+    });
+    return {
+      project, files, acceptance, report, credentials,
+      runtimeRequired:project?.architecture?.backend===true||hasBackendEntryPoint(files),
+      status:describeRuntimeAcceptance(report)
+    };
   };
 
   if(type==='build'){
@@ -249,10 +318,96 @@ async function gateResult(task){
     check('requirements_gate_passed',r?.state==='completed','Requirement verification has not passed');
     check('unsafe_patterns_absent',risky.length===0,risky.length?`Unsafe pattern found in: ${risky.map(x=>x.path).slice(0,5).join(', ')}`:'Unsafe patterns detected');
     check('placeholder_free',qualityProblems(code).length===0,'Placeholder/stub markers remain in generated code');
-  } else if(type==='qa'){
-    const s=prior(pid,'security');
-    const generation=store.list('tasks').filter(t=>t.projectId===pid&&!t.pipelineGate&&!t.finalProjectVerification);
+  } else if(type==='functional-fidelity'){
+    // "Code exists" is not "the feature works". This is the static half of that claim, and it
+    // is the gate the Production Runtime gate chains behind, so a demo can never reach the
+    // runtime stage with a message that a warning was ignored.
+    const s=prior(pid,'security'), project=store.get('projects',pid), merged=mergedCodeArtifacts(pid);
     check('security_gate_passed',s?.state==='completed','Security gate has not passed');
+    const fidelity=fidelityFor();
+    check('functional_fidelity',fidelity.passed,fidelity.passed?'Generated app passed the static functional fidelity gate':('Not a working app: '+fidelity.violations.map(v=>v.code).join(', ')));
+    // Evidence is judged once, on the founder's own requirement set. A spec-driven project is
+    // judged by its structured matrix (REQ ids + evidence vocabulary); only a legacy project
+    // with no specification falls back to keyword coverage of the plan's prose lines. Judging
+    // the prose lines as well made process statements ("Testing plan") a MISSING requirement
+    // for every project, which is the kind of permanent false failure that gets gates ignored.
+    const matrix=specMatrix();
+    check('requirement_evidence',evidenceComplete(pid,merged,matrix,project),
+      evidenceGap(pid,merged,matrix,project));
+    check('no_critical_requirement_failed',!matrix||matrix.deliverable,matrix?.criticalFailed?.length?('Critical requirement(s) failed: '+matrix.criticalFailed.map(r=>r.id+' '+r.title).join(', ')):'');
+  } else if(type==='production-runtime'){
+    // Point 8. The mandatory gate: the generated application must have been RUN against a
+    // real database and a real user journey, and every critical requirement must have a
+    // passing runtime test behind it. Missing evidence BLOCKS — it is never a warning, and
+    // QA, Integrity and Final Delivery all chain behind this gate.
+    const f=prior(pid,'functional-fidelity');
+    // Produce the evidence first, then judge it. The Worker cannot execute generated code, so
+    // MAULI_RUNTIME_EXECUTOR names the Node/HTTP runner that does; with no runner configured
+    // this is an honest no-op and the checks below report BLOCKED with the exact reason.
+    await ensureRuntimeAcceptance(pid,gateEnv);
+    const ctx=runtimeContext();
+    check('functional_fidelity_gate_passed',f?.state==='completed'&&(f?.result?.passed??true)!==false,'The functional fidelity gate has not passed');
+    if(ctx.runtimeRequired){
+      check('runtime_acceptance_recorded',Boolean(ctx.acceptance),'No production runtime acceptance run has been recorded for this project');
+      check('production_runtime_passed',ctx.report.status==='passed',ctx.report.blockingReason??'Production runtime acceptance did not pass');
+      check('critical_requirements_runtime_verified',ctx.report.criticalFailed.length===0,ctx.report.criticalFailed.length?('Critical requirement(s) without passing runtime evidence: '+ctx.report.criticalFailed.join(', ')):'');
+      check('no_false_pass',ctx.report.noFalsePass.length===0,ctx.report.noFalsePass.length?('No false PASS: '+ctx.report.noFalsePass.map(v=>`${v.code} (${v.detail})`).join('; ')):'');
+      check('external_dependencies_declared',ctx.report.dependenciesRequired.length===0,ctx.report.dependenciesRequired.map(d=>d.reason).join('; '));
+    } else {
+      // Browser-only / local architecture (point 9). There is no server to deploy and no D1 to
+      // round-trip, so the bar is the one this architecture actually owes — and it is not
+      // lowered: the UI must have bound controls that change real state, records must persist
+      // and read back, and every critical requirement must have evidence. When a recorded
+      // runtime acceptance run exists (the Node/CI executor produces one for local apps too),
+      // it is used and must have passed; otherwise the executed-source evidence is the basis,
+      // and the gate says so instead of implying a run happened.
+      const merged=mergedCodeArtifacts(pid);
+      const fid=analyzeGeneratedApp(merged,{objective:ctx.project?.objective??'',requirements:ctx.project?.requirements??[]});
+      const interaction=fid.stats?.interactionCount??0;
+      check('local_ui_interaction',interaction>0,'The generated UI has no bound control that changes real state');
+      const spec=ctx.project?.requirementSpec??null;
+      const needsPersistence=((spec?.dataRequirements??[]).length>0)||(spec?.features??[]).some(f=>['create','read','update','delete'].includes(f.key));
+      check('local_persistence',!needsPersistence||fid.stats?.hasPersistence===true,'The product stores records but the delivered code never persists them or reads them back');
+      const localMatrix=specMatrix();
+      check('critical_requirements_have_evidence',!localMatrix||localMatrix.deliverable,localMatrix?.criticalFailed?.length?('Critical requirement(s) without evidence: '+localMatrix.criticalFailed.map(r=>`${r.id} ${r.title}`).join('; ')):'');
+      check('no_false_pass',ctx.report.noFalsePass.length===0,ctx.report.noFalsePass.length?('No false PASS: '+ctx.report.noFalsePass.map(v=>`${v.code} (${v.detail})`).join('; ')):'');
+      if(ctx.acceptance) check('runtime_acceptance_passed',ctx.report.status==='passed',ctx.report.blockingReason??'The recorded runtime acceptance did not pass');
+    }
+    // A local application has no run to point at, so the gate reports the basis it actually
+    // judged on rather than reusing a verdict that would read as "BLOCKED" while passing.
+    const staticBasis=!ctx.runtimeRequired&&!ctx.acceptance;
+    const runtimeAcceptance=staticBasis
+      ?{status:passed?'passed':'blocked',label:passed?'PASS':'BLOCKED',environment:ctx.report.environment,
+        basis:'executed-source fidelity + requirement coverage (local architecture: no server to deploy)',
+        criticalPassed:ctx.report.criticalPassed?.length??0,criticalFailed:0,missingTests:[],failedTests:[],
+        blockingReason:passed?null:(checks.find(c=>!c.passed)?.reason??null)}
+      :ctx.status;
+    return {
+      type:'plan', taskId:task.id, gate:type, passed, checks,
+      runtimeAcceptance,
+      runtimeStatus:runtimeAcceptance.status,
+      // How the runtime verdict was reached. Never left implicit: "static evidence" and
+      // "executed acceptance run" are different claims, and the founder can tell them apart.
+      runtimeBasis:ctx.acceptance?'recorded production runtime acceptance run':(ctx.runtimeRequired?'no runtime acceptance run recorded':'executed-source fidelity + requirement coverage (this architecture owes no server to deploy)'),
+      blockingReason:passed?null:(ctx.report.blockingReason??checks.find(c=>!c.passed)?.reason??null),
+      requirementRuntimeEvidence:ctx.report.requirements,
+      requirementStatuses:requirementStatuses(),
+      verifiedAt:now(),
+      summary:passed?'production-runtime gate passed.':`production-runtime gate BLOCKED: ${ctx.report.blockingReason??checks.find(c=>!c.passed)?.reason??'see checks'}`
+    };
+  } else if(type==='qa'){
+    const s=prior(pid,'functional-fidelity'), pr=prior(pid,'production-runtime');
+    const generation=store.list('tasks').filter(t=>t.projectId===pid&&!t.pipelineGate&&!t.finalProjectVerification);
+    check('security_gate_passed',prior(pid,'security')?.state==='completed','Security gate has not passed');
+    // A gate row can be 'completed' while its own verdict is `passed:false` — verification
+    // checks the execution, not the verdict. Reading only the state would let QA pass behind
+    // a refused functional-fidelity or production-runtime gate.
+    const gateRefused=g=>g?.state!=='completed'||(g?.result?.passed??true)===false;
+    check('functional_fidelity_gate_passed',!gateRefused(s),s?.result?.passed===false?('Functional fidelity gate refused the app: '+(s?.result?.summary??s?.result?.blockingReason??'see gate checks')):'The functional fidelity gate has not passed');
+    // Point 8: a failed/blocked Production Runtime gate must keep QA from passing. The chain
+    // already prevents QA from starting, but the check is explicit so a completed QA row can
+    // never be read as "runtime was fine".
+    check('production_runtime_gate_passed',!gateRefused(pr),pr?.result?.passed===false?('Production Runtime gate BLOCKED: '+(pr?.result?.blockingReason??pr?.result?.summary??'see gate checks')):(pr?.result?.blockingReason??'The production runtime gate has not passed'));
     check('all_project_tasks_complete',generation.every(t=>t.state==='completed'),'One or more generation tasks are incomplete');
     check('artifacts_present',arts.length>0,'No project artifact available for QA');
     check('artifact_files_valid',validFiles(pid),'Artifact files failed QA structure checks');
@@ -264,14 +419,12 @@ async function gateResult(task){
     // per-requirement statuses are recorded as gate evidence.
     const project=store.get('projects',pid);
     const merged=mergedCodeArtifacts(pid);
-    const fidelity=analyzeGeneratedApp(merged,{objective:project?.objective??'',requirements:project?.requirements??[]});
+    const fidelity=fidelityFor();
     check('functional_fidelity',fidelity.passed,fidelity.passed?'Generated app passed functional fidelity checks':('Not a working app: '+fidelity.violations.map(v=>v.code).join(', ')));
-    const coverage=evaluateRequirementCoverage(project?.requirements??[],merged);
-    const unmet=coverage.filter(c=>c.status==='MISSING');
-    check('requirement_evidence',unmet.length===0,unmet.length?('No source evidence for: '+unmet.slice(0,5).map(c=>c.requirement).join(' | ')):'Every requirement has evidence in the executed source');
-    // The per-requirement matrix, the ten-category quality score and the two independent
-    // statuses are recorded as QA evidence so a completed project carries them.
+    // Same single judgement as the functional fidelity gate — see evidenceComplete().
     const matrix=specMatrix();
+    check('requirement_evidence',evidenceComplete(pid,merged,matrix,project),
+      evidenceGap(pid,merged,matrix,project));
     const quality=scoreGeneratedAppQuality({matrix,fidelity,architecture:project?.architecture??null,files:merged,integrity:{valid:false}});
     const status=dualStatus({matrix,runtime:project?.runtimeEvidence??null,fidelity});
     check('no_critical_requirement_failed',!matrix||matrix.deliverable,matrix?.criticalFailed?.length?('Critical requirement(s) failed: '+matrix.criticalFailed.map(r=>r.id).join(', ')):'');
@@ -299,8 +452,8 @@ async function gateResult(task){
   };
 }
 
-registerExecutor('internal.pipeline-gate', async ({task}) => gateResult(task), {
-  description:'Mandatory MAULI delivery pipeline gate with build/test contracts, security checks, QA and artifact integrity evidence',
+registerExecutor('internal.pipeline-gate', async ({task,env}) => gateResult(task,env), {
+  description:'Mandatory MAULI delivery pipeline gate with build/test contracts, security checks, functional fidelity, production runtime acceptance, QA and artifact integrity evidence',
   scope:'internal',
   risk:'low'
 });

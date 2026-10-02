@@ -186,7 +186,7 @@ test('concurrent pipeline setup creates each gate exactly once', () => {
   const gates = store.list('tasks').filter((t) => t.projectId === pid && t.pipelineGate);
   const byType = {};
   for (const g of gates) byType[g.gateType] = (byType[g.gateType] ?? 0) + 1;
-  assert.deepEqual(byType, { build: 1, test: 1, requirements: 1, security: 1, qa: 1, integrity: 1 }, JSON.stringify(byType));
+  assert.deepEqual(byType, { build: 1, test: 1, requirements: 1, security: 1, 'functional-fidelity': 1, 'production-runtime': 1, qa: 1, integrity: 1 }, JSON.stringify(byType));
   assert.equal(new Set(gates.map((g) => g.id)).size, gates.length, 'gate ids must be unique');
   // Deterministic ids make the second create an upsert of the same row.
   assert.ok(gates.every((g) => g.gateType === 'qa' || g.id.startsWith(`task_gate_${pid}_`)), gates.map((g) => g.id).join(', '));

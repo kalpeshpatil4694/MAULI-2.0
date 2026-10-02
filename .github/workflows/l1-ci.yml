@@ -56,6 +56,13 @@ jobs:
       - name: Founder user journey (real backend execution)
         run: npm run verify:journey
 
+      # Production Runtime Acceptance, the gate between Functional Fidelity and QA.
+      # The engine's own contract: a real generated product passes, a static-JSON backend is
+      # caught as fake, a backend with no evidence is BLOCKED, a missing external credential
+      # is DEPENDENCY_REQUIRED, and no critical requirement may lack runtime evidence.
+      - name: Production runtime acceptance engine
+        run: npm run verify:runtime
+
       - name: Security + governance tests
         run: npm run test:security
 
@@ -110,6 +117,39 @@ jobs:
           done
           echo "::error::Cloudflare deployment failed after 3 attempts."
           exit 1
+
+      # deploy → smoke → production runtime acceptance → final gate. The smoke proves the
+      # deployed Worker answers; the acceptance step runs the full production-like smoke test
+      # (health → API contract → auth → CRUD → persistence → journey) against a real project
+      # and POSTs the evidence to /api/projects/:id/runtime-acceptance. It is skipped when no
+      # project id is configured rather than reporting a PASS it did not earn.
+      - name: Post-deploy smoke test
+        run: |
+          set -euo pipefail
+          BASE="${MAULI_BASE_URL:-https://mauli-2-0.kalpeshpatil4694.workers.dev}"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS --max-time 20 "$BASE/api/health" | grep -q '"status"'; then
+              echo "Smoke test passed: $BASE/api/health"
+              exit 0
+            fi
+            sleep $((attempt * 15))
+          done
+          echo "::error::Post-deploy smoke test failed for $BASE/api/health"
+          exit 1
+        env:
+          MAULI_BASE_URL: ${{ vars.MAULI_BASE_URL }}
+
+      - name: Production runtime acceptance (deployed Worker)
+        if: ${{ vars.MAULI_RUNTIME_PROJECT != '' }}
+        env:
+          MAULI_BASE_URL: ${{ vars.MAULI_BASE_URL }}
+          MAULI_RUNTIME_PROJECT: ${{ vars.MAULI_RUNTIME_PROJECT }}
+          MAULI_KEY: ${{ secrets.MAULI_FOUNDER_KEY }}
+        run: |
+          set -euo pipefail
+          node scripts/accept-runtime.mjs \
+            --project "${MAULI_RUNTIME_PROJECT}" \
+            --base "${MAULI_BASE_URL:-https://mauli-2-0.kalpeshpatil4694.workers.dev}"
 
 # Persistence stack is Workers + D1 + Durable Objects + Workers AI only. There is no
 # object-storage binding of any kind, so deployment and CI must never require one.
