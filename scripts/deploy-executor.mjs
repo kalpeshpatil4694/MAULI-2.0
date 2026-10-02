@@ -48,7 +48,7 @@ function run(command, args, { cwd, env = {}, input = null } = {}) {
     const child = spawn(command, args, {
       cwd,
       env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe']
     });
     let stdout = '';
     let stderr = '';
