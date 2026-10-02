@@ -397,9 +397,15 @@ function attachDurableObjectBindings(mod, runtime) {
   const files = Array.isArray(runtime?.files) ? runtime.files : [];
   const config = files.find((f) => /wrangler\.(?:jsonc?|toml)/i.test(String(f?.path ?? '')))?.content ?? '';
   const bindings = [];
-  const jsonMatch = /"bindings"\s*:\s*\[([\s\S]*?)\]/.exec(config);
-  if (jsonMatch) {
-    for (const m of jsonMatch[1].matchAll(/"name"\s*:\s*"([^"]+)"[\s\S]*?"class_name"\s*:\s*"([^"]+)"/g)) bindings.push({ name: m[1], className: m[2] });
+  // wrangler's JSON form is an ARRAY of {name, class_name}; its TOML form nests the same
+  // list under "bindings". The generated config uses the array, because the array is what
+  // wrangler actually honours — reading only the object form left the deployed app with no
+  // LIVE binding and a 501 on /api/live.
+  const jsonArray = /"durable_objects"\s*:\s*\[([\s\S]*?)\]\s*[,}]/.exec(config);
+  const jsonObject = /"bindings"\s*:\s*\[([\s\S]*?)\]/.exec(config);
+  const block = jsonArray?.[1] ?? jsonObject?.[1];
+  if (block) {
+    for (const m of block.matchAll(/"name"\s*:\s*"([^"]+)"[\s\S]*?"class_name"\s*:\s*"([^"]+)"/g)) bindings.push({ name: m[1], className: m[2] });
   } else {
     for (const m of config.matchAll(/\[\s*durable_objects\s*\]\s*binding\s*=\s*"([^"]+)"[\s\S]*?class_name\s*=\s*"([^"]+)"/g)) bindings.push({ name: m[1], className: m[2] });
   }
