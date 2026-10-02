@@ -162,7 +162,7 @@ test('the delivery says which platform it was built for', () => {
     requirements: [objective], platform: 'android', state: 'completed',
   });
   store.put('tasks', { id: 'pd-task', projectId: project.id, title: 'Build', state: 'completed' });
-  for (const gate of ['build', 'test', 'requirements', 'security', 'integrity']) {
+  for (const gate of ['build', 'test', 'requirements', 'security', 'functional-fidelity', 'production-runtime', 'integrity']) {
     store.put('tasks', { id: `pd-${gate}`, projectId: project.id, title: `Gate ${gate}`, state: 'completed', pipelineGate: true, gateType: gate, verificationId: `v-${gate}` });
   }
   store.put('tasks', { id: 'pd-qa', projectId: project.id, title: 'Final QA', state: 'completed', finalProjectVerification: true, verificationId: 'v', pipelineGate: true, gateType: 'qa' });

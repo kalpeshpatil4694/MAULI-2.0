@@ -150,7 +150,7 @@ async function finalizeCommand(projectId,env={},indexedTasks=null){const project
   // delivers nothing' failure this gate exists to prevent. Record why and stay unfinished.
   let finalDelivery=project.finalDeliveryId?store.get('artifacts',project.finalDeliveryId):null;
   if(!finalDelivery){
-    try{finalDelivery=await buildFinalDeliveryDurable(project,{enforceGates:true});}
+    try{finalDelivery=await buildFinalDeliveryDurable(project,{enforceGates:true,env});}
     catch(error){
       const reason=String(error?.message??error);
       store.addEvent('delivery.blocked',{projectId,reason,at:now()});

@@ -5,6 +5,7 @@ import { generateFromTemplate } from './app-templates.js';
 import { analyzeGeneratedApp } from './generated-app-quality.js';
 import { generateFullStackApp } from './fullstack-codegen.js';
 import { store } from './store.js';
+import { hasBackendEntryPoint } from './production-runtime.js';
 
 const WEB_REQUIRED = ['www/index.html', 'www/app.js', 'www/styles.css'];
 const COMMON_REQUIRED = ['package.json', 'README.md'];
@@ -282,15 +283,10 @@ function architectureFor(task) {
   return { architecture, spec, project };
 }
 
-/**
- * Does this file set actually contain a server entry point? A Worker, an API or a server
- * module — not a page that merely mentions the word "database".
- */
-export function hasBackendEntryPoint(files) {
-  return (Array.isArray(files) ? files : []).some((f) =>
-    f && typeof f.path === 'string' && /(?:^|\/)(?:worker|api|server|backend|routes?)\/[a-z0-9_-]+\.[cm]?js$/i.test(f.path)
-      || /(?:^|\/)(?:worker|api|server)\.[cm]?js$/i.test(f.path));
-}
+// The detector lives in src/production-runtime.js so the gate, the delivery and the
+// acceptance executor cannot disagree about what a backend is. Re-exported here because this
+// module is where it used to live.
+export { hasBackendEntryPoint } from './production-runtime.js';
 
 /**
  * Generate the product the specification asks for, when it owes a backend.

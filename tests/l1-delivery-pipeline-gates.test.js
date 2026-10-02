@@ -42,7 +42,11 @@ test('L1 delivery pipeline creates ordered mandatory gates', () => {
 
   const result = ensureProjectPipeline(project.id);
   const gates = store.list('tasks').filter(t => t.projectId === project.id && t.pipelineGate).sort((a, b) => a.sequence - b.sequence);
-  assert.deepEqual(gates.map(t => t.gateType), ['build', 'test', 'requirements', 'security', 'qa', 'integrity']);
+  // Build → Tests → Requirements → Security → Functional Fidelity → Production Runtime
+  // → QA → Integrity. The two middle gates are mandatory: "the code is a working app" and
+  // "the app was actually run against a real database and journey" are separate, required
+  // steps before QA may pass.
+  assert.deepEqual(gates.map(t => t.gateType), ['build', 'test', 'requirements', 'security', 'functional-fidelity', 'production-runtime', 'qa', 'integrity']);
   assert.equal(gates.find(t => t.gateType === 'qa')?.id, finalQa.id);
   assert.equal(gates.find(t => t.gateType === 'build')?.dependsOn.includes(generated.id), true);
   assert.equal(gates.find(t => t.gateType === 'integrity')?.dependsOn[0], gates.find(t => t.gateType === 'qa')?.id);

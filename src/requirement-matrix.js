@@ -12,6 +12,7 @@
 //     can run beautifully and still not be the product that was asked for.
 
 import { evaluateRequirementCoverage } from './generated-app-quality.js';
+import { runtimeRequirementEvidence } from './production-runtime.js';
 
 export const MATRIX_STATUS = { PASS: 'PASS', PARTIAL: 'PARTIAL', FAIL: 'FAIL', BLOCKED: 'BLOCKED' };
 
@@ -60,11 +61,17 @@ function staticEvidence(requirement, haystack) {
  * @param {Array} input.files       - the merged generated source
  * @param {object} [input.fidelity] - analyzeGeneratedApp() output, for the placeholder rule
  * @param {object} [input.runtime]  - runtime execution evidence from the verifier
+ * @param {object} [input.acceptance] - structured production runtime acceptance report
+ * @param {boolean} [input.runtimeRequired] - the architecture owes runtime evidence, so a
+ *   critical requirement without a passing runtime test is BLOCKED, not PASS
  * @returns {{rows:Array, criticalFailed:Array, deliverable:boolean, summary:object}}
  */
-export function buildRequirementMatrix({ requirements = [], files = [], fidelity = null, runtime = null, architecture = null } = {}) {
+export function buildRequirementMatrix({ requirements = [], files = [], fidelity = null, runtime = null, architecture = null, acceptance = null, runtimeRequired = false } = {}) {
   const haystack = executedSource(files);
   const hasCode = (Array.isArray(files) ? files : []).length > 0;
+  const runtimeRows = (runtimeRequired || acceptance)
+    ? new Map(runtimeRequirementEvidence({ requirements, acceptance, architecture }).map((r) => [String(r.requirementId), r]))
+    : new Map();
   const rows = (Array.isArray(requirements) ? requirements : []).map((requirement) => {
     const id = requirement.id ?? requirement;
     const title = requirement.title ?? String(id);
@@ -114,6 +121,21 @@ export function buildRequirementMatrix({ requirements = [], files = [], fidelity
       basis = evidence.matched.length ? `source evidence: ${evidence.matched.slice(0, 6).join(', ')}` : 'no evidence for this requirement';
     }
 
+    // Point 7: every row carries the runtime test that should evidence it, what was actually
+    // observed, and — when it failed — why. `runtimeEvidence: null` is BLOCKED, never PASS.
+    const runtimeRow = runtimeRows.get(String(id)) ?? null;
+    if (runtimeRequired && runtimeRow && runtimeRow.status !== 'NOT APPLICABLE') {
+      if (runtimeRow.status === 'FAIL') {
+        status = critical ? MATRIX_STATUS.FAIL : MATRIX_STATUS.PARTIAL;
+        basis = `runtime evidence failed: ${runtimeRow.failureReason ?? 'see the runtime acceptance report'}`;
+      } else if (runtimeRow.status === 'BLOCKED' && status === MATRIX_STATUS.PASS) {
+        // A requirement that only reading the source called PASS cannot stay PASS once the
+        // architecture owes a runtime proof and none exists.
+        status = critical ? MATRIX_STATUS.BLOCKED : MATRIX_STATUS.PARTIAL;
+        basis = runtimeRow.failureReason ?? 'no runtime evidence for this requirement';
+      }
+    }
+
     return {
       id,
       title,
@@ -122,7 +144,14 @@ export function buildRequirementMatrix({ requirements = [], files = [], fidelity
       status,
       basis,
       matched: evidence.matched.slice(0, 8),
-      verification: requirement.verification ?? 'runtime'
+      verification: requirement.verification ?? 'runtime',
+      runtimeTest: runtimeRow?.runtimeTest ?? null,
+      runtimeEvidence: runtimeRow?.runtimeEvidence ?? null,
+      // The runtime row's OWN verdict. `runtimeEvidence` is a string on a structural
+      // requirement ("satisfied by the delivered target") which must never be counted as a
+      // runtime-verified PASS — only an executed test may be.
+      runtimeStatus: runtimeRow?.status ?? null,
+      failureReason: status === MATRIX_STATUS.PASS || status === 'NOT APPLICABLE' ? null : (runtimeRow?.failureReason ?? null)
     };
   });
 
@@ -138,6 +167,7 @@ export function buildRequirementMatrix({ requirements = [], files = [], fidelity
       applicable: applicable.length,
       notApplicable: rows.length - applicable.length,
       pass: rows.filter((r) => r.status === MATRIX_STATUS.PASS).length,
+      runtimeVerified: rows.filter((r) => r.runtimeStatus === 'PASS' && r.status === MATRIX_STATUS.PASS).length,
       partial: rows.filter((r) => r.status === MATRIX_STATUS.PARTIAL).length,
       fail: rows.filter((r) => r.status === MATRIX_STATUS.FAIL).length,
       blocked: rows.filter((r) => r.status === MATRIX_STATUS.BLOCKED).length,

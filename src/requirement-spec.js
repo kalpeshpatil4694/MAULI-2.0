@@ -115,6 +115,20 @@ function detect(list, text) {
 // an app, for me …). They are never evidence that a product was identified.
 const STOP_WORDS = new Set(['build', 'create', 'make', 'develop', 'design', 'implement', 'generate', 'give', 'want', 'need', 'please', 'help', 'app', 'application', 'website', 'site', 'web', 'webapp', 'simple', 'small', 'basic', 'quick', 'new', 'and', 'the', 'a', 'an', 'for', 'with', 'that', 'this', 'me', 'my', 'our', 'its', 'from', 'into', 'using', 'use', 'can', 'should', 'must', 'will', 'let', 'us', 'tool', 'software', 'system', 'project', 'platform', 'based', 'able']);
 
+// Words that are not a DOMAIN. They are the roles, the surfaces and the filler a command
+// mentions around the product, plus the placeholder nouns a vague request is made of. A
+// domain MAULI has no catalogue entry for is still a real specification — "laundry",
+// "notes", "garments" — but "something", "stuff" or "the screen" name nothing at all, and
+// treating them as a product would turn BLOCKED into a confident wrong answer.
+const NON_ENTITY_WORDS = new Set([
+  'owner', 'shop', 'counter', 'screen', 'staff', 'team', 'customer', 'user', 'app',
+  'order', 'orders', 'item', 'items', 'thing', 'things', "thing's", 'people', 'time',
+  'day', 'week', 'month', 'year', 'update', 'updates', 'live',
+  'something', 'anything', 'everything', 'nothing', 'stuff', 'whatever', 'someone',
+  'somebody', 'anyone', 'anybody', 'product', 'products', 'idea', 'ideas', 'solution',
+  'service', 'services', 'program', 'utility', 'best', 'good', 'great', 'cool', 'nice'
+]);
+
 function domainWords(text) {
   return normalize(text)
     .split(' ')
@@ -146,6 +160,9 @@ export function extractRequirementSpec(input = {}) {
   resetRequirementIds();
 
   const productTypes = detect(PRODUCT_TYPES, text);
+  // Declared here because the product-type inference below needs it, and the understanding
+  // verdict at the end uses the same test.
+  const asksForSoftware = /\b(?:build|create|make|develop|implement|design|generate|need|want)\b/i.test(text);
   const roles = detect(ROLES, text);
   // The founder's own domain nouns. A product type the app must evidence is best evidenced
   // by the words the founder used: a medicine tracker names medicines, a Wi-Fi auditor names
@@ -190,8 +207,12 @@ export function extractRequirementSpec(input = {}) {
   // named the thing ("a laundry pickup and drop-off app ... register each garment"). It is
   // reported as the founder's own domain, at PARTIAL confidence — never silently upgraded to
   // a catalogue product, and never dropped to BLOCKED when the behaviour asked for is clear.
-  const domainNoun = nouns.find((w) => !['owner','shop','counter','screen','staff','team','customer','user','app','order','orders','item','items','thing','things','thing\'s','people','time','day','week','month','year','update','updates','live'].includes(w)) ?? null;
-  const inferredProduct = !productTypes.length && features.length && domainNoun
+  const domainNoun = nouns.find((w) => !NON_ENTITY_WORDS.has(w)) ?? null;
+  // The founder naming the thing is a specification. "Build a notes web app" names its own
+  // domain (notes) even though no catalogue entry and no feature verb appear; refusing it as
+  // BLOCKED refused a product the founder described exactly. A command that names nothing at
+  // all ("Build me something") still has no domain noun to fall back on and stays BLOCKED.
+  const inferredProduct = !productTypes.length && domainNoun && (features.length > 0 || asksForSoftware)
     ? { type: 'domain', label: `${domainNoun} app` }
     : null;
   const product = productTypes[0] ?? inferredProduct;
@@ -347,7 +368,6 @@ export function extractRequirementSpec(input = {}) {
   // -- understanding ----------------------------------------------------------
   // BLOCKED when the command asks for software but nothing in it identifies a product
   // or a single feature: guessing here is exactly the generic-substitution failure.
-  const asksForSoftware = /\b(?:build|create|make|develop|implement|design|generate|need|want)\b/i.test(text);
   const understood = productTypes.length > 0 && features.length > 0;
   // COMPLETE needs a catalogue product AND behaviour. A product MAULI recognised from the
   // founder's own domain noun is PARTIAL: the behaviour is clear, the domain is unverified.

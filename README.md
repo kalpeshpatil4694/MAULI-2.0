@@ -70,16 +70,14 @@ Founder command (POST /api/command)
   → approval gate when required (POST /api/approvals/:id)
   → scheduler owns execution (cron */5 + explicit command/approval/chat triggers)
   → agents execute → verification → pipeline gates
-      (build → test → requirements → security → qa → integrity)
+      (build → test → requirements → security → functional-fidelity
+       → production-runtime → qa → integrity)
   → final delivery artifact (unique id, metadata, manifest + sha256 integrity)
   → command result upserted under its own runId (never overwrites another run)
 ```
 
 Dashboard polling (`GET /api/state`, `GET /api/projects/:id/detail`) is strictly read-only:
-it never writes to D1 and never starts execution.
-
-### A working product, not a demo
-
+it never writes to D1 and never starts execution.### A working product, not a demo
 "Generated code is not proof of functionality." Generation runs a bounded repair loop
 (Detect → Diagnose → Fix → Rebuild → Retest) against the functional fidelity gate, the QA
 gate judges the merged code of every agent, and final delivery refuses an app that is only a
@@ -90,13 +88,38 @@ downloaded code workspace on demand:
 node scripts/verify-generated-app.mjs --verify workspace.json   # exits non-zero if it does not work
 ```
 
+### A product that was actually run
+"Tests passed" is not "the product works". Between Functional Fidelity and QA sits the
+mandatory **Production Runtime** gate, and it answers one question in code:
+
+> Founder ने command दिल्यावर MAULI ने तयार केलेला application त्याच्या वास्तविक requirements
+> प्रमाणे deploy होतो, चालतो, data persist करतो, user journey पूर्ण करतो आणि प्रत्येक critical
+> requirement साठी runtime evidence देतो का?
+
+A NO for any critical requirement means no QA PASS, no Integrity PASS, no Final Delivery and
+no ZIP — the project stays BLOCKED with the exact reason. The evidence comes from running
+the generated application (health → API contract → authentication → CRUD → persistence →
+error path → user journey), never from reading its source:
+
+```bash
+npm run verify:runtime    # the engine's own contract: a real product passes, a fake is caught
+npm run accept:runtime -- --project <projectId> --base <url>   # record the run on the project
+```
+
+The verdict is stored on the project (`runtimeAcceptance`), rendered in the Founder Command
+Center as **Production Runtime: PASS / FAILED / BLOCKED** with tested-at, deployment, API,
+database, authentication, journey and the blocking reason, and re-checked by Final Delivery.
+Secrets are never persisted: the store redacts credential-shaped keys before writing.
+
+
 ## CI/CD
 
 The pipeline in `.github/workflows/l1-ci.yml` runs, in order:
 
 ```text
-Install (npm ci) → Syntax/Lint → Unit → Integration → Security → Self-Test
-  → Wrangler Validation → Build Verification → Deploy
+Install (npm ci) → Syntax/Lint → Unit → Integration → Security → Generated-app runtime
+  → User journey → Production runtime acceptance → Self-Test → Wrangler Validation
+  → Build Verification → Deploy → Post-deploy smoke → Production runtime acceptance
 ```
 
 Installs are deterministic from the committed `package-lock.json`.

@@ -10,11 +10,13 @@ test('unified delivery pipeline creates ordered mandatory gates', () => {
   store.put('tasks',{id:'pipeline-final-qa',projectId,title:'Final QA',state:'queued',finalProjectVerification:true});
   const result=ensureProjectPipeline(projectId);
   const types=result.gates.map(g=>g.type);
-  assert.deepEqual(types.sort(),['build','integrity','qa','requirements','security','test'].sort());
+  assert.deepEqual(types.sort(),['build','functional-fidelity','integrity','production-runtime','qa','requirements','security','test'].sort());
   const byType=new Map(result.gates.map(g=>[g.type,g]));
   assert.deepEqual(byType.get('test').dependsOn,[byType.get('build').id]);
   assert.deepEqual(byType.get('requirements').dependsOn,[byType.get('test').id]);
   assert.deepEqual(byType.get('security').dependsOn,[byType.get('requirements').id]);
-  assert.deepEqual(byType.get('qa').dependsOn,[byType.get('security').id]);
+  assert.deepEqual(byType.get('functional-fidelity').dependsOn,[byType.get('security').id]);
+  assert.deepEqual(byType.get('production-runtime').dependsOn,[byType.get('functional-fidelity').id]);
+  assert.deepEqual(byType.get('qa').dependsOn,[byType.get('production-runtime').id]);
   assert.deepEqual(byType.get('integrity').dependsOn,[byType.get('qa').id]);
 });

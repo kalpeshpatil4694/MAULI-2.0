@@ -147,7 +147,7 @@ test('delivery accepts a matching template that really implements the request', 
     id: 'right-app-project', name: 'P', objective, founderCommand: objective, requirements: [objective], state: 'completed'
   });
   store.put('tasks', { id: 'right-task', projectId: project.id, title: 'Build', state: 'completed' });
-  for (const gate of ['build', 'test', 'requirements', 'security', 'integrity']) {
+  for (const gate of ['build', 'test', 'requirements', 'security', 'functional-fidelity', 'production-runtime', 'integrity']) {
     store.put('tasks', { id: `right-${gate}`, projectId: project.id, title: `Gate ${gate}`, state: 'completed', pipelineGate: true, gateType: gate, verificationId: `v-${gate}` });
   }
   store.put('tasks', { id: 'right-qa', projectId: project.id, title: 'Final QA', state: 'completed', finalProjectVerification: true, verificationId: 'v', pipelineGate: true, gateType: 'qa' });

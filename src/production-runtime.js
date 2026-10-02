@@ -1,0 +1,742 @@
+// MAULI 2.0 — PRODUCTION RUNTIME ACCEPTANCE.
+//
+// The question this module answers, in code, for every project before Final Delivery:
+//
+//   "Founder ने command दिल्यावर MAULI ने तयार केलेला application त्याच्या वास्तविक
+//    requirements प्रमाणे deploy होतो, चालतो, data persist करतो, user journey पूर्ण करतो
+//    आणि प्रत्येक critical requirement साठी runtime evidence देतो का?"
+//
+// If the answer is NO for any critical requirement, the application is BLOCKED: no QA
+// PASS, no Integrity PASS, no Final Delivery, no ZIP.
+//
+// What was missing before this module existed: static fidelity, build, requirement checks
+// and the generated-runtime journey were all real, but none of them was MANDATORY for
+// delivery. `project.runtimeEvidence` was READ by src/delivery.js and src/pipeline-gates.js
+// and never WRITTEN by anything, so the runtime branch of the requirement matrix could only
+// ever see `null`. A project could therefore reach `completed` with zero runtime evidence
+// and a `REQUIREMENT NOT VERIFIED` badge — "QA Passed" to anyone reading quickly.
+//
+// This module is deliberately split from the executor:
+//   * it is pure and Worker-safe (no node imports, no eval), so the Worker can apply the
+//     gate and the dashboard can render the same verdict;
+//   * the EXECUTION lives in scripts/production-runtime.mjs, which runs the real smoke test
+//     against the generated backend in Node/CI (or against a deployed endpoint over real
+//     HTTP) and produces the structured acceptance report this module judges.
+//
+// A report is never trusted because it exists. It is trusted when it is shaped like an
+// acceptance run, carries the stages the architecture actually owes, and every critical
+// requirement has a named runtime test behind it.
+
+export const PRODUCTION_RUNTIME_VERSION = 1;
+
+// The mandatory order the pipeline must respect:
+//   Build → Tests → Requirements → Security → Functional Fidelity → Production Runtime
+//         → QA → Integrity → Final Delivery
+// Exported so the gate order and this module cannot drift apart.
+export const RUNTIME_PIPELINE_ORDER = [
+  'build', 'test', 'requirements', 'security', 'functional-fidelity',
+  'production-runtime', 'qa', 'integrity'
+];
+
+export const RUNTIME_STATUS = { PASSED: 'passed', FAILED: 'failed', BLOCKED: 'blocked' };
+
+// Why a project is not allowed to deliver. Exported so tests, the gate and the dashboard
+// all name the same reasons (point 8: "exact reason द्या").
+export const RUNTIME_BLOCKING = {
+  NO_CODE: 'runtime-no-generated-code',
+  EVIDENCE_MISSING: 'runtime-evidence-missing',
+  EVIDENCE_INCOMPLETE: 'runtime-evidence-incomplete',
+  RUNTIME_FAILED: 'runtime-failed',
+  DEPENDENCY_REQUIRED: 'dependency-required',
+  NO_FALSE_PASS: 'no-false-pass-violation'
+};
+
+// ---------------------------------------------------------------------------
+// The smoke-test stages (spec item 2). Each stage is a real observation, not a label:
+//   DEPLOYED WORKER → Health → API Contract → Authentication → Core Business Operation
+//   → D1 Persistence → Read/Update/Delete → Error Handling → User Journey → Runtime Evidence
+// ---------------------------------------------------------------------------
+export const RUNTIME_STAGES = [
+  { id: 'deployment', label: 'Deployed worker endpoint answers', scope: 'backend' },
+  { id: 'health', label: 'Health response is valid', scope: 'backend' },
+  { id: 'api-contract', label: 'API endpoints match the generated contract', scope: 'backend' },
+  { id: 'authentication', label: 'Authentication flow works end to end', scope: 'auth' },
+  { id: 'core-operation', label: 'Critical business workflow runs', scope: 'data' },
+  { id: 'database', label: 'Real database persistence', scope: 'backend' },
+  { id: 'crud-lifecycle', label: 'create → read → update → read → delete → read missing', scope: 'data' },
+  { id: 'error-handling', label: 'Errors surface instead of a fabricated success', scope: 'always' },
+  { id: 'user-journey', label: 'The founder journey completes', scope: 'always' },
+  { id: 'evidence', label: 'Runtime evidence recorded per critical requirement', scope: 'always' }
+];
+
+// Test ids the executor records. The gate refuses to call a run "passed" unless the ids the
+// architecture owes are present AND passed.
+export const RUNTIME_TESTS = [
+  'deployment', 'health', 'api-contract',
+  'unauthorized', 'register', 'duplicate-register', 'login', 'invalid-login', 'session',
+  'invalid-input', 'create', 'read', 'update', 'delete', 'read-missing', 'refresh',
+  'realtime', 'logout', 'post-logout', 'error-path', 'fake-check', 'user-journey',
+  'ui-interaction', 'local-persistence', 'external-service'
+];
+
+const TEST_LABEL = {
+  deployment: 'the deployed entry point answers a request',
+  health: 'the health/read probe returns a usable response',
+  'api-contract': 'the API returns the fields the generated frontend expects',
+  unauthorized: 'a protected route refuses an unauthenticated request',
+  register: 'registration stores a new user',
+  'duplicate-register': 'registering the same address twice is rejected (409)',
+  login: 'login verifies the stored hash and returns a session',
+  'invalid-login': 'a wrong password is rejected (401), not accepted',
+  session: 'the session token authorises a protected read',
+  'invalid-input': 'invalid input is rejected before it reaches the database',
+  create: 'a record is created and the new id is returned',
+  read: 'the created record is readable back',
+  update: 'an update changes the stored record',
+  delete: 'a delete removes the stored record',
+  'read-missing': 'reading the deleted record returns nothing (404/absent)',
+  refresh: 'data written earlier is still present on a later request',
+  realtime: 'a write reaches a second connected client live',
+  logout: 'logout invalidates the session',
+  'post-logout': 'the old session is refused after logout (401)',
+  'error-path': 'an unknown route answers 4xx instead of a fabricated 200',
+  'fake-check': 'no fake/mock/hardcoded response is used as production success',
+  'user-journey': 'the founder journey completes end to end',
+  'ui-interaction': 'the UI has bound controls that change real state',
+  'local-persistence': 'records persist on the device and survive a reload',
+  'external-service': 'the external service is called for real'
+};
+
+export function testLabel(id) { return TEST_LABEL[id] ?? id; }
+
+// Requirement wording → the runtime tests that can evidence it. Derived from the category
+// the extractor assigned plus the requirement's own title, so `REQ-001 User registration`
+// demands the register + duplicate-register tests rather than "something about users".
+const CATEGORY_TESTS = {
+  product: ['create', 'read', 'user-journey'],
+  platform: [],
+  data: ['create', 'read', 'refresh'],
+  api: ['deployment', 'api-contract', 'create'],
+  auth: ['unauthorized', 'register', 'login', 'session', 'logout'],
+  realtime: ['realtime'],
+  external: ['external-service', 'error-path'],
+  security: ['invalid-input', 'error-path'],
+  acceptance: ['refresh', 'user-journey']
+};
+
+/**
+ * The runtime tests a single requirement must evidence.
+ * Falls back to the category's tests, narrowed by the requirement's own title so
+ * "User registration" and "Logout" do not demand the same proof.
+ */
+export function requiredTestsForRequirement(requirement, architecture = null) {
+  const title = String(requirement?.title ?? '').toLowerCase();
+  const category = requirement?.category ?? 'product';
+  const tests = new Set();
+
+  if (category === 'auth' || /\b(register|login|log ?in|sign ?up|logout|session|unauthor)/.test(title)) {
+    if (/register|sign ?up|registration/.test(title)) { tests.add('register'); tests.add('duplicate-register'); }
+    if (/login|log ?in|sign ?in|session/.test(title)) { tests.add('login'); tests.add('invalid-login'); tests.add('session'); }
+    if (/logout|log ?out|sign ?out/.test(title)) { tests.add('logout'); tests.add('post-logout'); }
+    if (/unauthor|401|rejected|protected/.test(title)) tests.add('unauthorized');
+    if (tests.size === 0) { tests.add('register'); tests.add('login'); }
+  } else if (category === 'realtime') {
+    tests.add('realtime');
+  } else if (category === 'external') {
+    tests.add('external-service');
+  } else if (category === 'data') {
+    tests.add('create'); tests.add('read'); tests.add('refresh');
+  } else if (category === 'api') {
+    tests.add('deployment'); tests.add('api-contract'); tests.add('create');
+  } else if (category === 'security') {
+    if (/stub|mock|fake|placeholder/.test(title)) tests.add('fake-check');
+    else { tests.add('invalid-input'); tests.add('error-path'); }
+  } else if (category === 'acceptance') {
+    if (/refresh|persist|reload/.test(title)) tests.add('refresh');
+    else tests.add('user-journey');
+  } else {
+    for (const id of CATEGORY_TESTS[category] ?? []) tests.add(id);
+  }
+  // A local (no-backend) app evidences its product requirements through the device journey,
+  // never through an HTTP endpoint it does not have. The vocabulary is TRANSLATED rather
+  // than trimmed: a requirement to "create a record" is proven by the UI creating one and
+  // writing it to the device store, which is exactly what `ui-interaction` and
+  // `local-persistence` record — while `create`/`read`/`invalid-input` are backend tests the
+  // executor never performs for a browser-only app, and demanding them would block forever.
+  if (architecture && architecture.backend === false) {
+    const local = new Set();
+    for (const id of tests) {
+      if (['ui-interaction', 'local-persistence', 'user-journey'].includes(id)) { local.add(id); continue; }
+      if (['create', 'read', 'update', 'delete'].includes(id)) { local.add('ui-interaction'); continue; }
+      if (['refresh', 'database', 'local-persistence'].includes(id)) { local.add('ui-interaction'); local.add('local-persistence'); continue; }
+      if (['invalid-input', 'error-path', 'fake-check'].includes(id)) { local.add('ui-interaction'); continue; }
+      // Everything else is server-only and simply does not apply to this architecture.
+    }
+    // A requirement whose whole vocabulary is server-only contributes nothing here; the
+    // fallback is the local app's own floor, which the executor always records.
+    if (local.size === 0) { local.add('ui-interaction'); local.add('user-journey'); }
+    return [...local];
+  }
+  return [...tests];
+}
+
+/**
+ * Exactly which stages and tests this architecture owes.
+ * A browser-only app is not forced to invent D1 endpoints; a backend app is not allowed to
+ * substitute a page for them (spec item 9).
+ */
+export function runtimeObligations({ architecture = null, spec = null, files = [], hasBackend = false } = {}) {
+  const backend = architecture ? architecture.backend === true : Boolean(hasBackend);
+  const auth = architecture?.auth === true || spec?.authentication?.required === true;
+  const realtime = architecture?.realtime === true || spec?.realtime?.required === true;
+  const externalServices = spec?.externalServices ?? [];
+  const data = ((spec?.dataRequirements ?? []).length > 0) || (spec?.features ?? []).some((f) => ['create', 'read', 'update', 'delete'].includes(f.key));
+
+  const stages = new Set();
+  const tests = new Set();
+
+  if (backend) {
+    for (const id of ['deployment', 'health', 'api-contract', 'core-operation', 'database', 'crud-lifecycle', 'error-handling', 'user-journey', 'evidence']) stages.add(id);
+    for (const id of ['deployment', 'health', 'api-contract', 'create', 'read', 'update', 'delete', 'read-missing', 'refresh', 'error-path', 'fake-check', 'user-journey']) tests.add(id);
+    if (auth) {
+      stages.add('authentication');
+      for (const id of ['unauthorized', 'register', 'duplicate-register', 'login', 'invalid-login', 'session', 'logout', 'post-logout']) tests.add(id);
+    }
+  } else {
+    for (const id of ['core-operation', 'error-handling', 'user-journey', 'evidence']) stages.add(id);
+    // The executor records exactly these three for a browser-only app. `fake-check`,
+    // `create` and `read` are backend tests it never performs without a server; requiring
+    // them here would block every local app on evidence nobody was ever asked to produce.
+    // Fake detection for a local app is still done — statically, by the no-false-PASS rules
+    // over the delivered source, which run whether or not an acceptance run exists.
+    for (const id of ['ui-interaction', 'user-journey']) tests.add(id);
+    if (data) tests.add('local-persistence');
+  }
+  if (realtime && backend) tests.add('realtime');
+  if (externalServices.length) tests.add('external-service');
+
+  // The obligations must be the SUPERSET of what any requirement in this specification will
+  // demand as evidence. Deriving them from the architecture alone left `invalid-input` (and,
+  // for a local app, `error-path`) out of the required set while a critical security
+  // requirement demanded exactly that test — so every app that owed input validation was
+  // permanently BLOCKED by a test nobody had asked the run to perform.
+  if (Array.isArray(spec?.requirements) && spec.requirements.length) {
+    const arch = architecture ?? { backend };
+    for (const requirement of spec.requirements) {
+      for (const testId of requiredTestsForRequirement(requirement, arch)) tests.add(testId);
+    }
+  }
+
+  return {
+    backend,
+    auth,
+    realtime,
+    data,
+    externalServices: externalServices.map((s) => ({ key: s.key, label: s.label, envVar: s.envVar })),
+    environment: backend ? 'production-like worker + D1' : 'generated app + device store',
+    stages: RUNTIME_STAGES.filter((s) => stages.has(s.id)).map((s) => s.id),
+    tests: RUNTIME_TESTS.filter((t) => tests.has(t)),
+    requiredStages: [...stages],
+    requiredTests: [...tests]
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Point 3 + 14: things that must NEVER count as production runtime success.
+// These are static signals, because the Worker cannot execute the app; the executor also
+// re-checks them at runtime (a fetch that resolves a literal never reaches the network).
+// ---------------------------------------------------------------------------
+const FAKE_SIGNALS = [
+  { code: 'fake-api', re: /fetch\s*=\s*(?:async\s*)?\([^)]*\)\s*=>\s*\{?\s*return\s*(?:Promise\.resolve\s*\(\s*)?\{/i, why: 'fetch is replaced by a function that returns a literal response' },
+  { code: 'hardcoded-success', re: /Promise\.resolve\s*\(\s*\{\s*(?:ok|success|status)\s*:/i, why: 'a resolved literal is used as an API response' },
+  { code: 'hardcoded-records', re: /(?:const|let|var)\s+\w*(?:records|items|orders|users)\w*\s*=\s*\[\s*\{[^}]*\}\s*\]\s*;?\s*(?:function|const|let|var)?\s*(?:render|list)/i, why: 'a hardcoded array is rendered as the record list' },
+  { code: 'todo-marker', re: /\bTODO\b|\bFIXME\b/, why: 'unfinished-work markers ship in the product' },
+  { code: 'coming-soon', re: /coming soon/i, why: '"coming soon" stands in for a feature' },
+  { code: 'placeholder', re: /\bsetTimeout\s*\([^)]*\)\s*;?\s*\/\/\s*(?:simulate|fake|pretend)/i, why: 'a timer simulates work that never happens' },
+  { code: 'mock-api-url', re: /https?:\/\/(?:localhost|127\.0\.0\.1)?\/?examples?\/(?:api|v\d)|jsonplaceholder|mockapi|reqres\.in/i, why: 'a mock API host stands in for the product backend' }
+];
+
+/**
+ * Static fake/mock detection over the delivered source. Returns violations (empty = clean).
+ * Read from `no-false-pass` rules and by the executor's `fake-check` test.
+ */
+export function fakeRuntimeSignals(files = []) {
+  const list = (Array.isArray(files) ? files : []).filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string');
+  const violations = [];
+  for (const file of list) {
+    if (/^package\.json$/i.test(file.path) || /(^|\/)README(\.md|\.txt)?$/i.test(file.path)) continue;
+    if (!/\.(?:html?|[cm]?js|css|json|sql)$/i.test(file.path)) continue;
+    const raw = String(file.content);
+    // Everything except the markers is scanned with comments removed, so an example inside a
+    // comment is not read as the product's own code. A TODO/FIXME or a "coming soon" is
+    // different: it is text the founder's USERS see, and stripping the comment that carries
+    // it is exactly how an unfinished feature used to walk straight through this rule.
+    const code = raw
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    for (const signal of FAKE_SIGNALS) {
+      const haystack = signal.code === 'todo-marker' || signal.code === 'coming-soon' ? raw : code;
+      if (signal.re.test(haystack)) violations.push({ code: signal.code, path: file.path, why: signal.why });
+    }
+  }
+  return violations;
+}
+
+// ---------------------------------------------------------------------------
+// Requirement → runtime evidence (points 6 and 7).
+// ---------------------------------------------------------------------------
+/**
+ * One row per requirement: the runtime test that evidences it, what was observed, and — when
+ * it failed — why. `runtimeEvidence` is null when no runtime test ran, which the gate and
+ * the matrix treat as BLOCKED, never as PASS.
+ */
+export function runtimeRequirementEvidence({ requirements = [], acceptance = null, architecture = null } = {}) {
+  const tests = acceptance?.tests ?? null;
+  return (Array.isArray(requirements) ? requirements : []).map((requirement) => {
+    const required = requiredTestsForRequirement(requirement, architecture);
+    const observed = [];
+    let status = 'BLOCKED';
+    let failureReason = null;
+
+    if (required.length === 0) {
+      // A requirement with no runtime test vocabulary (product type, platform) is structural:
+      // it is satisfied by the delivered target, and a runtime test cannot observe it.
+      return {
+        requirementId: requirement.id ?? null,
+        description: requirement.title ?? String(requirement.id ?? ''),
+        critical: requirement.critical === true,
+        category: requirement.category ?? 'product',
+        runtimeTest: null,
+        runtimeEvidence: 'structural requirement — satisfied by the delivered target',
+        status: 'NOT APPLICABLE',
+        failureReason: null
+      };
+    }
+    if (!tests) {
+      return {
+        requirementId: requirement.id ?? null,
+        description: requirement.title ?? String(requirement.id ?? ''),
+        critical: requirement.critical === true,
+        category: requirement.category ?? 'product',
+        runtimeTest: required.join(', '),
+        runtimeEvidence: null,
+        status: 'BLOCKED',
+        failureReason: `no runtime acceptance run exists for ${required.map(testLabel).join('; ')}`
+      };
+    }
+    for (const id of required) {
+      const test = tests[id];
+      if (!test) { failureReason = `${testLabel(id)} was never executed`; observed.push({ test: id, status: 'MISSING' }); continue; }
+      observed.push({ test: id, status: test.status, detail: test.detail ?? null });
+      if (test.status !== 'PASS') failureReason = failureReason ?? `${testLabel(id)} failed${test.detail ? `: ${test.detail}` : ''}`;
+    }
+    const missing = observed.some((o) => o.status === 'MISSING');
+    const failed = observed.some((o) => o.status === 'FAIL');
+    status = failed ? 'FAIL' : missing ? 'BLOCKED' : 'PASS';
+    return {
+      requirementId: requirement.id ?? null,
+      description: requirement.title ?? String(requirement.id ?? ''),
+      critical: requirement.critical === true,
+      category: requirement.category ?? 'product',
+      runtimeTest: required.join(', '),
+      runtimeEvidence: observed.map((o) => `${o.test}:${o.status}`).join(', '),
+      status,
+      failureReason: status === 'PASS' ? null : failureReason
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Point 14: the explicit no-false-PASS contract.
+// ---------------------------------------------------------------------------
+export const NO_FALSE_PASS_RULES = [
+  { code: 'placeholder', why: 'placeholder implementation ships in the product' },
+  { code: 'critical-todo', why: 'TODO/FIXME marks critical functionality as unfinished' },
+  { code: 'coming-soon', why: 'a feature is announced instead of built' },
+  { code: 'fake-api', why: 'a fake API is used' },
+  { code: 'hardcoded-success', why: 'a hardcoded success response is used' },
+  { code: 'fake-persistence', why: 'persistence is faked' },
+  { code: 'mocked-result', why: 'a mocked production result is reported' },
+  { code: 'browser-only-for-backend', why: 'a backend-required project shipped a browser-only page' },
+  { code: 'requirement-evidence-missing', why: 'a requirement has no evidence' },
+  { code: 'runtime-evidence-missing', why: 'runtime evidence is missing' },
+  { code: 'journey-failed', why: 'the critical user journey failed' },
+  { code: 'api-contract-mismatch', why: 'the API contract does not match the generated frontend' },
+  { code: 'persistence-failed', why: 'database persistence failed' },
+  { code: 'auth-flow-failed', why: 'the authentication flow failed' }
+];
+
+/**
+ * Evaluate every no-false-PASS rule that can be judged from what the gate has: the delivered
+ * source, the selected architecture, and the acceptance report (when one exists).
+ * @returns {Array<{code:string, why:string, detail:string}>}
+ */
+export function noFalsePassViolations({
+  files = [], architecture = null, fidelity = null, acceptance = null, evidence = [], hasBackend = false, runtime = true
+} = {}) {
+  const violations = [];
+  const add = (code, detail) => {
+    const rule = NO_FALSE_PASS_RULES.find((r) => r.code === code);
+    violations.push({ code, why: rule?.why ?? code, detail: String(detail ?? '') });
+  };
+
+  for (const signal of fakeRuntimeSignals(files)) {
+    if (signal.code === 'todo-marker') add('critical-todo', `${signal.path}: ${signal.why}`);
+    else if (signal.code === 'coming-soon') add('coming-soon', `${signal.path}: ${signal.why}`);
+    else if (signal.code === 'placeholder') add('placeholder', `${signal.path}: ${signal.why}`);
+    else if (signal.code === 'hardcoded-records') add('fake-persistence', `${signal.path}: ${signal.why}`);
+    else if (signal.code === 'mock-api-url') add('fake-api', `${signal.path}: ${signal.why}`);
+    else add('fake-api', `${signal.path}: ${signal.why}`);
+  }
+  if (fidelity && fidelity.passed === false) {
+    add('placeholder', 'the functional fidelity gate found a demo/placeholder signal: ' + (fidelity.violations ?? []).map((v) => v.code).join(', '));
+  }
+  const backendOwed = architecture ? architecture.backend === true : Boolean(hasBackend);
+  if (backendOwed && !hasBackend) add('browser-only-for-backend', 'the selected architecture owes a Worker API but the delivered code has no backend entry point');
+
+  // Acceptance-derived rules require an acceptance run. Without one the honest verdict is
+  // BLOCKED ("no runtime evidence"), which the caller reports as its own blocking code —
+  // not a FAILED masquerading as a defect in the product. `runtime:false` asks for exactly
+  // the static half, so that ordering is possible.
+  if (!runtime) return violations;
+
+  if (acceptance) {
+    const tests = acceptance.tests ?? {};
+    if (tests['api-contract']?.status === 'FAIL') add('api-contract-mismatch', tests['api-contract'].detail ?? 'API contract mismatch');
+    if (backendOwed && tests.database?.status && tests.database.status !== 'PASS') add('persistence-failed', tests.database.detail ?? 'database persistence failed');
+    if (backendOwed && tests.create?.status && tests.create.status !== 'PASS') add('fake-persistence', tests.create.detail ?? 'no record was created');
+    if (tests.login?.status === 'FAIL' || tests['post-logout']?.status === 'FAIL' || tests.unauthorized?.status === 'FAIL') {
+      add('auth-flow-failed', [tests.unauthorized, tests.login, tests['post-logout']].filter((t) => t?.status === 'FAIL').map((t) => t.detail ?? '').join('; '));
+    }
+    if (tests['user-journey']?.status === 'FAIL') add('journey-failed', tests['user-journey'].detail ?? 'the critical user journey failed');
+    if (tests['fake-check']?.status === 'FAIL') add('mocked-result', tests['fake-check'].detail ?? 'a mocked/fake response was used as production success');
+  }
+  for (const row of (Array.isArray(evidence) ? evidence : [])) {
+    // A BLOCKED row means "not executed yet", which is reported separately as missing
+    // evidence. Only an executed-and-failed row is a no-false-PASS violation.
+    if (row.status === 'FAIL') add('requirement-evidence-missing', `${row.requirementId ?? ''} ${row.failureReason ?? ''}`);
+  }
+  return violations;
+}
+
+// ---------------------------------------------------------------------------
+// The acceptance verdict.
+// ---------------------------------------------------------------------------
+/**
+ * Judge a project's production runtime acceptance.
+ *
+ * @param {object} input
+ * @param {Array}  input.files        merged generated source
+ * @param {object} [input.architecture]
+ * @param {object} [input.spec]
+ * @param {Array}  [input.requirements] extracted requirements (REQ ids)
+ * @param {object} [input.acceptance] structured run report (see scripts/production-runtime.mjs)
+ * @param {object} [input.fidelity]   analyzeGeneratedApp() output
+ * @param {object} [input.credentials] map of env-var NAME → boolean availability (never values)
+ * @param {boolean}[input.hasBackend] code contains a backend entry point
+ * @returns {object} the runtime evidence store record (spec item 15)
+ */
+export function evaluateRuntimeAcceptance({
+  files = [], architecture = null, spec = null, requirements = [], acceptance = null,
+  fidelity = null, credentials = {}, hasBackend = false
+} = {}) {
+  const list = (Array.isArray(files) ? files : []).filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string');
+  const obligations = runtimeObligations({ architecture, spec, files: list, hasBackend });
+  const evidence = runtimeRequirementEvidence({ requirements, acceptance, architecture });
+
+  const missingTests = obligations.requiredTests.filter((id) => !acceptance?.tests?.[id]);
+  const failedTests = obligations.requiredTests
+    .filter((id) => acceptance?.tests?.[id]?.status === 'FAIL')
+    .map((id) => ({ test: id, detail: acceptance.tests[id].detail ?? '' }));
+  // A test that ran but was not proven (e.g. the app was never executed) is neither a pass
+  // nor a failure — it is missing evidence, and missing evidence blocks.
+  const unprovenTests = obligations.requiredTests
+    .filter((id) => acceptance?.tests?.[id] && acceptance.tests[id].status !== 'PASS' && acceptance.tests[id].status !== 'FAIL')
+    .map((id) => ({ test: id, detail: acceptance.tests[id].detail ?? '' }));
+
+  // External dependencies without credentials are a declared dependency, never a fake pass.
+  const unmetDependencies = obligations.externalServices
+    .filter((s) => !credentials?.[s.envVar] && !credentials?.[s.key])
+    .map((s) => ({ key: s.key, label: s.label, envVar: s.envVar, reason: `${s.label} has no credential (${s.envVar}) configured, so calling it for real is impossible` }));
+
+  const noFalsePass = noFalsePassViolations({ files: list, architecture, fidelity, hasBackend, runtime: false });
+
+  const report = {
+    version: PRODUCTION_RUNTIME_VERSION,
+    status: RUNTIME_STATUS.BLOCKED,
+    environment: obligations.environment,
+    deployment: acceptance?.deployment ?? (obligations.backend ? 'not deployed for acceptance' : 'generated app executed in the local runtime'),
+    transport: acceptance?.transport ?? null,
+    testedAt: acceptance?.testedAt ?? null,
+    health: acceptance?.tests?.health?.status ?? (obligations.backend ? 'NOT TESTED' : 'N/A'),
+    api: acceptance?.tests?.['api-contract']?.status ?? (obligations.backend ? 'NOT TESTED' : 'N/A'),
+    database: obligations.backend ? (acceptance?.tests?.database?.status ?? 'NOT TESTED') : (acceptance?.tests?.['local-persistence']?.status ?? 'N/A'),
+    authentication: obligations.auth ? (acceptance?.tests?.login?.status ?? 'NOT TESTED') : 'N/A',
+    userJourney: acceptance?.tests?.['user-journey']?.status ?? 'NOT TESTED',
+    realtime: obligations.realtime ? (acceptance?.tests?.realtime?.status ?? 'NOT TESTED') : 'N/A',
+    external: obligations.externalServices.length ? (unmetDependencies.length ? 'DEPENDENCY_REQUIRED' : 'PASS') : 'N/A',
+    stages: obligations.stages,
+    requiredTests: obligations.requiredTests,
+    executedTests: acceptance ? Object.keys(acceptance.tests ?? {}) : [],
+    missingTests,
+    failedTests,
+    unprovenTests,
+    dependenciesRequired: unmetDependencies,
+    requirements: evidence,
+    criticalFailed: evidence.filter((r) => r.critical && (r.status === 'FAIL' || r.status === 'BLOCKED')).map((r) => r.requirementId),
+    criticalPassed: evidence.filter((r) => r.critical && r.status === 'PASS').map((r) => r.requirementId),
+    noFalsePass,
+    failures: [],
+    evidence: [],
+    blockingReason: null,
+    blockingCode: null,
+    /** The founder-facing line the dashboard and delivery both print. */
+    question: 'Does the delivered app deploy, run, persist data, complete the user journey and give runtime evidence for every critical requirement?'
+  };
+
+  // Static no-false-PASS violations are judged first: a placeholder or a browser-only page
+  // that owed a backend is a defect in the delivered product regardless of any run.
+  const staticViolations = noFalsePassViolations({ files: list, architecture, fidelity, hasBackend, runtime: false });
+  if (staticViolations.length) {
+    report.noFalsePass = staticViolations;
+    report.status = RUNTIME_STATUS.FAILED;
+    report.blockingCode = RUNTIME_BLOCKING.NO_FALSE_PASS;
+    report.blockingReason = `No false PASS: ${staticViolations.map((v) => `${v.code} (${v.detail})`).join('; ')}`;
+    report.failures.push(...staticViolations.map((v) => v.code));
+    return report;
+  }
+  if (list.length === 0) {
+    report.blockingCode = RUNTIME_BLOCKING.NO_CODE;
+    report.blockingReason = 'No generated code exists to run a production smoke test against.';
+    report.failures.push(report.blockingReason);
+    return report;
+  }
+  // A missing credential is a declared dependency — the honest, actionable reason. It is
+  // reported before the general "no evidence" case because it names exactly what to fix.
+  if (unmetDependencies.length) {
+    report.blockingCode = RUNTIME_BLOCKING.DEPENDENCY_REQUIRED;
+    report.blockingReason = unmetDependencies.map((d) => d.reason).join('; ');
+    report.failures.push(report.blockingReason);
+    return report;
+  }
+  if (!acceptance) {
+    report.blockingCode = RUNTIME_BLOCKING.EVIDENCE_MISSING;
+    report.blockingReason = obligations.backend
+      ? 'No production runtime acceptance run exists for this project. The generated Worker must be executed against a real D1 (create → read → update → read → delete → read-missing), its auth flow exercised, and the result recorded before delivery.'
+      : 'No runtime acceptance run exists for this project. The generated app must be executed (UI interaction, persistence, core journey) before delivery.';
+    report.failures.push(report.blockingReason);
+    return report;
+  }
+
+  // The run exists, so the runtime half of the contract applies: a static JSON body, a
+  // failed journey or a contract mismatch is a FAILED acceptance, not a blocked one.
+  const runtimeViolations = noFalsePassViolations({ files: list, architecture, fidelity, acceptance, evidence, hasBackend, runtime: true });
+  report.noFalsePass = runtimeViolations;
+  if (runtimeViolations.length) {
+    report.status = RUNTIME_STATUS.FAILED;
+    report.blockingCode = RUNTIME_BLOCKING.NO_FALSE_PASS;
+    report.blockingReason = `No false PASS: ${runtimeViolations.map((v) => `${v.code} (${v.detail})`).join('; ')}`;
+    report.failures.push(...runtimeViolations.map((v) => v.code));
+    return report;
+  }
+
+  report.evidence = [];
+  for (const id of obligations.requiredTests) {
+    const test = acceptance.tests?.[id];
+    report.evidence.push({
+      test: id,
+      label: testLabel(id),
+      status: test?.status ?? 'MISSING',
+      detail: test?.detail ?? null,
+      request: test?.request ?? null,
+      responseStatus: test?.responseStatus ?? null,
+      persisted: test?.persisted ?? null
+    });
+  }
+
+  if (failedTests.length) {
+    report.status = RUNTIME_STATUS.FAILED;
+    report.blockingCode = RUNTIME_BLOCKING.RUNTIME_FAILED;
+    report.blockingReason = `Production runtime test(s) failed: ${failedTests.map((f) => `${f.test} (${f.detail})`).join('; ')}`;
+    report.failures.push(...failedTests.map((f) => f.test));
+    return report;
+  }
+  if (missingTests.length || unprovenTests.length) {
+    report.blockingCode = RUNTIME_BLOCKING.EVIDENCE_INCOMPLETE;
+    report.blockingReason = `Production runtime evidence is incomplete: ${[...missingTests, ...unprovenTests.map((u) => u.test)].map(testLabel).join('; ')} was never proven against the generated application.`;
+    report.failures.push(...missingTests);
+    return report;
+  }
+
+  const criticalWithoutEvidence = evidence.filter((r) => r.critical && r.status !== 'PASS');
+  if (criticalWithoutEvidence.length) {
+    report.status = RUNTIME_STATUS.BLOCKED;
+    report.blockingCode = RUNTIME_BLOCKING.EVIDENCE_INCOMPLETE;
+    report.blockingReason = `Critical requirement(s) have no passing runtime evidence: ${criticalWithoutEvidence.map((r) => `${r.requirementId} ${r.description} — ${r.failureReason}`).join('; ')}`;
+    report.failures.push(...criticalWithoutEvidence.map((r) => r.requirementId));
+    return report;
+  }
+
+  report.status = RUNTIME_STATUS.PASSED;
+  return report;
+}
+
+/**
+ * Can this evidence be relied on? A report is rejected when it is not shaped like an
+ * acceptance run. Guards a stored record written by an older/partial integration.
+ */
+export function isRuntimeAcceptanceReport(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (!['passed', 'failed', 'blocked'].includes(String(value.status))) return false;
+  if (!value.tests || typeof value.tests !== 'object') return false;
+  return Object.keys(value.tests).length > 0;
+}
+
+/** Dashboard/report projection: the founder sees status and reason, never a bare "QA Passed". */
+export function describeRuntimeAcceptance(record) {
+  if (!record) {
+    return {
+      status: 'BLOCKED', label: 'BLOCKED', reason: 'Production runtime acceptance has not run for this project.',
+      testedAt: null, deployment: null, api: null, database: null, authentication: null, userJourney: null,
+      criticalPassed: 0, criticalFailed: 0, blockingReason: 'Production runtime acceptance has not run for this project.'
+    };
+  }
+  const passed = record.status === RUNTIME_STATUS.PASSED;
+  return {
+    status: String(record.status ?? 'blocked').toUpperCase(),
+    label: passed ? 'PASS' : record.status === RUNTIME_STATUS.FAILED ? 'FAILED' : 'BLOCKED',
+    reason: record.blockingReason ?? (passed ? 'Every critical requirement has passing runtime evidence.' : null),
+    testedAt: record.testedAt ?? null,
+    deployment: record.deployment ?? null,
+    api: record.api ?? null,
+    database: record.database ?? null,
+    authentication: record.authentication ?? null,
+    userJourney: record.userJourney ?? null,
+    realtime: record.realtime ?? null,
+    external: record.external ?? null,
+    criticalPassed: (record.criticalPassed ?? []).length,
+    criticalFailed: (record.criticalFailed ?? []).length,
+    blockingReason: record.blockingReason ?? null,
+    blockingCode: record.blockingCode ?? null,
+    environment: record.environment ?? null,
+    missingTests: record.missingTests ?? [],
+    failedTests: (record.failedTests ?? []).map((f) => f.test ?? f)
+  };
+}
+
+/**
+ * Cheap, per-project projection for list payloads (/api/state, dashboards).
+ * It never runs the engine — a list route serves dozens of rows per poll — so it reports
+ * the STORED verdict when one exists and, when none does, the honest reason there is not
+ * one. A browser-only architecture is named as such rather than as a failure, because it
+ * owes no server to deploy; anything else that has never been run is BLOCKED, never PASS.
+ */
+export function describeStoredRuntimeAcceptance(project) {
+  if (!project) return describeRuntimeAcceptance(null);
+  if (project.runtimeAcceptanceReport) return describeRuntimeAcceptance(project.runtimeAcceptanceReport);
+  if (project.architecture && project.architecture.backend === false) {
+    return {
+      ...describeRuntimeAcceptance(null),
+      status: 'not-run',
+      label: 'LOCAL',
+      reason: 'Browser-only architecture: there is no server to deploy. The production-runtime gate judges UI interaction, persistence and requirement evidence from executed source — open Project Details for the verdict.'
+    };
+  }
+  return describeRuntimeAcceptance(null);
+}
+
+/**
+ * Does this file set contain a server entry point? A Worker, an API or a server module — not
+ * a page that merely mentions the word "database". Shared so the gate, the delivery and the
+ * acceptance executor cannot disagree about what a backend is.
+ */
+export function hasBackendEntryPoint(files) {
+  return (Array.isArray(files) ? files : []).some((f) =>
+    f && typeof f.path === 'string' && (
+      /(?:^|\/)(?:worker|api|server|backend|routes?)\/[a-z0-9_-]+\.[cm]?js$/i.test(f.path)
+      || /(?:^|\/)(?:worker|api|server)\.[cm]?js$/i.test(f.path)
+    ));
+}
+
+/**
+ * The legacy runtime-evidence projection. The requirement matrix and the quality score read
+ * `{executed, verdict, evidence}` keyed by the RUNTIME_EVIDENCE_KEYS vocabulary; the
+ * acceptance report is keyed by test id. One adapter, so a persisted acceptance run also
+ * satisfies every reader that existed before it did.
+ */
+export function toRuntimeEvidenceProjection(acceptance) {
+  if (!acceptance?.tests) return null;
+  const t = acceptance.tests;
+  const ok = (id) => t[id]?.status === 'PASS';
+  const passedSteps = Object.entries(t).filter(([, v]) => v.status === 'PASS').map(([k]) => k);
+  return {
+    executed: true,
+    verdict: acceptance.status === RUNTIME_STATUS.PASSED ? 'functional' : 'not-functional',
+    passedSteps,
+    steps: Object.keys(t),
+    rowsInDb: acceptance.rowsInDb ?? null,
+    testedAt: acceptance.testedAt ?? null,
+    transport: acceptance.transport ?? null,
+    evidence: {
+      persistence: ok('refresh'),
+      create: ok('create'),
+      read: ok('read'),
+      update: ok('update'),
+      delete: ok('delete'),
+      backend: ok('deployment'),
+      validation: ok('invalid-input'),
+      database: ok('database'),
+      auth_register: ok('register'),
+      auth_login: ok('login'),
+      auth_protected: ok('unauthorized') || ok('session'),
+      logout: ok('post-logout'),
+      realtime: ok('realtime'),
+      external: ok('external-service'),
+      error_handling: ok('error-path')
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Running the acceptance when the Worker cannot execute generated code.
+//
+// The Worker deliberately does not execute untrusted code (free-tier CPU budget + sandbox
+// boundary), so execution happens in a runner: Node locally/CI, or an HTTP runner
+// (MAULI_RUNTIME_EXECUTOR) in production. Either way the evidence is REAL — the engine never
+// fabricates a PASS when no runner is configured.
+// ---------------------------------------------------------------------------
+export function runtimeExecutorConfigured(env) {
+  return Boolean(env?.MAULI_RUNTIME_EXECUTOR && String(env.MAULI_RUNTIME_EXECUTOR).trim());
+}
+
+/**
+ * Ask the configured runtime runner to execute the acceptance and return its structured
+ * report. A runner that answers anything other than a valid report yields `null`, and the
+ * gate then reports BLOCKED with an exact reason — never a fabricated PASS.
+ */
+export async function dispatchRuntimeAcceptance(env, { project, files, spec, architecture, requirements = [] } = {}) {
+  const url = env?.MAULI_RUNTIME_EXECUTOR;
+  if (!url) return { dispatched: false, reason: 'MAULI_RUNTIME_EXECUTOR is not configured', acceptance: null };
+  const payload = {
+    projectId: project?.id ?? null,
+    objective: project?.objective ?? '',
+    platform: project?.platform ?? null,
+    architecture: architecture ?? null,
+    spec: spec ?? null,
+    requirements: requirements.map((r) => ({ id: r.id, title: r.title, category: r.category, critical: r.critical === true })),
+    files: (files ?? []).map((f) => ({ path: f.path, content: f.content }))
+  };
+  const headers = { 'Content-Type': 'application/json' };
+  if (env?.MAULI_RUNTIME_EXECUTOR_TOKEN) headers.Authorization = `Bearer ${env.MAULI_RUNTIME_EXECUTOR_TOKEN}`;
+  try {
+    const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+    if (!response.ok) return { dispatched: true, reason: `runtime runner answered ${response.status}`, acceptance: null };
+    const body = await response.json().catch(() => null);
+    const acceptance = body?.runtimeAcceptance ?? body;
+    return { dispatched: true, reason: null, acceptance: isRuntimeAcceptanceReport(acceptance) ? acceptance : null };
+  } catch (error) {
+    return { dispatched: true, reason: `runtime runner unreachable: ${error?.message ?? error}`, acceptance: null };
+  }
+}
+
+export default evaluateRuntimeAcceptance;

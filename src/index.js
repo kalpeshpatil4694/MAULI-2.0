@@ -35,6 +35,8 @@ import { getFreeServices, getServicesByCategory, getServiceCategories, estimateF
 import { generateDesignCSS, getThemes, createDesignSystem } from './design-system.js';
 import { getAgentPatterns, getPatternForProject, getPatternCategories } from './agent-patterns.js';
 import { getD1UsageFromAPI, getWorkerAnalytics, getKVUsage, getFullUsageReport, checkLimits } from './cloudflare-api.js';
+import { recordRuntimeAcceptance, runtimeAcceptanceSummary, ensureRuntimeAcceptance } from './runtime-evidence.js';
+import { isRuntimeAcceptanceReport, describeStoredRuntimeAcceptance } from './production-runtime.js';
 
 function artifactJson(artifact) { return artifact ? ok({ artifact }) : fail('Artifact not found',404); }
 function isIsolatedTestEnv(env) { return env?.SKIP_RESULT_PERSISTENCE === true || env?.SKIP_RESULT_PERSISTENCE === 'true' || env?.MAULI_TEST_MODE === true || env?.MAULI_TEST_MODE === 'true'; }
@@ -114,6 +116,11 @@ function compactStateItem(item, type) {
   }
   if (type === 'projects') {
     delete copy.result; delete copy.largeResult;
+    // The acceptance run and its judgement are the size of a small document and are read
+    // one project at a time (Project Details, live progress). The list ships the compact
+    // founder-facing verdict instead, so a table of 100 projects does not carry 100 runs.
+    delete copy.runtimeAcceptance; delete copy.runtimeAcceptanceReport; delete copy.runtimeEvidence;
+    copy.productionRuntime = describeStoredRuntimeAcceptance(item);
   }
   return copy;
 }
@@ -516,7 +523,7 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/live-status'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({status:getLiveStatus()});}
   if(request.method==='GET'&&url.pathname==='/api/activity'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');const agentId=url.searchParams.get('agentId');const limit=parseInt(url.searchParams.get('limit')||'50');return ok({activities:getActivityFeed({limit,projectId,agentId})});}
   if(request.method==='POST'&&url.pathname==='/api/activity'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const activity=recordActivity(body);return ok({activity});}
-  if(request.method==='GET'&&url.pathname.startsWith('/api/project-progress/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const pid=parts[parts.length-1];if(store.hydrated)await d1TasksFresh(env);return ok({progress:getProjectProgress(pid)});}
+  if(request.method==='GET'&&url.pathname.startsWith('/api/project-progress/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const pid=parts[parts.length-1];if(store.hydrated)await d1TasksFresh(env);    return ok({progress:{...getProjectProgress(pid),productionRuntime:runtimeAcceptanceSummary(pid)}});}
   // Sub-Agent API
   if(request.method==='POST'&&url.pathname==='/api/sub-agents'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const sub=createSubAgent(body);return ok({subAgent:sub});}
   if(request.method==='GET'&&url.pathname==='/api/sub-agents'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parentId=url.searchParams.get('parentId');if(!parentId)return fail('parentId required',400);return ok({subAgents:getSubAgents(parentId)});}
@@ -524,6 +531,41 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/agent-conversation'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const a1=url.searchParams.get('agent1');const a2=url.searchParams.get('agent2');if(!a1||!a2)return fail('agent1 and agent2 required',400);return ok({messages:getAgentConversation(a1,a2)});}
   // Clone API
   if(request.method==='POST'&&url.pathname==='/api/clone'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const result=cloneProject(body.projectId,body.newObjective);return ok({result});}
+  // ── PRODUCTION RUNTIME ACCEPTANCE (points 6, 15, 16, 17) ──────────────────
+  // The structured run is persisted on the project and read back by the pipeline gate, the
+  // delivery and the dashboard, so all three judge the same evidence. Recording requires the
+  // founder key, and a body that is not shaped like an acceptance run is refused — a
+  // hand-written object must never become the evidence a delivery is approved on.
+  if(request.method==='GET'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/runtime-acceptance')){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const pid=url.pathname.split('/')[3];const project=store.get('projects',pid);
+    if(!project)return fail('Project not found',404);
+    return ok({projectId:pid,productionRuntime:runtimeAcceptanceSummary(project),runtimeAcceptance:project.runtimeAcceptance??null,recordedAt:project.runtimeAcceptedAt??null});
+  }
+  if(request.method==='POST'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/runtime-acceptance')){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const pid=url.pathname.split('/')[3];const project=store.get('projects',pid);
+    if(!project)return fail('Project not found',404);
+    const body=await json(request);
+    const acceptance=body?.runtimeAcceptance??body?.acceptance??null;
+    if(!isRuntimeAcceptanceReport(acceptance))return fail('runtimeAcceptance is not a valid acceptance run: it needs a status of passed|failed|blocked and a non-empty tests map',400);
+    try{recordRuntimeAcceptance(pid,acceptance);}catch(error){return fail(String(error?.message??error),400);}
+    const stored=store.get('projects',pid);
+    return ok({projectId:pid,productionRuntime:runtimeAcceptanceSummary(stored),runtimeAcceptance:stored.runtimeAcceptance,recordedAt:stored.runtimeAcceptedAt});
+  }
+  if(request.method==='POST'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/runtime-acceptance/run')){
+    const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
+    const pid=url.pathname.split('/')[3];const project=store.get('projects',pid);
+    if(!project)return fail('Project not found',404);
+    if(isRuntimeAcceptanceReport(project.runtimeAcceptance))
+      return ok({projectId:pid,recorded:false,alreadyRecorded:true,productionRuntime:runtimeAcceptanceSummary(project)});
+    const outcome=await ensureRuntimeAcceptance(pid,env);
+    if(!outcome.recorded){
+      // 424 Failed Dependency: BLOCKED / DEPENDENCY_REQUIRED, not a fabricated PASS.
+      return fail(`Production runtime acceptance could not be produced: ${outcome.reason}. Run node scripts/production-runtime.mjs against this project's code and POST the report to /api/projects/${pid}/runtime-acceptance, or configure MAULI_RUNTIME_EXECUTOR (the Node runner).`,424);
+    }
+    return ok({projectId:pid,recorded:true,productionRuntime:runtimeAcceptanceSummary(store.get('projects',pid))});
+  }
   // Project Detail: full lifecycle JSON for any project
   if(request.method==='GET'&&url.pathname.startsWith('/api/projects/')&&url.pathname.endsWith('/detail')){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
@@ -548,7 +590,11 @@ export default { async fetch(request, env, ctx) { try {
     const started=project.commandStartedAt||project.startedAt||project.commandReceivedAt||project.createdAt; const end=project.commandCompletedAt||project.completedAt||project.failedAt; const totalTimeMs=started?Math.max(0,Date.parse(end||now())-Date.parse(started)):0; // One source of truth for estimates: enrichProjectTiming clamps them, so this cannot
     // disagree with /api/project-progress or resurrect a poisoned stored estimate.
     const timingSummary=enrichProjectTiming(project,tasks); const estimatedDurationMs=timingSummary.estimatedDurationMs; const remainingDurationMs=timingSummary.remainingMs; const fmt=ms=>{const sec=Math.round(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;return h?h+'h '+m+'m '+s+'s':m?m+'m '+s+'s':s+'s';};
-    const detail={project,tasks:enrichedTasks,artifacts,events,approvals,summary:{totalTasks:tasks.length,completedTasks:completedCount,failedTasks:failedCount,runningTasks:runningCount,pendingTasks:tasks.length-completedCount-failedCount-runningCount,progressPct:tasks.length>0?Math.round((completedCount/tasks.length)*100):0,totalTimeMs,totalTimeFormatted:totalTimeMs>0?fmt(totalTimeMs):'In progress',estimatedDurationMs,estimatedDurationFormatted:fmt(estimatedDurationMs),remainingDurationMs,remainingDurationFormatted:fmt(remainingDurationMs),commandReceivedAt:project.commandReceivedAt||project.createdAt,commandStartedAt:started,commandCompletedAt:end,createdAt:project.createdAt,completedAt:project.completedAt||null,failedAt:project.failedAt||null,state:project.state,errors:tasks.filter(t=>t.error).map(t=>({task:t.title,error:t.error,at:t.updatedAt})),fixes:tasks.filter(t=>t.attempts>1).map(t=>({task:t.title,attempts:t.attempts,at:t.updatedAt}))}};
+    const detail={project,tasks:enrichedTasks,artifacts,events,approvals,
+    // Point 16: the founder must never see a bare "QA Passed". The runtime verdict, its
+    // tested-at stamp, the deployment/API/database/auth/journey statuses, the critical
+    // pass/fail counts and the exact blocking reason ride on the detail payload.
+    productionRuntime:runtimeAcceptanceSummary(project),summary:{totalTasks:tasks.length,completedTasks:completedCount,failedTasks:failedCount,runningTasks:runningCount,pendingTasks:tasks.length-completedCount-failedCount-runningCount,progressPct:tasks.length>0?Math.round((completedCount/tasks.length)*100):0,totalTimeMs,totalTimeFormatted:totalTimeMs>0?fmt(totalTimeMs):'In progress',estimatedDurationMs,estimatedDurationFormatted:fmt(estimatedDurationMs),remainingDurationMs,remainingDurationFormatted:fmt(remainingDurationMs),commandReceivedAt:project.commandReceivedAt||project.createdAt,commandStartedAt:started,commandCompletedAt:end,createdAt:project.createdAt,completedAt:project.completedAt||null,failedAt:project.failedAt||null,state:project.state,errors:tasks.filter(t=>t.error).map(t=>({task:t.title,error:t.error,at:t.updatedAt})),fixes:tasks.filter(t=>t.attempts>1).map(t=>({task:t.title,attempts:t.attempts,at:t.updatedAt}))}};
     return ok({detail});
   }
   // Documentation API
