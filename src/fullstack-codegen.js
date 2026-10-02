@@ -895,7 +895,9 @@ function wranglerJsonc({ table, realtime, backend = true }) {
   "durable_objects": {
     "bindings": [{ "name": "LIVE", "class_name": "LiveConnections" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveConnections"] }]` : ''}
+  "exports": {
+    "LiveConnections": { "type": "durable-object", "storage": "sqlite" }
+  }` : ''}
 }
 `;
 }
