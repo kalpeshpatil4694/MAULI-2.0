@@ -410,28 +410,39 @@ import { DurableObject } from 'cloudflare:workers';
 
 export class LiveConnections extends DurableObject {
   constructor(ctx, state) { super(ctx, state); this.state = state; }
-  async fetch(request, env) {
+  broadcast(message, sender = null) {
+    const sockets = typeof this.ctx?.getWebSockets === 'function' ? this.ctx.getWebSockets() : [];
+    for (const socket of sockets) {
+      if (socket === sender) continue;
+      try { socket.send(message); } catch (_) { /* runtime owns closed sockets */ }
+    }
+  }
+  async fetch(request) {
     const pathname = new URL(request.url).pathname;
     if (pathname === '/api/live/broadcast' && request.method === 'POST') {
       const message = await request.text();
-      broadcast(null, message);
+      this.broadcast(message);
       return new Response('ok');
     }
     if (pathname !== '/api/live') return new Response('Not found', { status: 404 });
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade', { status: 426 });
     const pair = new WebSocketPair();
     const client = pair[0];
-    client.accept();
-    clients.set(client, { since: Date.now() });
-    client.addEventListener('message', async (event) => {
-      let payload;
-      try { payload = JSON.parse(String(event.data)); } catch (_) { return; }
-      if (payload && payload.type === 'ping') broadcast(client, JSON.stringify({ type: 'pong', at: Date.now() }));
-    });
-    client.addEventListener('close', () => { clients.delete(client); });
-    client.addEventListener('error', () => { clients.delete(client); });
+    const server = pair[1];
+    if (typeof this.ctx?.acceptWebSocket === 'function') this.ctx.acceptWebSocket(server);
+    else server.accept();
     return new Response(null, { status: 101, webSocket: client });
   }
+  webSocketMessage(ws, message) {
+    let payload;
+    try { payload = JSON.parse(String(message)); } catch (_) { return; }
+    if (payload && payload.type === 'ping') this.broadcast(JSON.stringify({ type: 'pong', at: Date.now() }), ws);
+  }
+  webSocketClose(ws) {
+    try { ws.close(1000, 'Durable Object is closing WebSocket'); } catch (_) { /* already closed */ }
+  }
+}
+
 }
 ` : ''}
 `;
