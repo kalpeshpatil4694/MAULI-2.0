@@ -28,7 +28,9 @@ test('a generated realtime backend passes every wrangler configuration check', a
   // The specific pairs that were wrong before.
   assert.ok(Array.isArray(coffee.config.d1_databases), 'D1 bindings must be an array');
   assert.equal(coffee.config.durable_objects.bindings[0].class_name, 'LiveConnections');
-  assert.deepEqual(coffee.config.migrations[0].new_sqlite_classes, ['LiveConnections']);
+  assert.equal(coffee.config.exports.LiveConnections.type, 'durable-object');
+  assert.equal(coffee.config.exports.LiveConnections.storage, 'sqlite');
+  assert.equal(coffee.config.migrations, undefined, "new generated projects use declarative exports, not legacy migrations");
 });
 
 test('every generated product passes, whichever architecture it got', async () => {

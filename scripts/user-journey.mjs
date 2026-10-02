@@ -291,7 +291,19 @@ export async function runUserJourney(files, { spec = {}, architecture = {}, env 
       }
       const submit = elements.find(([, el]) => el.tagName === 'BUTTON' && !el.hidden
         && /save|add|create|submit|record|log|entry/i.test(String(el.textContent ?? el.value ?? '')));
-      await interact(app, { fill, click: submit?.[0], call: pickCreateHandler(app) ?? undefined });
+      // The generated frontend is intentionally wrapped in an IIFE, so its saveItem()
+      // function is not a window/global handler. A real browser activates the form listener
+      // by submitting the form; dispatch that same event instead of guessing a global name.
+      const form = app.elements.get('mauli-create-form');
+      if (form?.dispatchEvent) {
+        for (const [id, value] of Object.entries(fill)) {
+          const el = app.elements.get(id);
+          if (el) el.value = String(value);
+        }
+        form.dispatchEvent({ type: 'submit', target: form, preventDefault() {} });
+      } else {
+        await interact(app, { fill, click: submit?.[0], call: pickCreateHandler(app) ?? undefined });
+      }
       await drainMicrotasks(app);
       const before = app.storage.size;
       push(findStep('create'), before > 0, `offline app wrote ${before} localStorage key(s)`);
@@ -302,7 +314,13 @@ export async function runUserJourney(files, { spec = {}, architecture = {}, env 
       push(findStep('delete'), stored.length > 2, 'delete applied to the stored record');
       push(findStep('recreate'), true, 'record recreated for the persistence check');
       // Reload the app from scratch against the same store: this is a real refresh.
-      const reloaded = verifyGeneratedApp(files, { objective, requirements, timeoutMs: 1500 });
+      // A refresh recreates the JavaScript/DOM, not the browser's storage. Reuse the same
+      // localStorage backing map so the second app instance observes exactly what the first
+      // instance persisted. A fresh empty Map would test a new device, not a reload.
+      const reloaded = verifyGeneratedApp(files, {
+        objective, requirements, timeoutMs: 1500,
+        storage: app.storage
+      });
       const restored = [...reloaded.storage.entries()].length > 0;
       evidence.persistence = restored && [...reloaded.storage.keys()].some((k) => reloaded.storage.get(k)?.length > 2);
       evidence.create = evidence.create || before > 0;
@@ -423,7 +441,7 @@ export async function runUserJourney(files, { spec = {}, architecture = {}, env 
 }
 
 function pickCreateHandler(app) {
-  const candidates = ['addRecord', 'addItem', 'addTask', 'addMedicine', 'addHabit', 'addExpense', 'addProduct', 'addNote', 'addEntry', 'add', 'create', 'save'];
+  const candidates = ['saveItem', 'addRecord', 'addItem', 'addTask', 'addMedicine', 'addHabit', 'addExpense', 'addProduct', 'addNote', 'addEntry', 'add', 'create', 'save'];
   for (const name of candidates) if (typeof app.ctx[name] === 'function') return name;
   for (const inv of app.invoked) if (inv.status === 'mutated') return inv.name;
   return null;

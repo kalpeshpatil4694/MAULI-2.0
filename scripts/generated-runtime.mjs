@@ -434,7 +434,7 @@ function attachDurableObjectBindings(mod, runtime) {
     // `get` makes the live route answer 501 while the feature still looks present in source.
     runtime.env[binding.name] = {
       idFromName: () => ({ name: binding.name }),
-      get: async () => instance,
+      get: () => instance,
       fetch: (request, env) => instance.fetch(request, env ?? runtime.env)
     };
   }

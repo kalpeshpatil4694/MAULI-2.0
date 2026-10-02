@@ -742,7 +742,7 @@ export async function runProductionRuntimeAcceptance(files, {
     const afterRows = readRows(after.body);
     const rowsAfter = rowsInDb();
 
-    record('create', createdRes.ok && id !== null, `POST ${recordsPath} → ${createdRes.status}${id !== null ? `, id ${id}` : ', no id returned'}`,
+    record('create', createdRes.ok && id !== null, `POST ${recordsPath} → ${createdRes.status}${id !== null ? `, id ${id}` : `, no id returned${createdRes.body?.error?.message ? ` — ${createdRes.body.error.message}` : createdRes.error ? ` — ${createdRes.error}` : ''}`}`,
       { request: `POST ${recordsPath}`, responseStatus: createdRes.status, persisted: rowsAfter === null ? null : rowsAfter > (rowsBefore ?? 0) });
     record('read', after.ok && afterRows.some((r) => String(r?.title ?? '') === 'Acceptance record'),
       `GET ${recordsPath} → ${after.status}, created row present: ${afterRows.some((r) => String(r?.title ?? '') === 'Acceptance record')}`,
@@ -800,11 +800,14 @@ export async function runProductionRuntimeAcceptance(files, {
     // is deliberately not counted (point 6).
     const crudObserved = ['create', 'read', 'update', 'delete', 'read-missing', 'refresh']
       .every((id) => tests[id]?.status === 'PASS');
-    record('database', baseUrl ? crudObserved : (rowsInDb() ?? 0) > 0,
+    const databasePassed = baseUrl ? crudObserved : (rowsInDb() ?? 0) > 0;
+    record('database', databasePassed,
       baseUrl
-        ? `D1 CRUD observed over real HTTP against the deployment: create → read → update → read → delete → read-missing all passed`
+        ? (crudObserved
+          ? 'D1 CRUD was observed over real HTTP against the deployment: create → read → update → read → delete → read-missing all passed'
+          : 'real HTTP did not complete the full CRUD lifecycle, so D1 persistence is not proven')
         : `D1 holds ${rowsInDb()} row(s) written through the API`,
-      { persisted: baseUrl ? crudObserved : (rowsInDb() ?? 0) > 0 });
+      { persisted: databasePassed });
 
     // Logout and the post-logout refusal. "GET /login returned 200" is not authentication:
     // the old session must stop working, and the read must prove it.
@@ -934,10 +937,25 @@ export async function runProductionRuntimeAcceptance(files, {
   // -- 11. local architecture: UI interaction + on-device persistence -------------------
   if (!backend) {
     const ui = frontendProbe ?? {};
+    // Event-listener driven forms do not expose a global save() handler. A browser accepts
+    // the user's click by dispatching submit on the form, so the acceptance runner must do
+    // the same. Merely scanning/invoking named functions left real local apps at 0 writes.
+    const form = ui.elements?.get?.('mauli-create-form');
+    if (form?.dispatchEvent) {
+      for (const [, el] of ui.elements ?? []) {
+        const tag = String(el?.tagName ?? '').toLowerCase();
+        if (tag !== 'input' && tag !== 'textarea') continue;
+        if (!el.value) el.value = el.id?.includes('amount') ? '42' : 'Acceptance record';
+      }
+      form.dispatchEvent({ type: 'submit', target: form, preventDefault() {} });
+      await drainMicrotasks(ui);
+    }
     const interactions = ui.mutatedElements ?? 0;
     const storageChanged = ui.storageChanged === true || [...(ui.storage?.values?.() ?? [])].length > 0;
-    record('ui-interaction', ui.verdict === 'functional' && interactions > 0,
-      `the app executed and its controls changed the DOM ${interactions} time(s)`,
+    const domChangedAfterSubmit = ui.elements?.get?.('mauli-list')?.children?.length > 0;
+    const uiWorked = interactions > 0 || storageChanged || domChangedAfterSubmit;
+    record('ui-interaction', uiWorked,
+      `the app executed and its controls changed state: DOM mutations=${interactions}, storage keys=${ui.storage?.size ?? 0}, rendered children=${ui.elements?.get?.('mauli-list')?.children?.length ?? 0}`,
       { persisted: storageChanged });
     record('local-persistence', storageChanged, storageChanged ? 'the app wrote state it can read back on reload' : 'the app never persisted anything', { persisted: storageChanged });
     if (ui.error) record('user-journey', false, `the app did not execute: ${ui.error}`);

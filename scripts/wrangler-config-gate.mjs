@@ -15,7 +15,7 @@
 //
 //   * parses the emitted `wrangler.jsonc` as JSONC, proving it has no parse error;
 //   * checks the config against wrangler's own schema shape (D1 array, DO object with a
-//     `bindings` array, DO class listed in `migrations[].new_sqlite_classes`);
+//     `bindings` array, DO class declared in `exports` with SQLite storage);
 //   * runs the emitted migration through REAL SQLite, so a `CREATE TABLE order` — a SQL
 //     keyword, and the actual name of a coffee-shop order product — is caught here rather
 //     than as a 500 on a deployed Worker;
@@ -177,7 +177,7 @@ async function checkProject(command, { withWrangler }) {
     const live = (dos?.bindings ?? []).find((b) => b?.name === 'LIVE');
     check('LIVE binding declared', !!live, JSON.stringify(live));
     const classes = (parsed.migrations ?? []).flatMap((m) => m?.new_sqlite_classes ?? []);
-    check('LiveConnections is in new_sqlite_classes', classes.includes('LiveConnections'), JSON.stringify(classes));
+    check('LiveConnections is declared as a SQLite Durable Object export', parsed.exports?.LiveConnections?.type === 'durable-object' && parsed.exports?.LiveConnections?.storage === 'sqlite', JSON.stringify(parsed.exports?.LiveConnections));
   } else {
     check('no Durable Object for a product with no live channel', parsed.durable_objects === undefined, String(parsed.durable_objects));
   }

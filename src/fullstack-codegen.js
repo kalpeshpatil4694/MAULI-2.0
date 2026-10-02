@@ -217,6 +217,28 @@ function broadcast(sender, message) {
   }
   return sent;
 }
+
+async function broadcastLive(env, message) {
+  if (!env?.LIVE) return;
+  if (typeof env.LIVE.idFromName === 'function' && typeof env.LIVE.get === 'function') {
+    const id = env.LIVE.idFromName('global');
+    const stub = env.LIVE.get(id);
+    await stub.fetch(new Request('https://mauli-live/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: message
+    }));
+    return;
+  }
+  // Deterministic in-process harness fallback; never used by a real Cloudflare namespace.
+  if (typeof env.LIVE.fetch === 'function') {
+    await env.LIVE.fetch(new Request('https://mauli-live/broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: message
+    }), env);
+  }
+}
 ` : ''}
 async function route(request, env, url) {
   const path = url.pathname.replace(/\\/+$/, '');
@@ -309,7 +331,7 @@ ${auth ? `  if (path.startsWith('/api/') && !path.startsWith('/api/health')) {
       .bind(title, String(body.detail ?? '').trim(), amount, stamp, stamp${auth ? ', user.email' : ', null'}).run();
     const id = result?.meta?.last_row_id;
     const row = await env.DB.prepare('SELECT id, title, detail, amount, created_at, updated_at' + DUE + ' FROM ' + QT + ' WHERE id = ?').bind(id ?? 0).first();
-${realtime ? `    broadcast(null, JSON.stringify({ type: '${table}.created', record: row }));` : ''}
+${realtime ? `    await broadcastLive(env, JSON.stringify({ type: '${table}.created', record: row }));` : ''}
     return json({ ok: true, ${table}: row }, 201);
   }
 
@@ -332,14 +354,14 @@ ${realtime ? `    broadcast(null, JSON.stringify({ type: '${table}.created', rec
       await env.DB.prepare('UPDATE ' + QT + ' SET title = ?, detail = ?, amount = ?, updated_at = ?' + DUE_SET + ' WHERE id = ?')
         .bind(title, String(body.detail ?? '').trim(), amount, new Date().toISOString()${due ? ", String(body.due ?? '').trim()" : ''}, id).run();
       const row = await env.DB.prepare('SELECT id, title, detail, amount, created_at, updated_at' + DUE + ' FROM ' + QT + ' WHERE id = ?').bind(id).first();
-${realtime ? `      broadcast(null, JSON.stringify({ type: '${table}.updated', record: row }));` : ''}
+${realtime ? `      await broadcastLive(env, JSON.stringify({ type: '${table}.updated', record: row }));` : ''}
       return json({ ok: true, ${table}: row });
     }
     if (method === 'DELETE') {
       const existing = await env.DB.prepare('SELECT id FROM ' + QT + ' WHERE id = ?').bind(id).first();
       if (!existing) return fail('${label} not found', 404);
       await env.DB.prepare('DELETE FROM ' + QT + ' WHERE id = ?').bind(id).run();
-${realtime ? `      broadcast(null, JSON.stringify({ type: '${table}.deleted', id }));` : ''}
+${realtime ? `      await broadcastLive(env, JSON.stringify({ type: '${table}.deleted', id }));` : ''}
       return json({ ok: true, deleted: id });
     }
   }
@@ -358,6 +380,13 @@ export default {
       // also what makes every client of the product share ONE Durable Object instance, so a
       // write on one client reaches the others.
       if (url.pathname === '/api/live') {
+        // Production env.LIVE is a DurableObjectNamespace; resolve a stable instance first.
+        if (env && env.LIVE && typeof env.LIVE.idFromName === 'function' && typeof env.LIVE.get === 'function') {
+          const id = env.LIVE.idFromName('global');
+          return await env.LIVE.get(id).fetch(request);
+        }
+        // The generated-runtime test harness exposes a direct DO instance for deterministic
+        // in-process execution. Production Cloudflare always takes the namespace branch above.
         if (env && env.LIVE && typeof env.LIVE.fetch === 'function') return await env.LIVE.fetch(request, env);
         return fail('Live updates are not configured for this deployment', 501);
       }
@@ -382,7 +411,13 @@ import { DurableObject } from 'cloudflare:workers';
 export class LiveConnections extends DurableObject {
   constructor(ctx, state) { super(ctx, state); this.state = state; }
   async fetch(request, env) {
-    if (new URL(request.url).pathname !== '/api/live') return new Response('Not found', { status: 404 });
+    const pathname = new URL(request.url).pathname;
+    if (pathname === '/api/live/broadcast' && request.method === 'POST') {
+      const message = await request.text();
+      broadcast(null, message);
+      return new Response('ok');
+    }
+    if (pathname !== '/api/live') return new Response('Not found', { status: 404 });
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade', { status: 426 });
     const pair = new WebSocketPair();
     const client = pair[0];
@@ -908,7 +943,9 @@ function wranglerJsonc({ table, realtime, backend = true }) {
   "durable_objects": {
     "bindings": [{ "name": "LIVE", "class_name": "LiveConnections" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveConnections"] }]` : ''}
+  "exports": {
+    "LiveConnections": { "type": "durable-object", "storage": "sqlite" }
+  }` : ''}
 }
 `;
 }

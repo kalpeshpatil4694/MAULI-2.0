@@ -43,17 +43,19 @@ export function redact(value) {
   return String(value ?? '').replace(SECRET_VALUE_RE, '[redacted]').slice(0, 2000);
 }
 
-function run(command, args, { cwd, env = {} } = {}) {
+function run(command, args, { cwd, env = {}, input = null } = {}) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
       env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe']
     });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (c) => { stdout += c; });
     child.stderr.on('data', (c) => { stderr += c; });
+    if (input !== null) { try { child.stdin.write(String(input)); child.stdin.end(); } catch (_) { /* process may have exited */ } }
+    else child.stdin.end();
     const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_) { /* gone */ } }, 300000);
     child.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
     child.on('error', (error) => { clearTimeout(timer); resolve({ code: 1, stdout, stderr: String(error?.message ?? error) }); });
@@ -258,6 +260,17 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
       const db = await provisionDatabase(root, dbName);
       if (!db.ok) {
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(db.message, ''), errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}` } };
+      }
+    }
+    // A newly provisioned remote D1 is empty. Generated Workers also create their schema
+    // defensively on first request, but production acceptance must not depend on request-time
+    // DDL: apply the generated migration to the exact database bound to this Worker before
+    // deployment. This prevents a valid generated API from reaching a real D1 with no schema.
+    const migrationDir = join(root, 'migrations');
+    if (existsSync(migrationDir) && dbName) {
+      const migrated = await run(wranglerCommand(), ['d1', 'migrations', 'apply', dbName, '--remote'], { cwd: root, input: 'y\n' });
+      if (migrated.code !== 0) {
+        return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(migrated.stderr, migrated.stdout), errorMessage: `the generated project's D1 migrations could not be applied: ${redact(migrated.stderr || migrated.stdout)}` } };
       }
     }
     const validation = await run(wranglerCommand(), ['deploy', '--dry-run'], { cwd: root });
