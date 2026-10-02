@@ -90,6 +90,14 @@ export async function startDeploymentHarness(files, { env = {}, host = '127.0.0.
         socket.end('HTTP/1.1 426 Upgrade Required\r\nConnection: close\r\n\r\n');
         return;
       }
+      // Which half does the generated Worker hand back? A Durable Object that uses the
+      // hibernation API registers the SERVER half with ctx.acceptWebSocket() and returns the
+      // CLIENT half to the runtime, so every broadcast is sent on `server` — while a plain
+      // implementation registers and returns the same half. Forwarding whichever half the
+      // DO actually broadcasts on is what keeps a real two-client proof honest.
+      const registered = workerEnv?.LIVE?.__sockets;
+      const candidates = registered ? [...registered] : [];
+      const outbound = candidates.find((s) => s !== shim) ?? shim;
       // Exactly one blank line terminates the handshake. A second one is read by the client
       // as a stray frame and closes the socket with "invalid opcode".
       socket.write([
@@ -99,8 +107,8 @@ export async function startDeploymentHarness(files, { env = {}, host = '127.0.0.
         `Sec-WebSocket-Accept: ${acceptKey(req.headers['sec-websocket-key'])}`,
         '', ''
       ].join('\r\n'));
-      const originalSend = shim.send.bind(shim);
-      shim.send = (data) => {
+      const originalSend = outbound.send.bind(outbound);
+      outbound.send = (data) => {
         try { socket.write(textFrame(typeof data === 'string' ? data : String(data))); } catch (_) { /* the client went away */ }
         return originalSend(data);
       };

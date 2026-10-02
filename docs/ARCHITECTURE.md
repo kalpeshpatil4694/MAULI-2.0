@@ -535,6 +535,32 @@ DO's router to accept it, then drives a real write through the real namespace. I
 control reverts the path and confirms the test fails, so it cannot quietly stop testing
 anything.
 
+**Four harness defects, one symptom.** With the route fixed, the two-client proof still failed
+— and each remaining cause was a place where the harness was *less* faithful than Cloudflare,
+so every one of them looked like a product whose live channel had stopped working:
+
+1. **A socket kept one listener per event type.** `addEventListener` assigned, so registering
+   a close handler silently erased the message handler. The DOM's own semantics are a list.
+2. **A closed socket stayed in the Durable Object's set.** Nothing invoked the DO's
+   `webSocketClose`, so a disconnected client kept receiving broadcasts into a dead socket —
+   and the reconnected client, correctly registered alongside it, appeared to receive nothing.
+3. **The journey built its own Durable Object.** Clients connected to a private
+   `new LiveConnections(...)` while the write broadcast through the runtime's instance. Two
+   instances, two socket sets. Cloudflare gives every client of one id exactly one instance.
+4. **The journey opened the socket by calling the DO directly**, skipping the Worker's own
+   live route — and with it the hop a real request makes.
+
+The hibernation change made this harder to see rather than easier: a Durable Object that
+registers the **server** half and returns the **client** half broadcasts on the one the
+harness was not forwarding. It now resolves whichever half the DO actually registered, and
+the runtime publishes that set — as a `Set`, which one `Array.isArray` check was quietly
+rejecting, falling back to the half nobody broadcasts on.
+
+Every one of these failed **silently**: no assertion fired and no error was thrown. The only
+evidence was a product that could not do the thing its specification promised.
+`tests/live-broadcast.test.js` pins all five behaviours, including the route agreement, and
+its negative control reverts the route and confirms the test fails.
+
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
 Everything above proves the code is a working app. None of it proved the app **ran**. The

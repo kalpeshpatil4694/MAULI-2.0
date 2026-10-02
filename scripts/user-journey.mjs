@@ -345,13 +345,34 @@ export async function runUserJourney(files, { spec = {}, architecture = {}, env 
         // Two independent clients connect to the live Durable Object, then a record is
         // written through the normal API. "Real-time" means both clients receive that
         // write without reloading — not that a WebSocket object exists somewhere.
-        const instance = new live({} /* Durable Object state */);
+        // The clients must connect to the SAME Durable Object instance the write broadcasts
+        // through. Constructing a private `new live(...)` here gave the sockets their own
+        // instance, so every broadcast went to a different instance's socket set and the
+        // live channel looked connected while delivering nothing. Cloudflare gives every
+        // client of one id ONE instance; the journey has to do the same.
+        const namespace = worker?.env?.LIVE ?? runtime.env?.LIVE ?? null;
+        const instance = namespace?.get && namespace.get()
+          ? namespace.get(namespace.idFromName('global'))
+          : new live({
+            id: { name: 'journey', toString: () => 'journey' },
+            acceptWebSocket: () => {},
+            getWebSockets: () => []
+          });
+        // A hibernation DO returns one half and broadcasts on the other, so the observer
+        // watches the half the Durable Object actually sends on.
+        const observed = (response) => {
+          const registered = typeof instance?.ctx?.getWebSockets === 'function' ? instance.ctx.getWebSockets() : [];
+          return registered.find((s) => s !== response?.webSocket) ?? response?.webSocket ?? null;
+        };
         const open = async () => {
-          const response = await instance.fetch(
+          // Through the Worker's OWN entry point, exactly as a deployed client reaches the
+          // Durable Object. Calling instance.fetch() directly skipped the Worker's live
+          // route, and with it the hop a real request makes.
+          const response = await worker.handler(
             new Request('https://generated.app/api/live', { headers: { Upgrade: 'websocket' } }),
             worker.env, {}
           );
-          return { response, socket: response?.webSocket ?? null };
+          return { response, socket: observed(response) };
         };
         const a = await open();
         const b = await open();

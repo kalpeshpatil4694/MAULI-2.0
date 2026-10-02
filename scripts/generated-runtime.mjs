@@ -230,11 +230,25 @@ class ShimSocket {
     if (this._peer && !this._peer.closed) this._peer.messages.push(text);
     return 0;
   }
-  close(code = 1000, reason = '') { this.closed = true; this.closeInfo = { code, reason }; }
-  addEventListener(type, fn) { (this._handlers ||= {})[type] = fn; }
+  close(code = 1000, reason = '') {
+    if (this.closed) return;
+    this.closed = true;
+    this.closeInfo = { code, reason };
+    // The runtime notifies the Durable Object that owns this socket, so a hibernation DO can
+    // drop it from its own broadcast set. Without this a closed client stays registered and
+    // a later broadcast is written into a dead socket.
+    for (const fn of this._handlers?.close ?? []) {
+      try { fn({ type: 'close', code, reason }); } catch (_) { /* a closing handler cannot fail the close */ }
+    }
+  }
+  // Handlers ACCUMULATE. Storing one handler per type silently discarded every listener but
+  // the last: a Durable Object that registers both a message and a close handler kept only
+  // the close one, so a disconnected client was never removed from the broadcast set and a
+  // reconnected client then received nothing. The DOM's own semantics here are a list.
+  addEventListener(type, fn) { ((this._handlers ||= {})[type] ||= []).push(fn); }
   removeEventListener() {}
   // Used by the verifier to push a message FROM the client INTO the server handler.
-  receive(text) { (this._handlers?.message ?? []).forEach((fn) => fn({ data: text })); }
+  receive(text) { for (const fn of this._handlers?.message ?? []) fn({ data: text }); }
 }
 
 function WebSocketPair() {
@@ -430,8 +444,21 @@ function attachDurableObjectBindings(mod, runtime) {
     const doSockets = new Set();
     const doCtx = {
       id: { name: binding.name, toString: () => binding.name },
-      acceptWebSocket(socket) { doSockets.add(socket); },
-      getWebSockets() { return [...doSockets]; }
+      acceptWebSocket(socket) {
+        doSockets.add(socket);
+        // A hibernation Durable Object is told when one of its sockets goes away, and drops
+        // it from the set. Nothing called the DO's own webSocketClose handler, so a closed
+        // client stayed registered and every later broadcast was written into a dead socket
+        // — which reads to the founder as "reconnecting stopped working".
+        socket.addEventListener?.('close', () => {
+          doSockets.delete(socket);
+          const handler = instance?.webSocketClose;
+          if (typeof handler === 'function') {
+            try { handler.call(instance, socket); } catch (_) { /* a closing socket cannot fail the close */ }
+          }
+        });
+      },
+      getWebSockets() { return [...doSockets].filter((s) => s && !s.closed); }
     };
     const instance = new Cls(doCtx);
     instance.env = runtime.env;
@@ -441,7 +468,14 @@ function attachDurableObjectBindings(mod, runtime) {
     runtime.env[binding.name] = {
       idFromName: () => ({ name: binding.name }),
       get: () => instance,
-      fetch: (request, env) => instance.fetch(request, env ?? runtime.env)
+      fetch: (request, env) => instance.fetch(request, env ?? runtime.env),
+      // The sockets the Durable Object registered through ctx.acceptWebSocket(). A
+      // hibernation-style DO broadcasts on these, which is NOT necessarily the half it
+      // returns to the runtime, so the HTTP harness needs to see them to forward the right
+      // one over the socket. It is a Set, not an Array — a consumer that checks it with
+      // Array.isArray silently gets an empty list and forwards the half nobody broadcasts
+      // on, which looks exactly like a product whose live channel never connects.
+      __sockets: doSockets
     };
   }
   return bindings.length;

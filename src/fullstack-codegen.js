@@ -442,8 +442,6 @@ export class LiveConnections extends DurableObject {
     try { ws.close(1000, 'Durable Object is closing WebSocket'); } catch (_) { /* already closed */ }
   }
 }
-
-}
 ` : ''}
 `;
 }

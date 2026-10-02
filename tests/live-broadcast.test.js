@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { extractRequirementSpec } from '../src/requirement-spec.js';
 import { selectArchitecture } from '../src/architecture.js';
 import { generateFullStackApp } from '../src/fullstack-codegen.js';
-import { createRuntime, loadWorker } from '../scripts/generated-runtime.mjs';
+import { createRuntime, loadWorker, ShimSocket } from '../scripts/generated-runtime.mjs';
 
 // A write has to REACH the connected clients. The Worker holds no sockets — the Durable
 // Object does — so a write is delivered by asking the DO to broadcast.
@@ -78,6 +78,69 @@ test('a write on one client really reaches the other through the Durable Object'
       body: JSON.stringify({ type: 'order.created' })
     }), runtime.env);
     assert.equal(relayed.status, 200, 'the Durable Object must accept the broadcast the Worker sends it');
+  } finally {
+    runtime.disposeGlobals();
+    await runtime.dispose();
+  }
+});
+// Every one of these harness defects had the same symptom to the founder: the live channel
+// looked connected and delivered nothing. They are pinned here because each of them failed
+// silently — no assertion fired, no error was thrown, and the only evidence was a product
+// that could not do the thing its specification promised.
+
+// A socket's listeners ACCUMULATE. Storing one handler per type silently discarded every
+// listener but the last, so a Durable Object registering both a message and a close handler
+// kept only the close one and never heard the client it was serving.
+test('socket listeners accumulate instead of overwriting each other', () => {
+  const socket = new ShimSocket('client');
+  const seen = [];
+  socket.addEventListener('message', () => seen.push('first'));
+  socket.addEventListener('message', () => seen.push('second'));
+  socket.receive('hello');
+  assert.deepEqual(seen, ['first', 'second'], 'a second message listener must not erase the first');
+});
+
+// A hibernation Durable Object is told when one of its sockets closes and drops it. Nothing
+// called the DO's own handler, so a disconnected client stayed in the broadcast set and a
+// reconnected client received nothing — "reconnecting stopped working".
+test('a closed socket is dropped from the Durable Object socket set', async () => {
+  const built = buildRealtimeApp();
+  const runtime = createRuntime({ files: built.files });
+  try {
+    const loaded = await loadWorker(built.files, runtime);
+    const stub = runtime.env.LIVE.get(runtime.env.LIVE.idFromName('global'));
+    const first = await loaded.handler(
+      new Request('https://generated.app/api/live', { headers: { Upgrade: 'websocket' } }),
+      runtime.env, {}
+    );
+    assert.equal(first.status, 101);
+    assert.equal(stub.ctx.getWebSockets().length, 1, 'the connected client is registered');
+
+    // The half the Durable Object registered is the one a real client's disconnection
+    // ends — that is the socket Cloudflare hands to the DO, not the half returned to the
+    // runtime. Closing it must remove it from the set.
+    const registered = stub.ctx.getWebSockets()[0];
+    assert.ok(registered, 'the Durable Object registered the socket it broadcasts on');
+    registered.close();
+    assert.equal(stub.ctx.getWebSockets().length, 0,
+      'a closed client must leave the broadcast set, or every later write goes into a dead socket');
+  } finally {
+    runtime.disposeGlobals();
+    await runtime.dispose();
+  }
+});
+
+// The journey used to build its OWN Durable Object instance, so the sockets it opened lived
+// in a different instance from the one the write broadcast through. Two independent clients
+// connected to one instance, and Cloudflare gives every client of one id ONE instance.
+test('the journey and the write share ONE Durable Object instance', async () => {
+  const built = buildRealtimeApp();
+  const runtime = createRuntime({ files: built.files });
+  try {
+    await loadWorker(built.files, runtime);
+    const a = runtime.env.LIVE.get(runtime.env.LIVE.idFromName('global'));
+    const b = runtime.env.LIVE.get(runtime.env.LIVE.idFromName('global'));
+    assert.equal(a, b, 'every client of one Durable Object id must reach the same instance');
   } finally {
     runtime.disposeGlobals();
     await runtime.dispose();
