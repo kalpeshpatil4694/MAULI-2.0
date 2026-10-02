@@ -36,7 +36,11 @@ function wranglerCommand() {
 
 const SECRET_VALUE_RE = /(?:bearer\s+)[A-Za-z0-9._~+/=-]{8,}|\b[A-Za-z0-9_-]{32,}\b|(?:token|key|secret|password)\s*[=:]\s*\S+/gi;
 export function redact(value) {
-  return String(value ?? '').replace(SECRET_VALUE_RE, '[redacted]').slice(0, 400);
+  // 400 characters truncated wrangler's own output right where the binding table is —
+  // "Your Worker has access to the following bindings:" is the line that says whether the
+  // Durable Object was actually accepted, and it was the one line being cut. Errors stay
+  // short because they arrive at the start of the message.
+  return String(value ?? '').replace(SECRET_VALUE_RE, '[redacted]').slice(0, 2000);
 }
 
 function run(command, args, { cwd, env = {} } = {}) {
@@ -271,6 +275,8 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     // binding produced no evidence anywhere and the only symptom was a 501 at runtime.
     // Redacted before it is ever printed; secrets are never written to a CI log.
     const deployLog = redact([deployed.stdout, deployed.stderr].filter(Boolean).join('\n'));
+    // The binding table is the whole point of this log: it is the only place that says
+    // whether Cloudflare accepted the Durable Object binding.
     if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}\n${deployLog}`);
     if (deployed.code !== 0) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(deployed.stderr, deployed.stdout), errorMessage: redact(deployed.stderr || deployed.stdout) } };
