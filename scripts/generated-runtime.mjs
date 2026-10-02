@@ -32,6 +32,13 @@ const NATIVE = { setTimeout: nodeSetTimeout, clearTimeout: nodeClearTimeout };
 
 const TYPES = { TEXT: 'TEXT', INTEGER: 'INTEGER', REAL: 'REAL' };
 
+// A SQL identifier may be bare (`order` — which is a keyword and therefore invalid) or
+// quoted (`"order"` — which is what real D1 requires and what the generator now emits). The
+// shim must read both, because a harness that cannot parse the SQL the product actually
+// issues reports a working product as broken. `table()` strips the quotes when it stores.
+// The alternation is CAPTURING: callers read the name as match(...)[1].
+const IDENT = '("[^"]+"|`[^`]+`|[A-Za-z_]\\w*)';
+
 class D1Result {
   constructor(rows = [], meta = {}) {
     this.results = rows;
@@ -58,7 +65,11 @@ class InMemoryD1 {
   prepare(sql) { return new D1Statement(this, sql); }
 
   table(name) {
-    const key = String(name).replace(/["'`\[\]]/g, '').toLowerCase();
+    const key = String(name ?? '').replace(/["'`\[\]]/g, '').toLowerCase();
+    // A statement whose table name this shim could not read is a harness gap, not an empty
+    // table. Silently creating a table keyed '' let an unreadable statement look like a
+    // working one that had simply found no rows.
+    if (!key) throw new Error(`the shim could not read the table name from: ${String(name ?? '(none)')}`);
     if (!this.tables.has(key)) this.tables.set(key, { name: key, columns: [], rows: [] });
     return this.tables.get(key);
   }
@@ -69,7 +80,7 @@ class InMemoryD1 {
     const upper = statement.toUpperCase();
 
     if (/^CREATE\s+TABLE/i.test(upper)) {
-      const name = (statement.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][\w]*)/i) ?? [])[1];
+      const name = (statement.match(new RegExp(`CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${IDENT}`, 'i')) ?? [])[1];
       const body = statement.slice(statement.indexOf('('));
       const columns = [...body.matchAll(/([A-Za-z_][\w]*)\s+(TEXT|INTEGER|REAL)/gi)].map((m) => ({ name: m[1].toLowerCase(), type: m[2].toUpperCase() }));
       const t = this.table(name);
@@ -77,12 +88,12 @@ class InMemoryD1 {
       return new D1Result([], { changes: 0 });
     }
     if (/^DROP\s+TABLE/i.test(upper)) {
-      const name = (statement.match(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([A-Za-z_][\w]*)/i) ?? [])[1];
+      const name = (statement.match(new RegExp(`DROP\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?${IDENT}`, 'i')) ?? [])[1];
       this.tables.delete(String(name).toLowerCase());
       return new D1Result([], { changes: 0 });
     }
     if (/^INSERT/i.test(upper)) {
-      const name = (statement.match(/INSERT\s+(?:OR\s+\w+\s+)?INTO\s+([A-Za-z_][\w]*)/i) ?? [])[1];
+      const name = (statement.match(new RegExp(`INSERT\\s+(?:OR\\s+\\w+\\s+)?INTO\\s+${IDENT}`, 'i')) ?? [])[1];
       const t = this.table(name);
       const cols = [...(statement.match(/\(([^)]*)\)/i)?.[1] ?? '').split(',')].map((c) => c.trim().replace(/["'`]/g, '')).filter(Boolean);
       const explicit = cols.length > 0;
@@ -95,7 +106,7 @@ class InMemoryD1 {
       return new D1Result([], { changes: 1, lastRowId: Number(row.id) || t.rows.length });
     }
     if (/^SELECT/i.test(upper)) {
-      const name = (statement.match(/FROM\s+([A-Za-z_][\w]*)/i) ?? [])[1];
+      const name = (statement.match(new RegExp(`FROM\\s+${IDENT}`, 'i')) ?? [])[1];
       const t = this.table(name);
       let rows = t.rows.slice();
       const where = this.parseWhere(statement, values);
@@ -106,7 +117,7 @@ class InMemoryD1 {
       return new D1Result(mode === 'first' ? out.slice(0, 1) : out, { changes: 0 });
     }
     if (/^UPDATE/i.test(upper)) {
-      const name = (statement.match(/UPDATE\s+([A-Za-z_][\w]*)/i) ?? [])[1];
+      const name = (statement.match(new RegExp(`UPDATE\\s+${IDENT}`, 'i')) ?? [])[1];
       const t = this.table(name);
       const setPart = (statement.match(/\bSET\b([\s\S]*?)(?:\bWHERE\b|$)/i) ?? [])[1] ?? '';
       const assignments = [...setPart.matchAll(/([A-Za-z_][\w]*)\s*=\s*(\?|'[^']*'|\d+(?:\.\d+)?)/gi)];
@@ -125,7 +136,7 @@ class InMemoryD1 {
       return new D1Result([], { changes });
     }
     if (/^DELETE/i.test(upper)) {
-      const name = (statement.match(/DELETE\s+FROM\s+([A-Za-z_][\w]*)/i) ?? [])[1];
+      const name = (statement.match(new RegExp(`DELETE\\s+FROM\\s+${IDENT}`, 'i')) ?? [])[1];
       const t = this.table(name);
       const filter = this.parseWhere(statement, values);
       const before = t.rows.length;

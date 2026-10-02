@@ -56,6 +56,16 @@ jobs:
       - name: Founder user journey (real backend execution)
         run: npm run verify:journey
 
+      # The generated project's own deployment config, validated by wrangler itself. A
+      # malformed wrangler.jsonc is invisible to every other check — the file parses as
+      # JSONC and still fails `wrangler deploy`. This regenerates a real backend, runs its
+      # migration through real SQLite, and refuses to pass unless a real
+      # `wrangler deploy --dry-run` accepts the config and reports the D1 and Durable Object
+      # bindings. The D1 500 that a deployed Worker returned came from a reserved-word table,
+      # and this is where that is caught instead.
+      - name: Generated wrangler configuration (wrangler deploy --dry-run)
+        run: npm run verify:wrangler
+
       # Production Runtime Acceptance, the gate between Functional Fidelity and QA.
       # The engine's own contract: a real generated product passes, a static-JSON backend is
       # caught as fake, a backend with no evidence is BLOCKED, a missing external credential

@@ -427,6 +427,45 @@ duplicate keys in the synonym map (the later entry silently wins), and an assign
 destructured `const` that would have thrown inside the Worker at exactly the moment the
 model produced a browser-only page.
 
+### THE WRANGLER CONFIGURATION GATE — a config that parses is not a config that deploys
+
+`wrangler deploy` reads `wrangler.jsonc` before it reads anything else, so a malformed config
+is not a runtime failure, it is a build that never happens. Worse, the failures are invisible
+to every other kind of check: the file parses as JSONC, `JSON.parse` accepts it, a reviewer
+reads it as correct, and wrangler still refuses it. Probing a **real deployed** generated
+Worker — not reading it — found three defects in one pass:
+
+1. **The D1 500 was a SQL reserved word.** The coffee-shop order product's entity is `order`,
+   so the generated migration said `CREATE TABLE IF NOT EXISTS order ( … )`, which is not
+   valid SQLite. The deploy *succeeded* and then every single API call answered
+   `500 D1_ERROR: near "order": syntax error`. Identifiers are now quoted through
+   `quoteSql()`, in the migration and in the Worker's own runtime `CREATE`.
+2. **The Durable Object binding was emitted as `"durable_objects": [ … ]`.** wrangler's
+   schema wants an object with a `bindings` array. Correcting it to an array produced the
+   opposite failure — a jsonc parse error — because the two shapes were confused in the fix
+   as well as in the generator. The current shape is the one wrangler actually accepts, and
+   it is now asserted rather than assumed.
+3. **A browser-only product declared `"main": "worker/index.js"` for a Worker it never
+   generates.** wrangler loads the declared entry point first and refuses
+   (`The entry-point file at "worker/index.js" was not found`), so the product was a website
+   nobody could host. An assets-only Worker must declare no `main` — and no assets
+   *binding*, because there is no Worker to bind it to.
+
+`scripts/wrangler-config-gate.mjs` is the gate, and it is deliberately not a linter. For each
+generated product it parses the config as JSONC, checks it against wrangler's own schema
+(D1 array with a real `database_id` and `migrations_dir`, `durable_objects.bindings` an array
+under an object, the DO class present in `migrations[].new_sqlite_classes`, every declared
+path actually shipped), **executes the migration through real SQLite**, and finally runs a
+real `wrangler deploy --dry-run` and refuses to pass unless wrangler itself accepts the
+config and reports `env.DB`, `env.LIVE` and the assets it read. `npm run verify:wrangler`
+runs it in CI before the acceptance chain.
+
+One thing that gate immediately caught in MAULI's own **harness**: the in-memory D1 shim read
+table names with `/FROM\s+([A-Za-z_][\w]*)/` and could not parse the `"order"` the fixed
+generator now sends. The shim threw, and a working generated backend was reported broken —
+the same shape as defect 5 above, and the reason `table()` now refuses a name it could not
+read instead of silently creating a table keyed `''`.
+
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
 Everything above proves the code is a working app. None of it proved the app **ran**. The

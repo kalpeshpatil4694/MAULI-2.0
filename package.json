@@ -18,6 +18,7 @@
     "sweep:runtime": "node scripts/accept-runtime.mjs",
     "accept:runtime": "node scripts/accept-runtime.mjs",
     "verify:journey": "node --test tests/generated-app-runtime.test.js tests/functional-fidelity-2.test.js",
+    "verify:wrangler": "node scripts/wrangler-config-gate.mjs",
     "verify:app": "node scripts/verify-generated-app.mjs --verify",
     "test:security": "node --test tests/founder-auth.test.js tests/tool-security.test.js test/security-governance.test.js tests/d1-write-budget.test.js tests/d1-monotonic-writes.test.js",
     "self-test": "node --test test/*.test.js"
