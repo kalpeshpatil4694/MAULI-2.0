@@ -308,8 +308,8 @@ ${auth ? `  if (path.startsWith('/api/') && !path.startsWith('/api/health')) {
       .bind(title, String(body.detail ?? '').trim(), amount, stamp, stamp${auth ? ', user.email' : ', null'}).run();
     const id = result?.meta?.last_row_id;
     const row = await env.DB.prepare('SELECT id, title, detail, amount, created_at, updated_at' + DUE + ' FROM ' + QT + ' WHERE id = ?').bind(id ?? 0).first();
-${realtime ? `    await broadcastLive(env, JSON.stringify({ type: '${table}.created', record: row }));` : ''}
-    return json({ ok: true, ${table}: row }, 201);
+${realtime ? `    const liveDelivered = await broadcastLive(env, JSON.stringify({ type: '${table}.created', record: row }));` : ''}
+    return json({ ok: true, ${table}: row${realtime ? ', liveDelivered' : ''} }, 201);
   }
 
   const itemMatch = path.match(new RegExp('^' + '${api}' + '/(\\\\d+)$'));
