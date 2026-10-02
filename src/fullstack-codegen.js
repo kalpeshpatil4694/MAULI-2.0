@@ -430,7 +430,6 @@ export class LiveConnections extends DurableObject {
   }
 }
 
-}
 ` : ''}
 `;
 }
