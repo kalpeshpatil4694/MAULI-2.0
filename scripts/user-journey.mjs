@@ -305,8 +305,10 @@ export async function runUserJourney(files, { spec = {}, architecture = {}, env 
       // A refresh recreates the JavaScript/DOM, not the browser's storage. Reuse the same
       // localStorage backing map so the second app instance observes exactly what the first
       // instance persisted. A fresh empty Map would test a new device, not a reload.
-      const reloaded = verifyGeneratedApp(files, { objective, requirements, timeoutMs: 1500 });
-      for (const [key, value] of app.storage.entries()) reloaded.storage.set(key, value);
+      const reloaded = verifyGeneratedApp(files, {
+        objective, requirements, timeoutMs: 1500,
+        storage: app.storage
+      });
       const restored = [...reloaded.storage.entries()].length > 0;
       evidence.persistence = restored && [...reloaded.storage.keys()].some((k) => reloaded.storage.get(k)?.length > 2);
       evidence.create = evidence.create || before > 0;
