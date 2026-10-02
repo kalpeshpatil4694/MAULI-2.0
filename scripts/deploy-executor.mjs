@@ -133,14 +133,19 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     if (validation.code !== 0) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(validation.stderr, validation.stdout), errorMessage: `wrangler validation failed before deployment: ${redact(validation.stderr || validation.stdout)}` } };
     }
-    const deployed = await run('npx', ['--yes', 'wrangler', 'deploy', '--json'], { cwd: root });
+    // `wrangler deploy` — NOT `--json`. That flag does not exist in the wrangler this
+    // repository pins, and passing it failed the deployment with "Unknown argument: json",
+    // which is exactly the kind of infrastructure error that must not be read as a product
+    // failure. The real URL and version id are read out of wrangler's own output.
+    const deployed = await run('npx', ['--yes', 'wrangler', 'deploy'], { cwd: root });
     if (deployed.code !== 0) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(deployed.stderr, deployed.stdout), errorMessage: redact(deployed.stderr || deployed.stdout) } };
     }
     let parsed = null;
     try { parsed = JSON.parse(deployed.stdout); } catch (_) { parsed = null; }
     const result = parsed?.result ?? parsed ?? {};
-    const url = result.url ?? /https:\/\/[^\s"']+\.workers\.dev/.exec(`${deployed.stdout}\n${deployed.stderr}`)?.[0] ?? null;
+    const output = `${deployed.stdout}\n${deployed.stderr}`;
+    const url = result.url ?? /https:\/\/[^\s"']+\.workers\.dev/.exec(output)?.[0] ?? null;
     if (!url) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: 'deployment', errorMessage: 'wrangler reported success without a deployment URL, so there is nothing to run an acceptance against' } };
     }
@@ -149,7 +154,8 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
         ...base,
         status: 'DEPLOYED',
         url: String(url).replace(/\/+$/, ''),
-        deploymentId: result.deployment_id ?? result.version_id ?? result.id ?? null,
+        deploymentId: result.deployment_id ?? result.version_id ?? result.id
+          ?? /Current Version ID:\s*([0-9a-f-]{16,})/i.exec(output)?.[1] ?? null,
         deployedAt: new Date().toISOString(),
         environment: result.environment ?? environment
       }
