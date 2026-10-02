@@ -742,7 +742,7 @@ export async function runProductionRuntimeAcceptance(files, {
     const afterRows = readRows(after.body);
     const rowsAfter = rowsInDb();
 
-    record('create', createdRes.ok && id !== null, `POST ${recordsPath} → ${createdRes.status}${id !== null ? `, id ${id}` : ', no id returned'}`,
+    record('create', createdRes.ok && id !== null, `POST ${recordsPath} → ${createdRes.status}${id !== null ? `, id ${id}` : `, no id returned${createdRes.body?.error?.message ? ` — ${createdRes.body.error.message}` : createdRes.error ? ` — ${createdRes.error}` : ''}`}`,
       { request: `POST ${recordsPath}`, responseStatus: createdRes.status, persisted: rowsAfter === null ? null : rowsAfter > (rowsBefore ?? 0) });
     record('read', after.ok && afterRows.some((r) => String(r?.title ?? '') === 'Acceptance record'),
       `GET ${recordsPath} → ${after.status}, created row present: ${afterRows.some((r) => String(r?.title ?? '') === 'Acceptance record')}`,
