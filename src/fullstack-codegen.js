@@ -223,7 +223,7 @@ async function broadcastLive(env, message) {
   if (typeof env.LIVE.idFromName === 'function' && typeof env.LIVE.get === 'function') {
     const id = env.LIVE.idFromName('global');
     const stub = env.LIVE.get(id);
-    await stub.fetch(new Request('https://mauli-live/broadcast', {
+    await stub.fetch(new Request('https://mauli-live/api/live/broadcast', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: message
@@ -232,7 +232,7 @@ async function broadcastLive(env, message) {
   }
   // Deterministic in-process harness fallback; never used by a real Cloudflare namespace.
   if (typeof env.LIVE.fetch === 'function') {
-    await env.LIVE.fetch(new Request('https://mauli-live/broadcast', {
+    await env.LIVE.fetch(new Request('https://mauli-live/api/live/broadcast', {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: message

@@ -519,6 +519,22 @@ The shipped source stays byte-for-byte what Cloudflare runs, and the local run n
 class really answers the live route (`101`, upgraded) instead of the harness quietly
 supplying the missing binding itself.
 
+**A write has to actually arrive.** With the class a real Durable Object, the live channel
+connected and the deploy went green — and every two-client proof still failed, because the
+Worker holds no sockets: the Durable Object does. A write is delivered by asking the DO to
+broadcast, and that handoff is a private route written in two places in the template. The
+Worker POSTed to `https://mauli-live/broadcast`; the DO's router matched
+`/api/live/broadcast`. The DO answered **404**, the write was dropped, and every product with
+live updates reported "a change on one client did not reach the other" — while the deploy
+succeeded, the config was correct and every other check stayed green. A dropped write is
+indistinguishable from a product that has no live channel, unless the two halves of the route
+are required to agree.
+
+`tests/live-broadcast.test.js` reads the path out of the Worker's own request and requires the
+DO's router to accept it, then drives a real write through the real namespace. Its negative
+control reverts the path and confirms the test fails, so it cannot quietly stop testing
+anything.
+
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
 Everything above proves the code is a working app. None of it proved the app **ran**. The
