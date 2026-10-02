@@ -220,6 +220,7 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     };
   }
   const root = await mkdtemp(join(tmpdir(), `mauli-deploy-${randomUUID().slice(0, 8)}-`));
+  const safe = String(projectId ?? 'project').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
   try {
     const written = await stageProject(list, { root });
     if (!written) {
@@ -233,13 +234,13 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
       const configPath = join(root, 'wrangler.jsonc');
       const config = await readFile(configPath, 'utf8').catch(() => null);
       if (config) {
-        const safe = String(projectId).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
         // Every generated project gets its own Worker AND its own D1 database. Reusing a
         // database by entity name (for example generated_order) would let two unrelated
         // Founder commands see each other's rows. The name is deterministic so redeploys
         // of the same project reuse the same database and preserve its data.
         const workerName = `generated-${safe}`.slice(0, 63);
         const databaseName = `generated-${safe}`.slice(0, 63);
+        // Kept in scope for the deploy log below.
         const rewritten = config
           .replace(/("name"\s*:\s*)"[^"]*"/i, `$1"${workerName}"`)
           .replace(/("database_name"\s*:\s*)"[^"]*"/i, `$1"${databaseName}"`);
@@ -264,6 +265,13 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     // which is exactly the kind of infrastructure error that must not be read as a product
     // failure. The real URL and version id are read out of wrangler's own output.
     const deployed = await run(wranglerCommand(), ['deploy'], { cwd: root });
+    // wrangler's own output is the only account of what Cloudflare actually did — which
+    // bindings it accepted, which version it published. The executor used to keep it to
+    // itself, so a deployment that "succeeded" while quietly dropping a Durable Object
+    // binding produced no evidence anywhere and the only symptom was a 501 at runtime.
+    // Redacted before it is ever printed; secrets are never written to a CI log.
+    const deployLog = redact([deployed.stdout, deployed.stderr].filter(Boolean).join('\n'));
+    if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}\n${deployLog}`);
     if (deployed.code !== 0) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(deployed.stderr, deployed.stdout), errorMessage: redact(deployed.stderr || deployed.stdout) } };
     }
