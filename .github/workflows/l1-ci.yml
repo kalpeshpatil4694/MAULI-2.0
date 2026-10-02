@@ -71,6 +71,17 @@ jobs:
       - name: Generated deployment + identity matrix
         run: npm run verify:deployment
 
+      # The product, not just the rules. Three DIFFERENT founder commands are followed from
+      # the command itself through specification → architecture → code → build → verification
+      # → DEPLOY → the ACTUAL URL → real HTTP E2E → real persistence → auth/journey → core
+      # business feature → requirement evidence → runtime gate → QA → integrity → delivery.
+      #
+      # Each chain prints every link. A link that produced no real evidence is printed as
+      # BLOCKED, which is the point: a green tick here means the chain ran, not that a
+      # deployment was faked.
+      - name: Founder command → delivery chain (real HTTP E2E)
+        run: node scripts/acceptance-chain.mjs --json acceptance-chain.json
+
       - name: Security + governance tests
         run: npm run test:security
 
@@ -129,6 +140,8 @@ jobs:
       # deploy → smoke → production runtime acceptance → final gate. The smoke proves the
       # MAULI Worker itself answers after a deploy.
       - name: Post-deploy smoke test
+        env:
+          MAULI_BASE_URL: ${{ vars.MAULI_BASE_URL }}
         run: |
           set -euo pipefail
           BASE="${MAULI_BASE_URL:-https://mauli-2-0.kalpeshpatil4694.workers.dev}"
@@ -141,21 +154,73 @@ jobs:
           done
           echo "::error::Post-deploy smoke test failed for $BASE/api/health"
           exit 1
+
+      # GENERATED PROJECTS: a REAL deployment and a REAL HTTP acceptance.
+      #
+      # Three different founder commands are generated, built and deployed to Cloudflare
+      # with this repository's own credentials, and the acceptance is then driven over the
+      # network against the URL Cloudflare actually returned. Nothing here runs the source
+      # in this process: the boundary is a real Worker with a real D1.
+      - name: Generated projects - real deployment + real HTTP runtime acceptance
         env:
-          MAULI_BASE_URL: ${{ vars.MAULI_BASE_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GIT_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::error title=Configuration failure::CLOUDFLARE_API_TOKEN is not configured, so generated projects cannot be deployed. Production runtime acceptance is BLOCKED - DEPENDENCY_REQUIRED, not a pass."
+            {
+              echo "## Generated projects - production runtime acceptance"
+              echo ""
+              echo "**BLOCKED - DEPENDENCY_REQUIRED (configuration).** CLOUDFLARE_API_TOKEN is not"
+              echo "configured for this repository, so no generated project can be deployed and none can be"
+              echo "runtime-verified. This is a configuration failure, not a product failure, and it is"
+              echo "never reported as a pass."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          node scripts/acceptance-chain.mjs --deploy --json acceptance-chain.json | tee acceptance-chain.txt
+          {
+            echo "## Generated projects - production runtime acceptance"
+            echo ""
+            echo '```'
+            cat acceptance-chain.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # THE THREE STATES, kept visibly apart:
+      #   A. configuration failure - this repository is missing a credential it needs
+      #   B. generated-project runtime failure - a product did not survive its own acceptance
+      #   C. external dependency BLOCKED - a third-party service has no credential
+      #
+      # A missing founder key is A, and it fails the release rather than letting a production
+      # deploy look verified. It is deliberately NOT applied to the ordinary unit-test job,
+      # which stays green so a credential problem never hides a real code regression.
+      - name: Configuration - founder key required for per-project acceptance
+        env:
+          MAULI_FOUNDER_KEY: ${{ secrets.MAULI_FOUNDER_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MAULI_FOUNDER_KEY:-}" ]; then
+            echo "::error title=Configuration failure::MAULI_FOUNDER_KEY is not configured for this repository. MAULI cannot authenticate the per-project production runtime sweep, so NO generated project can be runtime-verified and no delivery may be treated as production-verified."
+            {
+              echo ""
+              echo "### A. Configuration failure"
+              echo ""
+              echo "MAULI_FOUNDER_KEY is not configured. MAULI cannot authenticate the per-project"
+              echo "production runtime sweep. Every generated backend project therefore stays BLOCKED on"
+              echo "runtime evidence, and its Final Delivery stays blocked. This is a configuration"
+              echo "failure - not a product failure and not a pass."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Founder key is configured (value never printed)."
 
       # Production runtime acceptance is AUTOMATIC and PER PROJECT. There is no fixed
-      # MAULI_RUNTIME_PROJECT here any more: the sweep asks MAULI itself which projects have
-      # generated code and no passing runtime evidence, and MAULI answers for each one by
-      # deploying it (when a deploy executor is configured) and running the acceptance over
-      # real HTTP against that project's own URL.
-      #
-      # It never reports a PASS it did not earn. A project with no runtime executor, no
-      # deploy executor or no credential comes back BLOCKED / DEPENDENCY_REQUIRED, and
-      # that is the honest end state — the gate, not this job, decides what may ship.
-      #
-      # `vars.MAULI_RUNTIME_PROJECT` survives ONLY as an optional single-project fixture
-      # filter for debugging; production acceptance does not depend on it.
+      # MAULI_RUNTIME_PROJECT here any more: the sweep asks MAULI which projects have
+      # generated code and no CURRENT passing runtime evidence, and MAULI answers for each
+      # one by deploying it and running the acceptance over real HTTP against its own URL.
       - name: Production runtime acceptance (every generated project)
         env:
           MAULI_BASE_URL: ${{ vars.MAULI_BASE_URL }}
@@ -163,16 +228,13 @@ jobs:
           MAULI_RUNTIME_FIXTURE: ${{ vars.MAULI_RUNTIME_PROJECT }}
         run: |
           set -euo pipefail
-          # No founder key means the sweep cannot authenticate. That is a configuration gap,
-          # not a product failure, so it is reported and the step ends without claiming
-          # anything. (A step-level `if` cannot read `secrets` — hence the guard in-script.)
           if [ -z "${MAULI_KEY:-}" ]; then
-            echo "::notice::MAULI_FOUNDER_KEY is not configured; the per-project runtime sweep is skipped and every generated project stays BLOCKED on runtime evidence."
-            exit 0
+            echo "::error::MAULI_FOUNDER_KEY is missing at run time after the configuration step reported it present."
+            exit 1
           fi
           BASE="${MAULI_BASE_URL:-https://mauli-2-0.kalpeshpatil4694.workers.dev}"
           if [ -n "${MAULI_RUNTIME_FIXTURE:-}" ]; then
-            echo "::notice::Fixture mode: only project ${MAULI_RUNTIME_FIXTURE} is re-tested. Production acceptance is per project and does not use this variable."
+            echo "::notice::Fixture mode: only the named project is re-tested. Production acceptance is per project and does not use this variable."
             BODY="{\"projectId\":\"${MAULI_RUNTIME_FIXTURE}\"}"
           else
             BODY='{"limit":25}'
@@ -181,21 +243,7 @@ jobs:
             -H "x-mauli-founder: ${MAULI_KEY}" -H 'content-type: application/json' \
             -d "${BODY}" | tee /tmp/runtime-sweep.json
           echo
-          node -e '
-            const r=JSON.parse(require("fs").readFileSync("/tmp/runtime-sweep.json","utf8"));
-            const d=r.data??r;
-            console.log(`  swept ${d.swept} project(s); runtime executor: ${d.executorConfigured}, deploy executor: ${d.deployExecutorConfigured}`);
-            let blocked=0;
-            for(const p of (d.projects??[])){
-              if(p.blocked) blocked++;
-              console.log(`  ${p.blocked?"BLOCKED":"EVIDENCE"} ${p.projectId} — ${p.verdict}${p.reason?" ("+p.reason+")":""}`);
-            }
-            // A blocked project is NOT a CI failure: the platform records it honestly and the
-            // production-runtime gate refuses delivery. Failing this job would hide the real
-            // verdict behind a red X that says nothing about which product was blocked.
-            if(!(d.projects??[]).length) console.log("  no generated project is awaiting a runtime acceptance run");
-            else console.log(`  ${blocked} project(s) BLOCKED on runtime evidence — their Final Delivery stays blocked.`);
-          '
+          node scripts/report-runtime-sweep.mjs /tmp/runtime-sweep.json
 
 # Persistence stack is Workers + D1 + Durable Objects + Workers AI only. There is no
 # object-storage binding of any kind, so deployment and CI must never require one.

@@ -22,11 +22,35 @@
 // BEFORE and AFTER a create, and an endpoint that answers the same payload to both is a
 // hardcoded JSON body, whatever its status code says.
 
-import { createRuntime, loadWorker } from './generated-runtime.mjs';
-import { runUserJourney } from './user-journey.mjs';
+import { createRuntime, loadWorker, ShimClientWebSocket } from './generated-runtime.mjs';
+import { startDeploymentHarness } from './deployment-harness.mjs';
+
+/**
+ * Run generated FRONTEND code with a client WebSocket that records instead of dialling.
+ *
+ * The frontend's own `new WebSocket(...)` is real evidence that the product tries to open a
+ * live channel. Letting it reach Node's built-in client is not: it connects to a host that
+ * does not exist, hangs, and its close-handshake timer throws after the verdict is printed.
+ * In the deployed transport the Worker runtime is not loaded, so the shim is installed here
+ * rather than coming from the runtime's globals.
+ */
+async function withShimmedClientWebSocket(fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, 'WebSocket');
+  const original = globalThis.WebSocket;
+  const opened = [];
+  globalThis.WebSocket = function ClientWebSocket(url, protocols) {
+    const socket = new ShimClientWebSocket(url, protocols);
+    opened.push(socket);
+    return socket;
+  };
+  try { return { value: await fn(), opened }; }
+  finally { if (had) globalThis.WebSocket = original; else delete globalThis.WebSocket; }
+}
+import { runUserJourney, planJourney } from './user-journey.mjs';
 import { verifyGeneratedApp, interact, drainMicrotasks } from './verify-generated-app.mjs';
 import { fakeRuntimeSignals, hasBackendEntryPoint, PRODUCTION_RUNTIME_VERSION } from '../src/production-runtime.js';
 import { analyzeGeneratedApp } from '../src/generated-app-quality.js';
+import { coreFeatureFor, judgeCoreFeature } from '../src/core-feature.js';
 
 const CALL_TIMEOUT_MS = 8000;
 
@@ -136,6 +160,383 @@ function readRecord(payload) {
   return 'id' in payload ? payload : null;
 }
 
+// ===========================================================================
+// POINT 8 — THE PRODUCT'S OWN CORE BUSINESS FEATURE.
+//
+// A create/read/update/delete round trip is not a product. It is the same test for a call
+// recording app, a medicine tracker and a coffee shop, so it can only ever prove that the
+// generated Worker talks to D1 — never that the feature the founder asked for works. These
+// probes are DERIVED from the requirement specification (src/core-feature.js) and issued
+// against the deployed application. Every one records the request it sent and the status it
+// got back; a probe the product cannot perform is FAIL, and a probe never attempted is
+// MISSING — which the gate reads as BLOCKED, never as a pass inherited from CRUD.
+// ===========================================================================
+
+/** The field the delivered code declares its listing order by, parsed from its own SQL. */
+export function declaredOrderField(files) {
+  const source = (Array.isArray(files) ? files : []).map((f) => String(f?.content ?? '')).join('\n');
+  const match = /ORDER\s+BY\s+"?(\w+)"?\s*(asc|desc)?/i.exec(source);
+  return match ? { field: match[1], direction: (match[2] ?? 'asc').toLowerCase() } : null;
+}
+
+/** A summary/report route the delivered app exposes, if any. */
+export function declaredSummaryRoute(files) {
+  const source = (Array.isArray(files) ? files : []).map((f) => String(f?.content ?? '')).join('\n');
+  const match = /['"`](\/api\/[a-z0-9_\-/]*(?:report|summary|stats|totals?|aggregate)[a-z0-9_\-/]*)['"`]/i.exec(source);
+  return match ? match[1] : null;
+}
+
+/**
+ * Run the core-feature probes over REAL HTTP against the deployment.
+ *
+ * @returns {{probes: object, lifecycle: object|null}} probeId → observation, plus the
+ * record lifecycle they shared so the report can quote one concrete end-to-end trace.
+ */
+export async function runCoreFeatureProbes({ coreFeature, callApi, recordsPath, token = null, capabilities = {}, files = [] } = {}) {
+  const probes = {};
+  if (!coreFeature || !recordsPath) return { probes, lifecycle: null };
+  const mark = (id, status, detail, extra = {}) => {
+    probes[id] = { status, detail, ...extra };
+    return probes[id];
+  };
+  const order = declaredOrderField(files);
+  const summaryRoute = declaredSummaryRoute(files);
+  const amount = 1234.5;
+  const domainTitle = `${coreFeature.featureKeys[0] ?? 'record'} core-feature probe`;
+
+  // One real record lifecycle, observed by several probes. Each probe asserts a distinct
+  // claim about it — the create is proven by the returned id, the read by a SEPARATE
+  // request serving the same row, the delete by its absence afterwards.
+  let createdId = null;
+  const createRes = await callApi('POST', recordsPath, { body: { title: domainTitle, detail: 'written by the production acceptance run', amount }, token });
+  const created = readRecord(createRes.body);
+  createdId = created?.id ?? null;
+
+  for (const probe of coreFeature.probes) {
+    if (!probe.executable) {
+      mark(probe.id, 'FAIL', `the delivered code exposes no "${probe.capability}" capability, so "${probe.featureLabel}" cannot work at runtime`, { request: null, responseStatus: null, persisted: false });
+      continue;
+    }
+    switch (probe.kind) {
+      case 'roundtrip': {
+        if (probe.id === 'record-delete') {
+          if (createdId === null) { mark(probe.id, 'FAIL', 'no record was created, so the delete could not be exercised', { persisted: false }); break; }
+          const removed = await callApi('DELETE', `${recordsPath}/${createdId}`, { token });
+          const after = readRows((await callApi('GET', recordsPath, { token })).body);
+          const gone = !after.some((r) => String(r?.id ?? '') === String(createdId));
+          mark(probe.id, removed.ok && gone ? 'PASS' : 'FAIL',
+            gone ? `DELETE ${recordsPath}/${createdId} → ${removed.status} and a later list request no longer serves the row` : `after DELETE → ${removed.status} the row is still served`,
+            { request: `DELETE ${recordsPath}/${createdId}`, responseStatus: removed.status, persisted: gone });
+          break;
+        }
+        if (createdId === null) { mark(probe.id, 'FAIL', `POST ${recordsPath} → ${createRes.status}, no record id was returned`, { request: `POST ${recordsPath}`, responseStatus: createRes.status, persisted: false }); break; }
+        const back = await callApi('GET', `${recordsPath}/${createdId}`, { token });
+        const listed = readRows((await callApi('GET', recordsPath, { token })).body).some((r) => String(r?.title ?? '') === domainTitle);
+        const present = listed && (back.ok || readRecord(back.body)?.id !== undefined);
+        mark(probe.id, present ? 'PASS' : 'FAIL',
+          present ? `POST ${recordsPath} → ${createRes.status} (id ${createdId}); a separate GET served the same record back` : `a separate GET did not serve the record created by POST ${recordsPath} (${back.status})`,
+          { request: `GET ${recordsPath}/${createdId}`, responseStatus: back.status, persisted: present });
+        break;
+      }
+      case 'numeric-total': {
+        const amountOk = createdId !== null && Number(created?.amount) === amount;
+        mark(probe.id, amountOk ? 'PASS' : 'FAIL',
+          amountOk ? `the amount submitted (${amount}) is stored and returned exactly as ${created.amount}` : `the amount submitted (${amount}) was not returned by the deployment (got ${created?.amount ?? 'nothing'})`,
+          { request: `POST ${recordsPath} (amount=${amount})`, responseStatus: createRes.status, persisted: amountOk });
+        break;
+      }
+      case 'state-transition': {
+        if (createdId === null) { mark(probe.id, 'FAIL', 'no record was created, so no transition could be applied', { persisted: false }); break; }
+        const edited = { title: `${domainTitle} (updated)`, detail: 'the update must be stored, not echoed', amount: amount + 1 };
+        const put = await callApi('PUT', `${recordsPath}/${createdId}`, { body: edited, token });
+        const after = readRecord((await callApi('GET', `${recordsPath}/${createdId}`, { token })).body);
+        const stored = String(after?.title ?? '') === edited.title;
+        mark(probe.id, stored ? 'PASS' : 'FAIL',
+          stored ? `PUT ${recordsPath}/${createdId} → ${put.status}; a later GET returns the updated value, so the change was persisted` : `PUT ${recordsPath}/${createdId} → ${put.status} but a later GET still returns "${after?.title ?? 'nothing'}"`,
+          { request: `PUT ${recordsPath}/${createdId}`, responseStatus: put.status, persisted: stored });
+        break;
+      }
+      case 'filter-narrowing': {
+        const marker = `mauli-probe-${Math.random().toString(36).slice(2, 8)}`;
+        const want = `${marker} wanted`;
+        const other = `${marker} other`;
+        await callApi('POST', recordsPath, { body: { title: want, detail: marker }, token });
+        await callApi('POST', recordsPath, { body: { title: other, detail: marker }, token });
+        const param = ['q', 'search', 'query', 'filter'].find((p) => capabilities.filterParam === p) ?? 'q';
+        const probed = await callApi('GET', `${recordsPath}?${param}=${encodeURIComponent(want)}`, { token });
+        const rows = readRows(probed.body);
+        const narrowed = rows.length > 0
+          && rows.some((r) => String(r?.title ?? '') === want)
+          && !rows.some((r) => String(r?.title ?? '') === other);
+        mark(probe.id, narrowed ? 'PASS' : 'FAIL',
+          narrowed
+            ? `GET ${recordsPath}?${param}=… → ${probed.status}, ${rows.length} row(s) returned and the non-matching record is excluded`
+            : `GET ${recordsPath}?${param}=… → ${probed.status}, ${rows.length} row(s) returned — the search did not narrow the stored records`,
+          { request: `GET ${recordsPath}?${param}=${want}`, responseStatus: probed.status, persisted: narrowed });
+        break;
+      }
+      case 'ordering': {
+        if (!order) { mark(probe.id, 'FAIL', 'the delivered code declares no ORDER BY, so the listing is not an ordered result', { persisted: false }); break; }
+        const rows = readRows((await callApi('GET', recordsPath, { token })).body);
+        const values = rows.map((r) => r?.[order.field]).filter((v) => v !== null && v !== undefined);
+        const numeric = values.every((v) => typeof v === 'number');
+        let ordered = true;
+        for (let i = 1; i < values.length; i += 1) {
+          const bad = order.direction === 'desc' ? Number(values[i]) > Number(values[i - 1]) : Number(values[i]) < Number(values[i - 1]);
+          if ((numeric || !isNaN(Number(values[i]))) && bad) { ordered = false; break; }
+        }
+        mark(probe.id, ordered ? 'PASS' : 'FAIL',
+          ordered ? `the deployment lists ${rows.length} record(s) ordered by ${order.field} ${order.direction.toUpperCase()}, as the product's own query declares` : `the list is not ordered by ${order.field} ${order.direction.toUpperCase()}`,
+          { request: `GET ${recordsPath}`, responseStatus: 200, persisted: ordered });
+        break;
+      }
+      case 'computed-output': {
+        if (!summaryRoute) {
+          mark(probe.id, 'FAIL', `the delivered code exposes no summary/report route, so no aggregate can be computed from the stored ${recordsPath}`, { persisted: false });
+          break;
+        }
+        const summary = await callApi('GET', summaryRoute, { token });
+        const payload = summary.body;
+        const numbers = readRows(payload).length
+          ? readRows(payload)
+          : (payload && typeof payload === 'object' ? Object.values(payload) : []);
+        const aggregate = numbers.find((v) => typeof v === 'number');
+        mark(probe.id, summary.ok && aggregate !== undefined ? 'PASS' : 'FAIL',
+          summary.ok
+            ? `GET ${summaryRoute} → ${summary.status} returned an aggregate computed from the stored records`
+            : `GET ${summaryRoute} → ${summary.status}; no aggregate could be computed`,
+          { request: `GET ${summaryRoute}`, responseStatus: summary.status, persisted: summary.ok });
+        break;
+      }
+      default: {
+        mark(probe.id, 'FAIL', `no runtime probe implements "${probe.kind}"`, { persisted: false });
+      }
+    }
+  }
+  return { probes, lifecycle: { recordPath: recordsPath, createdId, title: domainTitle, amount } };
+}
+
+// ===========================================================================
+// POINTS 5, 7 and 11 — THE JOURNEY AND THE REAL-TIME PROOF RUN AGAINST THE
+// DEPLOYMENT, NOT AGAINST A LOCAL SHIM.
+//
+// Running the founder journey inside the harness against an in-memory Durable Object proves
+// the harness works. It does not prove the deployed Worker broadcasts anything to a second
+// browser. So when a deployment URL exists, the journey is re-derived from the plan and
+// judged against the network observations, and real-time is proved by TWO INDEPENDENT
+// WebSocket CLIENTS of the actual deployment.
+// ===========================================================================
+
+/** Journey step → the deployed observation that is its evidence. */
+const JOURNEY_STEP_EVIDENCE = {
+  startup: ['deployment'], 'backend-starts': ['deployment'], health: ['health'],
+  unauthorized: ['unauthorized'], register: ['register'], login: ['login'],
+  session: ['session'], validation: ['invalid-input'], create: ['create'],
+  'validation-data': ['invalid-input'], read: ['read'], update: ['update'],
+  delete: ['delete'], recreate: ['refresh'], refresh: ['refresh'],
+  realtime: ['realtime'], logout: ['logout', 'post-logout'], errors: ['error-path']
+};
+
+/**
+ * Judge the founder journey against observations made over real network HTTP.
+ * A planned step with no deployed observation is a FAILED step: the journey did not happen.
+ */
+export function judgeDeployedJourney({ spec = {}, architecture = {}, tests = {}, transport = null, baseUrl = null } = {}) {
+  const plan = planJourney(spec, architecture);
+  const steps = [];
+  for (const step of plan) {
+    const evidenceIds = JOURNEY_STEP_EVIDENCE[step.id] ?? [];
+    if (!evidenceIds.length) { steps.push({ id: step.id, status: 'PASS', detail: 'no network-observable behaviour is owed by this step' }); continue; }
+    const observed = evidenceIds.map((id) => tests[id]).filter(Boolean);
+    if (!observed.length) {
+      steps.push({ id: step.id, status: 'FAIL', detail: `${step.label} — never executed against ${baseUrl ?? 'the deployment'} (${transport} transport)` });
+      continue;
+    }
+    const failed = observed.filter((t) => t.status !== 'PASS');
+    steps.push({
+      id: step.id,
+      status: failed.length ? 'FAIL' : 'PASS',
+      detail: failed.length
+        ? `${step.label} — ${failed.map((f) => `${f.status} ${f.detail ?? ''}`.trim()).join('; ')}`
+        : `${step.label} — ${observed.map((o) => `${o.request ?? o.test ?? 'call'} → HTTP ${o.responseStatus ?? '200'}`).join('; ')} over real HTTP`
+    });
+  }
+  const failedSteps = steps.filter((s) => s.status === 'FAIL');
+  return {
+    passed: steps.length > 0 && failedSteps.length === 0,
+    deployed: transport === 'deployed-http',
+    baseUrl,
+    steps,
+    errors: failedSteps.map((s) => `deployed-journey: ${s.id}: ${s.detail}`)
+  };
+}
+
+/**
+ * A minimal RFC 6455 client over a REAL TCP socket.
+ *
+ * Node's built-in WebSocket is deliberately not used here. Its parser leaves a timer behind
+ * when the server answers a close handshake, and that timer throws AFTER the acceptance run
+ * has printed its verdict — which fails CI for a run that actually passed. A real socket with
+ * an explicit close frame has no such leftover, and it is a truer picture of what a browser
+ * does anyway: connect, receive frames, close.
+ */
+async function openLiveSocket(url, sink, timeoutMs) {
+  const { request: httpRequest } = await import('node:http');
+  const { randomBytes } = await import('node:crypto');
+  return new Promise((resolve, reject) => {
+    const target = new URL(String(url).replace(/^ws/i, 'http'));
+    const key = randomBytes(16).toString('base64');
+    const req = httpRequest({
+      hostname: target.hostname,
+      port: target.port,
+      path: `${target.pathname}${target.search}`,
+      headers: {
+        Connection: 'Upgrade',
+        Upgrade: 'websocket',
+        'Sec-WebSocket-Key': key,
+        'Sec-WebSocket-Version': '13'
+      }
+    });
+    const fail = (message) => { try { req.destroy(); } catch (_) { /* gone */ } reject(new Error(message)); };
+    const timer = setTimeout(() => fail(`the live socket at ${url} did not open before the timeout`), timeoutMs);
+    req.on('error', (error) => { clearTimeout(timer); fail(`the live socket at ${url} errored: ${error.message}`); });
+    req.on('response', (res) => { clearTimeout(timer); fail(`the live socket at ${url} answered HTTP ${res.statusCode} instead of upgrading`); });
+    req.on('upgrade', (res, socket) => {
+      clearTimeout(timer);
+      if (res.statusCode !== 101) { socket.destroy(); fail(`the live socket at ${url} answered HTTP ${res.statusCode} instead of 101`); return; }
+      let buffered = Buffer.alloc(0);
+      socket.on('data', (chunk) => {
+        buffered = Buffer.concat([buffered, chunk]);
+        // Server→client frames are never masked; only the length needs decoding.
+        for (;;) {
+          if (buffered.length < 2) break;
+          const opcode = buffered[0] & 0x0f;
+          let length = buffered[1] & 0x7f;
+          let offset = 2;
+          if (length === 126) { if (buffered.length < 4) break; length = buffered.readUInt16BE(2); offset = 4; }
+          else if (length === 127) { if (buffered.length < 10) break; length = Number(buffered.readBigUInt64BE(2)); offset = 10; }
+          if (buffered.length < offset + length) break;
+          const payload = buffered.subarray(offset, offset + length).toString('utf8');
+          buffered = buffered.subarray(offset + length);
+          if (opcode === 0x1 || opcode === 0x2) sink.push(payload);
+          if (opcode === 0x8) { try { socket.end(); } catch (_) { /* closed */ } }
+        }
+      });
+      socket.on('error', () => { /* the server went away */ });
+      resolve({
+        close() {
+          try {
+            // A masked close frame, then a real FIN. The server answers and both ends go
+            // quietly, with no timer left to fire after the verdict has been printed.
+            const mask = randomBytes(4);
+            const frame = Buffer.concat([Buffer.from([0x88, 0x80]), mask]);
+            socket.write(frame);
+            socket.end();
+          } catch (_) { /* already gone */ }
+        }
+      });
+    });
+    req.end();
+  });
+}
+
+/**
+ * Point 11. TWO INDEPENDENT CLIENTS of the ACTUAL deployment: connect both to the live
+ * route, make one write through the HTTP API, and require BOTH sockets to receive the
+ * broadcast. A simulated event, a shared in-process Durable Object, or one client that
+ * merely stays open proves nothing and is not accepted here.
+ */
+export async function runDeployedRealtimeTwoClient({ baseUrl, recordsPath, token = null, callApi, timeoutMs = 6000 } = {}) {
+  const wsBase = String(baseUrl).replace(/^http/i, 'ws').replace(/\/+$/, '');
+  const url = `${wsBase}/api/live`;
+  const clientA = [];
+  const clientB = [];
+  let socketA = null;
+  let socketB = null;
+  try {
+    socketA = await openLiveSocket(url, clientA, timeoutMs);
+    socketB = await openLiveSocket(url, clientB, timeoutMs);
+    const before = { a: clientA.length, b: clientB.length };
+    const write = await callApi('POST', recordsPath, { body: { title: 'realtime two-client proof', detail: 'broadcast probe' }, token });
+    if (!write.ok) return { passed: false, detail: `the write that should broadcast → ${write.status}`, clients: 2, received: 0 };
+    for (let i = 0; i < 40 && (clientA.length === before.a || clientB.length === before.b); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const gotA = clientA.length > before.a;
+    const gotB = clientB.length > before.b;
+    const payload = clientA.concat(clientB).find((m) => m.includes('realtime two-client proof')) ?? null;
+    return {
+      passed: gotA && gotB && Boolean(payload),
+      clients: 2,
+      received: Number(gotA) + Number(gotB),
+      detail: gotA && gotB
+        ? `both independently connected clients received the write made over HTTP (A: ${clientA.length - before.a} message(s), B: ${clientB.length - before.b} message(s))`
+        : `client A received ${clientA.length - before.a}, client B received ${clientB.length - before.b} — a change on one client did not reach the other through the deployment`,
+      payload
+    };
+  } catch (error) {
+    return { passed: false, detail: String(error?.message ?? error), clients: [socketA, socketB].filter(Boolean).length, received: 0 };
+  } finally {
+    for (const socket of [socketA, socketB]) { try { socket?.close(); } catch (_) { /* closed */ } }
+  }
+}
+
+// ===========================================================================
+// POINT 10 — EXTERNAL APIs ARE CALLED FOR REAL, OR THE VERDICT IS BLOCKED.
+//
+// There is no mock, no sample payload and no fabricated 200 anywhere on this path. When the
+// credential exists the real endpoint is called and its real response is parsed; when it does
+// not, the test is MISSING and the gate reports DEPENDENCY_REQUIRED. A secret is only ever
+// read from the binding to be sent — never logged, never echoed into the evidence.
+// ===========================================================================
+export const EXTERNAL_SERVICE_PROBES = {
+  weather: { url: 'https://api.open-meteo.com/v1/forecast?latitude=19.076&longitude=72.8777&current=temperature_2m', requiresKey: false, expect: (b) => Boolean(b?.current?.temperature_2m), shape: 'current.temperature_2m' },
+  maps: { url: 'https://nominatim.openstreetmap.org/search?q=Pune&format=json&limit=1', requiresKey: false, headers: { 'User-Agent': 'MAULI-2.0-production-runtime-acceptance' }, expect: (b) => Array.isArray(b) && b.length > 0, shape: 'array of places' },
+  currency: { url: 'https://open.er-api.com/v6/latest/USD', requiresKey: false, expect: (b) => Boolean(b?.rates?.INR), shape: 'rates.INR' },
+  translation: { url: 'https://api.mymemory.translated.net/get?q=hello&langpair=en%7Chi', requiresKey: false, expect: (b) => Boolean(b?.responseData?.translatedText), shape: 'responseData.translatedText' },
+  email: { requiresKey: true, envVar: 'EMAIL_API_KEY' },
+  sms: { requiresKey: true, envVar: 'SMS_API_KEY' },
+  payment: { requiresKey: true, envVar: 'PAYMENT_API_KEY' }
+};
+
+/**
+ * Call the real external service. Returns the observation — status, whether a usable payload
+ * came back, and the shape that was read out of it. Never returns the credential itself.
+ */
+export async function callExternalServiceForReal({ service, credential = null, fetchImpl = null, timeoutMs = 8000 } = {}) {
+  const probe = EXTERNAL_SERVICE_PROBES[service?.key] ?? null;
+  const envVar = service?.envVar ?? probe?.envVar ?? null;
+  if (!probe) {
+    return { called: false, status: null, usable: false, reason: `no real probe endpoint is registered for the "${service?.label ?? service?.key}" service, so nothing was called` };
+  }
+  if (probe.requiresKey && !credential) {
+    return { called: false, status: null, usable: false, reason: `${service?.label ?? service?.key} needs ${envVar}, which is not configured — the real service cannot be called, so no success can be claimed` };
+  }
+  const send = fetchImpl ?? NATIVE_FETCH ?? fetch;
+  const headers = { Accept: 'application/json', ...(probe.headers ?? {}) };
+  try {
+    const response = await Promise.race([
+      send(probe.url, { headers, ...(credential ? { Authorization: `Bearer ${credential}` } : {}) }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('the external service did not answer before the timeout')), timeoutMs))
+    ]);
+    let body = null;
+    try { body = await response.clone().json(); } catch (_) { body = null; }
+    const usable = response.ok && Boolean(body) && (probe.expect ? probe.expect(body) : true);
+    return {
+      called: true,
+      url: probe.url,
+      status: response.status,
+      usable,
+      shape: probe.shape ?? null,
+      detail: usable
+        ? `the real ${service?.label ?? service?.key} endpoint answered ${response.status} and the response parsed (${probe.shape ?? 'usable payload'})`
+        : `the real ${service?.label ?? service?.key} endpoint answered ${response.status} but the response did not contain ${probe.shape ?? 'a usable payload'}`
+    };
+  } catch (error) {
+    return { called: true, url: probe.url, status: 0, usable: false, shape: probe.shape ?? null, detail: `the real ${service?.label ?? service?.key} endpoint could not be reached: ${String(error?.message ?? error)}` };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // the executor
 // ---------------------------------------------------------------------------
@@ -183,7 +584,7 @@ export async function runProductionRuntimeAcceptance(files, {
     return status === 'PASS';
   };
 
-  const runtime = baseUrl ? null : createRuntime({ env, fetchImpl });
+  const runtime = baseUrl ? null : createRuntime({ env, fetchImpl, files: list });
   let worker = null;
   if (!baseUrl) {
     const loaded = await loadWorker(list, runtime).catch((error) => ({ handler: null, loadError: String(error?.message ?? error) }));
@@ -192,6 +593,12 @@ export async function runProductionRuntimeAcceptance(files, {
 
   const recordsPath = String(api || deriveRecordsPath(list, { spec }) || '').replace(/\/$/, '');
   const contractCalls = frontendApiCalls(list);
+  // The product's ACTUAL core feature, derived from the founder's own requirement
+  // specification — the thing the runtime must prove instead of a generic CRUD round trip.
+  const coreFeature = coreFeatureFor({
+    spec, objective, files: list,
+    requirements: Array.isArray(spec?.requirements) && spec.requirements.length ? spec.requirements : requirements
+  });
 
   /** One real request: over the network when deployed, into the handler when executed. */
   async function callApi(method, path, { body, token } = {}) {
@@ -237,7 +644,9 @@ export async function runProductionRuntimeAcceptance(files, {
     )
     : () => Promise.resolve(new Response(JSON.stringify({ error: { message: 'no backend is part of this generated app' } }), { status: 503, headers: { 'Content-Type': 'application/json' } }));
   try {
-    frontendProbe = verifyGeneratedApp(list, { objective, requirements, timeoutMs: 1500, fetchImpl: frontendFetch });
+    const probe = await withShimmedClientWebSocket(async () => verifyGeneratedApp(list, { objective, requirements, timeoutMs: 1500, fetchImpl: frontendFetch }));
+    frontendProbe = probe.value;
+    frontendProbe.liveChannelAttempts = probe.opened.map((s) => s.url);
   } catch (error) {
     frontendProbe = { error: String(error?.message ?? error) };
   }
@@ -433,43 +842,94 @@ export async function runProductionRuntimeAcceptance(files, {
       { request: 'GET /api/this-route-does-not-exist-9f3a', responseStatus: notFound.status });
   }
 
-  // -- 8. external services ------------------------------------------------------------
+  // -- 8. external services: CALLED FOR REAL, or the obligation stays unmet -------------
+  // Point 10. The previous behaviour only checked whether a credential existed. Now the real
+  // endpoint is called over the network and its real response is parsed; the app is then
+  // checked for fabricating a success for a service it could not reach. No mock, no sample.
+  let externalProbe = null;
   if (externalServices.length) {
-    const available = externalServices.filter((s) => credentials?.[s.envVar] || credentials?.[s.key]);
-    const missingCreds = externalServices.filter((s) => !(credentials?.[s.envVar] || credentials?.[s.key]));
-    if (missingCreds.length && available.length === 0) {
-      record('external-service', 'MISSING', `no credential is configured for ${missingCreds.map((s) => s.label).join(', ')} (${missingCreds.map((s) => s.envVar).join(', ')}) — the real service cannot be called, so no success can be claimed`);
-    } else {
-      // With a credential the app must reach the real service; without one it must fail
-      // visibly rather than inventing data.
-      const probe = await callApi('GET', recordsPath || '/api/records');
-      record('external-service', !(probe.ok && missingCreds.length > 0),
-        missingCreds.length
-          ? `the app answered 200 for a service with no configured credential (${missingCreds.map((s) => s.envVar).join(', ')}) — a fabricated success`
-          : `a credential is configured for ${available.map((s) => s.label).join(', ')}`,
-        { responseStatus: probe.status });
+    const observations = [];
+    for (const service of externalServices) {
+      observations.push(await callExternalServiceForReal({
+        service, credential: credentials?.[service.envVar] ?? credentials?.[service.key] ?? null,
+        fetchImpl: fetchImpl ?? NATIVE_FETCH ?? null
+      }));
     }
+    const called = observations.filter((o) => o.called === true);
+    const usable = observations.filter((o) => o.usable === true);
+    const unmet = observations.filter((o) => o.called !== true);
+    externalProbe = { called: called.length, usable: usable.length, observations: observations.map((o) => ({ url: o.url ?? null, status: o.status ?? null, usable: o.usable === true, shape: o.shape ?? null, detail: o.detail ?? o.reason ?? null })) };
+    // The app must never answer a successful result for a service it has no credential for.
+    const fabrication = backend && unmet.length ? await callApi('GET', recordsPath || '/api/records') : null;
+    record('external-service', called.length > 0 && usable.length === called.length && (!fabrication || fabrication.status >= 400),
+      unmet.length
+        ? `${unmet.map((o) => o.reason).join('; ')}${fabrication ? ` — and the app answered ${fabrication.status} for it, which is a fabricated success` : ''}`
+        : `${called.length}/${externalServices.length} external service(s) answered for real: ${called.map((o) => o.detail).join('; ')}`,
+      { responseStatus: called[0]?.status ?? null, called: called.length > 0, evidence: externalProbe.observations });
   }
 
-  // -- 9. real-time: two clients, one write ---------------------------------------------
-  // -- 10. user journey: the founder's own steps, executed ------------------------------
+  // -- 8b. the product's OWN core business feature (point 8) ----------------------------
+  // Derived from the requirement specification, executed against the deployment. A probe the
+  // app cannot perform is FAIL; a probe never attempted is MISSING. Neither is a pass, and
+  // the generic CRUD result above cannot stand in for either.
+  let coreFeatureReport = null;
+  // The CRUD block above ends by logging out, so every later observation against an
+  // authenticated product needs a fresh session. Probes and the live two-client proof are
+  // issued as a signed-in user of the DEPLOYED application, never as an anonymous caller
+  // whose 401 would be mistaken for a product defect.
+  let sessionToken = token;
+  const ensureSession = async () => {
+    if (!authRequired || sessionToken) return sessionToken;
+    const relogin = await callApi('POST', '/api/login', { body: { email: user.email, password: user.password } });
+    sessionToken = relogin.body?.token ?? relogin.body?.data?.token ?? relogin.body?.sessionToken ?? null;
+    return sessionToken;
+  };
+  if (backend && coreFeature && recordsPath) {
+    const { probes, lifecycle } = await runCoreFeatureProbes({
+      coreFeature, callApi, recordsPath, token: await ensureSession(),
+      capabilities: { ...coreFeature.capabilities, filterParam: declaredFilterParam(list) },
+      files: list
+    });
+    const verdict = judgeCoreFeature(coreFeature, probes);
+    coreFeatureReport = { label: coreFeature.label, featureKeys: coreFeature.featureKeys, basis: coreFeature.basis, status: verdict.status, lifecycle, probes: verdict.rows };
+    record('core-feature', verdict.status === 'PASS', verdict.detail, {
+      persisted: verdict.status === 'PASS',
+      evidence: verdict.rows.map((r) => ({ probe: r.probeId, status: r.status, request: r.request, responseStatus: r.responseStatus, persisted: r.persisted }))
+    });
+  }
+
+  // -- 9. real-time + -- 10. user journey: against the DEPLOYMENT when one exists --------
+  // Points 5, 7 and 11. Executing the journey against an in-process Durable Object proves the
+  // harness works, not the product. With a deployment URL, the journey is judged against the
+  // network observations and real-time is proved by two independent WebSocket clients of the
+  // actual deployment.
   if (runtime) {
     runtime.disposeGlobals();
   }
-  const journey = await runUserJourney(list, {
-    spec, architecture: architecture ?? {}, objective, requirements, api: recordsPath || '/api/records'
-  }).catch((error) => ({ passed: false, steps: [], evidence: {}, errors: [String(error?.message ?? error)] }));
-
-  if (realtimeRequired && backend) {
-    record('realtime', journey.evidence?.realtime === true,
-      journey.evidence?.realtime === true
-        ? 'a write made through the API reached two independently connected clients'
-        : (journey.errors ?? []).find((e) => e.startsWith('realtime:')) ?? 'no two-client proof was produced');
+  let journey = null;
+  let realtimeProof = null;
+  if (baseUrl && backend) {
+    // Real-time FIRST: the founder journey includes the live step, so it can only be judged
+    // against the network once that observation exists.
+    if (realtimeRequired) {
+      realtimeProof = await runDeployedRealtimeTwoClient({ baseUrl, recordsPath, callApi, token: await ensureSession() });
+      record('realtime', realtimeProof.passed, realtimeProof.detail, { deployed: true, evidence: { clients: realtimeProof.clients, received: realtimeProof.received } });
+    }
+    journey = judgeDeployedJourney({ spec, architecture: architecture ?? {}, tests, transport, baseUrl });
+  } else {
+    journey = await runUserJourney(list, {
+      spec, architecture: architecture ?? {}, objective, requirements, api: recordsPath || '/api/records'
+    }).catch((error) => ({ passed: false, steps: [], evidence: {}, errors: [String(error?.message ?? error)] }));
+    if (realtimeRequired && backend) {
+      realtimeProof = { passed: journey.evidence?.realtime === true, detail: journey.evidence?.realtime === true ? 'a write made through the API reached two independently connected clients' : ((journey.errors ?? []).find((e) => e.startsWith('realtime:')) ?? 'no two-client proof was produced'), deployed: false };
+      record('realtime', realtimeProof.passed, realtimeProof.detail, { deployed: false });
+    }
   }
   record('user-journey', journey.passed === true,
     journey.passed === true
-      ? `all ${journey.steps?.length ?? 0} journey steps passed`
-      : `failing step(s): ${(journey.steps ?? []).filter((s) => s.status === 'FAIL').map((s) => `${s.id} (${s.detail})`).join('; ') || 'the journey did not run'}`);
+      ? `${journey.deployed ? `all ${journey.steps?.length ?? 0} journey steps passed over real HTTP against ${baseUrl}` : `all ${journey.steps?.length ?? 0} journey steps passed`}`
+      : `failing step(s): ${(journey.steps ?? []).filter((s) => s.status === 'FAIL').map((s) => `${s.id} (${s.detail})`).join('; ') || 'the journey did not run'}`,
+    { deployed: journey.deployed === true, baseUrl: journey.baseUrl ?? null });
 
   // -- 11. local architecture: UI interaction + on-device persistence -------------------
   if (!backend) {
@@ -516,11 +976,23 @@ export async function runProductionRuntimeAcceptance(files, {
     contractPaths: contractCalls.map((c) => `${c.method} ${c.path}`),
     tests,
     failures,
-    evidence: Object.entries(tests).map(([id, t]) => ({ test: id, status: t.status, detail: t.detail, request: t.request ?? null, responseStatus: t.responseStatus ?? null, persisted: t.persisted ?? null })),
-    journey: { passed: journey.passed === true, steps: (journey.steps ?? []).map((s) => ({ id: s.id, status: s.status, detail: s.detail })) },
+    evidence: Object.entries(tests).map(([id, t]) => ({ test: id, status: t.status, detail: t.detail, request: t.request ?? null, responseStatus: t.responseStatus ?? null, persisted: t.persisted ?? null, deployed: t.deployed ?? null })),
+    journey: { passed: journey.passed === true, deployed: journey.deployed === true, baseUrl: journey.baseUrl ?? null, steps: (journey.steps ?? []).map((s) => ({ id: s.id, status: s.status, detail: s.detail })) },
+    // Point 8: the per-probe evidence, so the requirement rows can point at the real
+    // observation for the founder's own feature rather than a generic CRUD result.
+    coreFeature: coreFeatureReport,
+    realtimeProof,
+    externalProbe,
     rowsInDb: rowsInDb()
   };
   return report;
+}
+
+/** The query parameter the delivered code actually reads for narrowing, if any. */
+function declaredFilterParam(files) {
+  const source = (Array.isArray(files) ? files : []).map((f) => String(f?.content ?? '')).join('\n');
+  const match = /searchParams\.(?:get|has)\s*\(\s*['"`]([A-Za-z_][A-Za-z0-9_]*)['"`]/i.exec(source);
+  return match ? match[1] : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -553,40 +1025,12 @@ export async function runSelfTest() {
   // ── the deployed-http run ────────────────────────────────────────────────
   // Everything above executed the generated Worker IN THIS PROCESS. That is a fixture, and
   // the gate refuses to call it production evidence. So the same product is now served over
-  // a real HTTP server and driven again through the network path: a genuine deployed run.
-  const { createServer } = await import('node:http');
-  const httpRuntime = createRuntime({ env: {} });
-  const loaded = await loadWorker(built.files, httpRuntime);
-  let listening = null;
+  // a real HTTP + WebSocket server and driven again through the network path: a genuine
+  // deployed run, including the founder journey and the two-client live proof.
+  let harness = null;
   try {
-    const server = createServer((req, res) => {
-      const chunks = [];
-      req.on('data', (c) => chunks.push(c));
-      req.on('end', async () => {
-        const raw = Buffer.concat(chunks);
-        const request = new Request(`http://127.0.0.1${req.url}`, {
-          method: req.method,
-          headers: Object.entries(req.headers).map(([k, v]) => [k, String(v)]),
-          body: raw.length ? raw.toString() : undefined
-        });
-        try {
-          const response = await loaded.handler(request, loaded.env ?? httpRuntime.env, {});
-          res.statusCode = response.status;
-          response.headers?.forEach?.((v, k) => res.setHeader(k, v));
-          // No keep-alive: the run issues many short requests and a pooled socket left
-          // half-read when the harness closes makes undici throw on process exit.
-          res.setHeader('Connection', 'close');
-          res.end(Buffer.from(await response.arrayBuffer()));
-        } catch (error) {
-          res.statusCode = 500;
-          res.end(String(error?.message ?? error));
-        }
-      });
-    });
-    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-    server.unref();
-    listening = server;
-    const deployedUrl = `http://127.0.0.1:${server.address().port}`;
+    harness = await startDeploymentHarness(built.files, { env: {} });
+    const deployedUrl = harness.url;
     const deployedRun = await runProductionRuntimeAcceptance(built.files, {
       spec, architecture, objective: command, requirements, api: `/api/${built.table}s`, baseUrl: deployedUrl,
       fetchImpl: NATIVE_FETCH
@@ -595,9 +1039,12 @@ export async function runSelfTest() {
     check(deployedRun.tests.deployment?.status === 'PASS' && deployedRun.tests.health?.status === 'PASS', 'the deployed endpoint answers over HTTP', JSON.stringify(deployedRun.tests.health ?? {}));
     check(deployedRun.tests.create?.status === 'PASS' && deployedRun.tests.database?.status === 'PASS', 'D1 CRUD is real over the network, not an in-process shortcut', JSON.stringify(deployedRun.tests.database ?? {}));
     check(deployedRun.tests['read-missing']?.status === 'PASS', 'a deleted record is absent on a later network read', JSON.stringify(deployedRun.tests['read-missing'] ?? {}));
+    check(deployedRun.tests['core-feature']?.status === 'PASS', "the product's own core feature ran end to end over the deployment", JSON.stringify(deployedRun.tests['core-feature'] ?? {}));
+    check(deployedRun.tests['user-journey']?.deployed === true, 'the founder journey was executed against the deployment, not a local runtime', JSON.stringify(deployedRun.tests['user-journey'] ?? {}));
+    check(deployedRun.tests.realtime?.status === 'PASS', 'two independent WebSocket clients of the DEPLOYMENT both received the write', JSON.stringify(deployedRun.tests.realtime ?? {}));
 
     const deployment = {
-      status: 'DEPLOYED', url: deployedUrl, deploymentId: 'dep_selftest',
+      status: 'DEPLOYED', url: deployedUrl, deploymentId: harness.id,
       deployedAt: '2026-10-02T00:00:00.000Z', environment: 'production', projectId: 'project_selftest'
     };
     deployedRun.projectId = 'project_selftest';
@@ -615,8 +1062,7 @@ export async function runSelfTest() {
     });
     check(localVerdict.status === 'blocked', 'a source-level run is refused as production acceptance for a deployed backend', `${localVerdict.status} ${localVerdict.blockingCode ?? ''}`);
   } finally {
-    try { listening?.closeAllConnections?.(); listening?.close(); } catch (_) { /* already closed */ }
-    httpRuntime.disposeGlobals?.();
+    try { harness?.close(); } catch (_) { /* already closed */ }
   }
 
   // A backend project with NO acceptance run must BLOCK, never pass.
@@ -657,6 +1103,13 @@ export async function runSelfTest() {
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed === results.length ? 'ALL PRODUCTION RUNTIME CHECK PASSED' : 'PRODUCTION RUNTIME CHECK FAILED'} (${passed}/${results.length})`);
   if (passed !== results.length) process.exitCode = 1;
+  // The verdict is final here. This run has just exercised real HTTP and real WebSocket
+  // connections, and Node's bundled HTTP client leaves a parser timer behind once those
+  // sockets are torn down; that timer throws AFTER the summary is printed and turned a
+  // 22/22 run into a failed CI job. A completed verdict must decide this process's exit,
+  // not a leftover timer from a network exercise that already finished.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  if (invokedDirectly) process.exit(process.exitCode ?? 0);
   return passed === results.length;
 }
 

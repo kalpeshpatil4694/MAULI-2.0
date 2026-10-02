@@ -33,8 +33,12 @@ import {
   DEPLOYMENT_STATUS, DEPLOYMENT_BLOCKING, normalizeDeployment, assertRuntimeIdentity,
   runtimeDeploymentKind
 } from './generated-deployment.js';
+// Point 8: the runtime test is derived from the project's OWN requirements, not a fixed
+// generic script. This turns the specification's feature list into the probes that must be
+// attempted against the deployment before those requirements may read RUNTIME VERIFIED.
+import { coreFeatureFor, judgeCoreFeature, coreFeatureEvidence } from './core-feature.js';
 
-export const PRODUCTION_RUNTIME_VERSION = 2;
+export const PRODUCTION_RUNTIME_VERSION = 3;
 
 // The mandatory order the pipeline must respect:
 //   Build → Tests → Requirements → Security → Functional Fidelity → Production Runtime
@@ -77,6 +81,7 @@ export const RUNTIME_STAGES = [
   { id: 'api-contract', label: 'API endpoints match the generated contract', scope: 'backend' },
   { id: 'authentication', label: 'Authentication flow works end to end', scope: 'auth' },
   { id: 'core-operation', label: 'Critical business workflow runs', scope: 'data' },
+  { id: 'core-feature', label: 'The product\'s own core feature works end to end', scope: 'data' },
   { id: 'database', label: 'Real database persistence', scope: 'backend' },
   { id: 'crud-lifecycle', label: 'create → read → update → read → delete → read missing', scope: 'data' },
   { id: 'error-handling', label: 'Errors surface instead of a fabricated success', scope: 'always' },
@@ -91,7 +96,7 @@ export const RUNTIME_TESTS = [
   'deployment', 'health', 'api-contract',
   'unauthorized', 'register', 'duplicate-register', 'login', 'invalid-login', 'session',
   'invalid-input', 'create', 'read', 'update', 'delete', 'read-missing', 'refresh',
-  'database',
+  'database', 'core-feature',
   'realtime', 'logout', 'post-logout', 'error-path', 'fake-check', 'user-journey',
   'ui-interaction', 'local-persistence', 'external-service',
   'android-launch'
@@ -108,6 +113,7 @@ const TEST_LABEL = {
   'invalid-login': 'a wrong password is rejected (401), not accepted',
   session: 'the session token authorises a protected read',
   'invalid-input': 'invalid input is rejected before it reaches the database',
+  'core-feature': 'the product\'s own core feature — the one the founder actually asked for — runs end to end in the deployed application',
   create: 'a record is created and the new id is returned',
   read: 'the created record is readable back',
   update: 'an update changes the stored record',
@@ -154,6 +160,12 @@ export function requiredTestsForRequirement(requirement, architecture = null) {
   const category = requirement?.category ?? 'product';
   const tests = new Set();
 
+  // Point 8. A "Core feature: …" row is the founder's OWN feature, so its evidence is the
+  // probe derived from that feature — not the generic CRUD round trip every product shares.
+  // Without this a search/filter or reporting requirement was marked RUNTIME VERIFIED by a
+  // create+read pair that never once searched or computed anything.
+  if (/^core feature:/.test(title)) tests.add('core-feature');
+
   if (category === 'auth' || /\b(register|login|log ?in|sign ?up|logout|session|unauthor)/.test(title)) {
     if (/register|sign ?up|registration/.test(title)) { tests.add('register'); tests.add('duplicate-register'); }
     if (/login|log ?in|sign ?in|session/.test(title)) { tests.add('login'); tests.add('invalid-login'); tests.add('session'); }
@@ -187,6 +199,9 @@ export function requiredTestsForRequirement(requirement, architecture = null) {
     const local = new Set();
     for (const id of tests) {
       if (['ui-interaction', 'local-persistence', 'user-journey'].includes(id)) { local.add(id); continue; }
+      // A browser-only app proves its core feature through the UI and its own store, which
+      // is exactly what ui-interaction/local-persistence record.
+      if (id === 'core-feature') { local.add('ui-interaction'); local.add('user-journey'); continue; }
       if (['create', 'read', 'update', 'delete'].includes(id)) { local.add('ui-interaction'); continue; }
       if (['refresh', 'database', 'local-persistence'].includes(id)) { local.add('ui-interaction'); local.add('local-persistence'); continue; }
       if (['invalid-input', 'error-path', 'fake-check'].includes(id)) { local.add('ui-interaction'); continue; }
@@ -205,7 +220,7 @@ export function requiredTestsForRequirement(requirement, architecture = null) {
  * A browser-only app is not forced to invent D1 endpoints; a backend app is not allowed to
  * substitute a page for them (spec item 9).
  */
-export function runtimeObligations({ architecture = null, spec = null, files = [], hasBackend = false, platform = null, deployment = null } = {}) {
+export function runtimeObligations({ architecture = null, spec = null, files = [], hasBackend = false, platform = null, deployment = null, requirements = [] } = {}) {
   const backend = architecture ? architecture.backend === true : Boolean(hasBackend);
   const deploymentKind = runtimeDeploymentKind({ architecture, platform });
   const auth = architecture?.auth === true || spec?.authentication?.required === true;
@@ -216,9 +231,15 @@ export function runtimeObligations({ architecture = null, spec = null, files = [
   const stages = new Set();
   const tests = new Set();
 
+  // Point 8: what this product's OWN core feature is, and therefore what must be probed.
+  // Derived from the specification + the delivered code; null when the founder asked for
+  // no feature, in which case nothing extra is owed and nothing extra can be claimed.
+  const coreFeature = coreFeatureFor({ spec, files, requirements: Array.isArray(spec?.requirements) ? spec.requirements : requirements });
+
   if (backend) {
     for (const id of ['deployment', 'health', 'api-contract', 'core-operation', 'database', 'crud-lifecycle', 'error-handling', 'user-journey', 'evidence']) stages.add(id);
     for (const id of ['deployment', 'health', 'api-contract', 'create', 'read', 'update', 'delete', 'read-missing', 'refresh', 'database', 'error-path', 'fake-check', 'user-journey']) tests.add(id);
+    if (coreFeature) { stages.add('core-feature'); tests.add('core-feature'); }
     if (auth) {
       stages.add('authentication');
       for (const id of ['unauthorized', 'register', 'duplicate-register', 'login', 'invalid-login', 'session', 'logout', 'post-logout']) tests.add(id);
@@ -265,6 +286,18 @@ export function runtimeObligations({ architecture = null, spec = null, files = [
     deploymentKind,
     deploymentRequired: deploymentKind === 'backend' || deploymentKind === 'native',
     deploymentStatus: normalizeDeployment(deployment).status,
+    // The founder's own feature, the probes it owes, and the capabilities the delivered
+    // code actually exposes. Printed by the gate so "the runtime test was generic" is
+    // visibly impossible.
+    coreFeature: coreFeature
+      ? {
+        label: coreFeature.label,
+        featureKeys: coreFeature.featureKeys,
+        basis: coreFeature.basis,
+        requirementIds: coreFeature.requirementIds,
+        probes: coreFeature.probes.map((p) => ({ id: p.id, kind: p.kind, label: p.label, executable: p.executable }))
+      }
+      : null,
     externalServices: externalServices.map((s) => ({ key: s.key, label: s.label, envVar: s.envVar })),
     environment: backend ? 'production-like worker + D1' : 'generated app + device store',
     stages: RUNTIME_STAGES.filter((s) => stages.has(s.id)).map((s) => s.id),
@@ -307,7 +340,13 @@ export function fakeRuntimeSignals(files = []) {
     const code = raw
       .replace(/\/\*[\s\S]*?\*\//g, ' ')
       .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    // A browser-only product has no server, so its data layer lives on the device and its
+    // handler answers from the store it just wrote. That is the product doing the work, not
+    // a fabricated API response — so the "hardcoded success" signal only applies to a file
+    // that ALSO writes nothing anywhere. Remove the store writes and this file is flagged.
+    const writesPersistedState = /(?:localStorage|sessionStorage)\.(?:setItem|removeItem)\s*\(|\bindexedDB\b|\.prepare\s*\(\s*['"`](?:INSERT|UPDATE|DELETE)|\bDB\s*\.\s*prepare\s*\(/i.test(code);
     for (const signal of FAKE_SIGNALS) {
+      if (signal.code === 'hardcoded-success' && writesPersistedState) continue;
       const haystack = signal.code === 'todo-marker' || signal.code === 'coming-soon' ? raw : code;
       if (signal.re.test(haystack)) violations.push({ code: signal.code, path: file.path, why: signal.why });
     }
@@ -437,7 +476,11 @@ export const NO_FALSE_PASS_RULES = [
   { code: 'generated-tested-mismatch', why: 'the app that was tested is not the app that was generated' },
   { code: 'wrong-deployment-url', why: 'the deployment URL belongs to another project' },
   { code: 'mock-response', why: 'a mocked response was reported as production behaviour' },
-  { code: 'android-runtime-missing', why: 'a native build was not run on a device or emulator' }
+  { code: 'android-runtime-missing', why: 'a native build was not run on a device or emulator' },
+  { code: 'core-feature-unproven', why: "the product's own core feature was never proved in the deployed application" },
+  { code: 'realtime-not-deployed', why: 'a real-time requirement was not proved between two clients of the actual deployment' },
+  { code: 'journey-not-deployed', why: 'the founder journey was not executed against the actual deployment' },
+  { code: 'external-api-not-called', why: 'an external API was required but no real call was issued to it' }
 ];
 
 /**
@@ -484,6 +527,22 @@ export function noFalsePassViolations({
     }
     if (tests['user-journey']?.status === 'FAIL') add('journey-failed', tests['user-journey'].detail ?? 'the critical user journey failed');
     if (tests['fake-check']?.status === 'FAIL') add('mocked-result', tests['fake-check'].detail ?? 'a mocked/fake response was used as production success');
+    // Point 8: a failed core-feature probe is a defect in the product, not a missing file.
+    if (tests['core-feature']?.status === 'FAIL') add('core-feature-unproven', tests['core-feature'].detail ?? "the product's own core feature failed at runtime");
+    // Point 11: a real-time obligation must be proved by two clients of the DEPLOYMENT.
+    // The in-process Durable Object shim is a fixture, so a run that never issued a
+    // network WebSocket cannot claim the real-time requirement.
+    if (tests.realtime && tests.realtime.status === 'MISSING') add('realtime-not-deployed', tests.realtime.detail ?? 'no two-client proof against the deployment');
+    // Point 7: the founder journey must be the one that ran against the deployment. Only a
+    // product that OWES a server can be held to that; a browser-only product has no
+    // deployment to journey through and is judged on its own executed UI evidence instead.
+    if (backendOwed && tests['user-journey'] && acceptance.transport === 'deployed-http' && tests['user-journey'].deployed !== true) {
+      add('journey-not-deployed', tests['user-journey'].detail ?? 'the journey was executed against the local runtime instead of the deployment');
+    }
+    // Point 10: an external service that is required must have been called for real.
+    if (tests['external-service'] && tests['external-service'].status !== 'PASS' && tests['external-service'].called !== true) {
+      add('external-api-not-called', tests['external-service'].detail ?? 'no real call was issued to the external API');
+    }
   }
   for (const row of (Array.isArray(evidence) ? evidence : [])) {
     // A BLOCKED row means "not executed yet", which is reported separately as missing
@@ -518,8 +577,15 @@ export function evaluateRuntimeAcceptance({
 } = {}) {
   const list = (Array.isArray(files) ? files : []).filter((f) => f && typeof f.path === 'string' && typeof f.content === 'string');
   const deploymentRecord = normalizeDeployment(deployment);
-  const obligations = runtimeObligations({ architecture, spec, files: list, hasBackend, platform, deployment: deploymentRecord });
+  const obligations = runtimeObligations({ architecture, spec, files: list, hasBackend, platform, deployment: deploymentRecord, requirements });
   const evidence = runtimeRequirementEvidence({ requirements, acceptance, architecture });
+  // Point 8: the core-feature verdict is read out of the run's own per-probe rows. A run
+  // that never attempted the probes leaves them absent, which is BLOCKED — the generic CRUD
+  // result cannot stand in for the product's actual feature.
+  const coreFeatureSpec = coreFeatureFor({ spec, files: list, requirements });
+  const coreFeatureVerdict = coreFeatureSpec && acceptance
+    ? judgeCoreFeature(coreFeatureSpec, acceptance.coreFeature?.probes ?? {})
+    : (coreFeatureSpec ? { status: 'BLOCKED', rows: coreFeatureEvidence(coreFeatureSpec, {}), passed: 0, failed: [], missing: coreFeatureSpec.probes.map((p) => p.id), detail: 'the acceptance run probed none of the product\'s own core-feature behaviours' } : null);
 
   const missingTests = obligations.requiredTests.filter((id) => !acceptance?.tests?.[id]);
   const failedTests = obligations.requiredTests
@@ -558,6 +624,11 @@ export function evaluateRuntimeAcceptance({
     authentication: obligations.auth ? (acceptance?.tests?.login?.status ?? 'NOT TESTED') : 'N/A',
     userJourney: acceptance?.tests?.['user-journey']?.status ?? 'NOT TESTED',
     realtime: obligations.realtime ? (acceptance?.tests?.realtime?.status ?? 'NOT TESTED') : 'N/A',
+    // Point 8, founder-visible: which feature this product is, and whether IT passed.
+    coreFeature: obligations.coreFeature,
+    coreFeatureResult: coreFeatureVerdict
+      ? { status: coreFeatureVerdict.status, detail: coreFeatureVerdict.detail, probes: coreFeatureVerdict.rows }
+      : null,
     external: obligations.externalServices.length ? (unmetDependencies.length ? 'DEPENDENCY_REQUIRED' : 'PASS') : 'N/A',
     stages: obligations.stages,
     requiredTests: obligations.requiredTests,

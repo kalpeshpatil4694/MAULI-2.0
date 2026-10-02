@@ -327,7 +327,14 @@ export function analyzeGeneratedApp(files, { objective = '', requirements = [] }
   if (fakeAsyncOnly) push('fake-async', SEVERITY.WARNING, 'uses timers but never updates state or the DOM');
 
   // 7. Mocked API: a fetch replaced by a literal promise.
-  if (/fetch\s*=\s*(async\s*)?\([^)]*\)\s*=>\s*\{?\s*return\s*(Promise\.resolve\s*\(\s*)?\{/i.test(clean) || /Promise\.resolve\s*\(\s*\{\s*(ok|success|status)/i.test(clean)) {
+  // A browser-only product has no server: its data layer lives on the device, so a handler
+  // answering from the store it just wrote is the product doing its work. The literal is
+  // only a FAKE when the product also writes no state anywhere — remove the store writes
+  // and this file is refused exactly as before.
+  const writesPersistedState = /(?:localStorage|sessionStorage)\.(?:setItem|removeItem)\s*\(|\bindexedDB\b|\.prepare\s*\(\s*['"`](?:INSERT|UPDATE|DELETE)/i.test(clean);
+  const mockedApi = /fetch\s*=\s*(async\s*)?\([^)]*\)\s*=>\s*\{?\s*return\s*(Promise\.resolve\s*\(\s*)?\{/i.test(clean)
+    || (/Promise\.resolve\s*\(\s*\{\s*(ok|success|status)/i.test(clean) && !writesPersistedState);
+  if (mockedApi) {
     push('mocked-api', SEVERITY.CRITICAL, 'an API is faked with a literal resolved response');
   }
 

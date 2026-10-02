@@ -287,18 +287,40 @@ export async function ensureRuntimeAcceptance(projectId, env = null) {
 }
 
 /**
- * Every project that has generated code and no passing production runtime evidence.
+ * Every project that has generated code and no CURRENT passing production runtime evidence.
  *
  * This is what makes acceptance AUTOMATIC: there is no configured project id, no fixture and
  * no manual list. Whatever founder command created the project, it appears here the moment
  * its code exists, and the runtime sweep has to account for it.
+ *
+ * "Current" is the part that used to be wrong. Reading the cached `runtimeAcceptanceReport`
+ * meant a project whose code was REGENERATED after a repair kept reporting passed forever,
+ * because the cached verdict was written before the repair and never re-checked. The sweep
+ * skipped exactly the projects that most needed re-acceptance. Now a project only counts as
+ * done when its stored run is judged against the artifact and the deployment it exists
+ * today — a newer artifact, a moved URL or a missing record all put it back in the queue.
  */
-export function projectsNeedingRuntimeAcceptance({ limit = 25 } = {}) {
+export function projectsNeedingRuntimeAcceptance({ limit = 25, env = null } = {}) {
   return store.list('projects')
     .filter((p) => p && p.id && mergedProjectFiles(p.id).length > 0)
     .filter((p) => {
-      const report = p.runtimeAcceptanceReport;
-      return !(report && isRuntimeAcceptanceReport(p.runtimeAcceptance) && report.status === 'passed');
+      const acceptance = currentRuntimeAcceptance(p);
+      if (!acceptance) return true;
+      const cached = p.runtimeAcceptanceReport;
+      if (!cached || cached.status !== 'passed') return true;
+      // Stale after a repair: the run describes bytes that no longer exist.
+      const current = latestCodeArtifactId(p.id);
+      if (acceptance.artifactId && current && acceptance.artifactId !== current) return true;
+      // Stale after a redeploy elsewhere: the recorded run tested a URL this project no
+      // longer answers on.
+      const dep = normalizeDeployment(p.runtimeDeployment);
+      const runUrl = typeof acceptance.deployment === 'string' ? acceptance.deployment : acceptance.deployment?.url ?? null;
+      if (dep.url && runUrl && dep.url !== runUrl) return true;
+      if (dep.status !== DEPLOYMENT_STATUS.DEPLOYED) {
+        // A browser-only app owes no deployment; a backend that lost its record does.
+        if (runtimeDeploymentKind({ architecture: p.architecture ?? null, platform: p.platform ?? null }) !== 'browser') return true;
+      }
+      return false;
     })
     .slice(0, limit)
     .map((p) => ({ id: p.id, name: p.name ?? null, objective: p.objective ?? null, platform: p.platform ?? null }));
@@ -314,15 +336,32 @@ export async function sweepRuntimeAcceptance(env = null, { limit = 25 } = {}) {
   const results = [];
   for (const project of projects) {
     const outcome = await ensureRuntimeAcceptance(project.id, env);
+    const summary = runtimeAcceptanceSummary(project.id, { env });
     results.push({
       projectId: project.id,
       recorded: outcome.recorded === true,
       blocked: outcome.blocked === true || outcome.recorded !== true,
       reason: outcome.reason ?? null,
-      verdict: runtimeAcceptanceSummary(project.id).label
+      // Named, so CI can print BLOCKED — DEPENDENCY_REQUIRED instead of a green tick.
+      blockingCode: summary.blockingCode ?? null,
+      verdict: summary.label,
+      runtimeUrl: summary.runtimeUrl ?? null,
+      deploymentStatus: summary.deploymentStatus ?? DEPLOYMENT_STATUS.NOT_DEPLOYED,
+      finalDelivery: summary.finalDelivery ?? 'BLOCKED'
     });
   }
-  return { projects: results, swept: results.length, executorConfigured: runtimeExecutorConfigured(env), deployExecutorConfigured: deployExecutorConfigured(env) };
+  return {
+    projects: results,
+    swept: results.length,
+    executorConfigured: runtimeExecutorConfigured(env),
+    deployExecutorConfigured: deployExecutorConfigured(env),
+    // Point 16: an unconfigured runner is a named dependency, never a silent skip.
+    blockingDependency: !deployExecutorConfigured(env)
+      ? 'MAULI_DEPLOY_EXECUTOR is not configured — generated projects cannot be deployed, so their Final Delivery stays BLOCKED'
+      : !runtimeExecutorConfigured(env)
+        ? 'MAULI_RUNTIME_EXECUTOR is not configured — deployed projects cannot be runtime-accepted, so their Final Delivery stays BLOCKED'
+        : null
+  };
 }
 
 /**
