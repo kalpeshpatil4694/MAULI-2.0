@@ -466,6 +466,42 @@ generator now sends. The shim threw, and a working generated backend was reporte
 the same shape as defect 5 above, and the reason `table()` now refuses a name it could not
 read instead of silently creating a table keyed `''`.
 
+### DEPLOY JOB GREEN, DEPLOY JOB RED — six runs, one name
+
+After the configuration gate passed, CI went green on `L1 validation` and stayed red on
+`Deploy tested revision` for six consecutive runs of `main`. The code was correct and the
+wrangler config deployed cleanly; the failure was one line above all of that, in how the
+acceptance chain named its projects.
+
+```js
+`chain_${Buffer.from(command).toString('base64url').slice(0, 10).toLowerCase()}`
+```
+
+base64url discards the bytes it cannot encode and reads from the front. All three founder
+commands begin **"Build a "**, so all three produced `chain_qnvpbgqgys`. The deploy executor
+derives the Worker name from the project id, so three different products deployed to
+**one Worker**, and the booking deployment — which has no live channel and therefore no
+`LIVE` Durable Object binding — silently replaced the coffee-shop Worker's URL. The
+coffee-shop acceptance then probed a Worker that was not its own and found `501` on
+`/api/live`, which reads exactly like a broken Durable Object binding rather than like a name
+collision. One product's evidence, attributed to another product: the identity failure the
+whole deployment contract exists to prevent, reintroduced through the id that identifies it.
+
+`chainProjectId()` now digests the **whole** command with SHA-256 and truncates to 12
+characters — long enough that a collision is not reachable by the first-characters problem
+that caused this, short enough that the derived Worker name stays inside the 40-character
+limit the executor truncates at.
+
+**A successful deploy is not yet a serving deploy.** The executor returned the URL the moment
+`wrangler deploy` exited, which means *uploaded*, not *serving this version*; the acceptance
+runner then probed whatever the edge had. `waitForDeployment()` polls the real hostname and
+refuses to hand a URL forward until it answers, and — for a specification that requires live
+updates — until `/api/live` is not `501`. A `501` there is a binding Cloudflare never
+deployed, so it is recorded as `errorCategory: 'deployment'` with the reason spelled out,
+rather than surfacing to the founder as a product failure and sending them to hunt a bug in
+their own app. `tests/acceptance-identity.test.js` pins all seven of these claims, including
+the negative control that a live route answering `200` *is* accepted.
+
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
 Everything above proves the code is a working app. None of it proved the app **ran**. The

@@ -22,6 +22,7 @@
 // Usage: node scripts/acceptance-chain.mjs [--json out.json] [--deploy]
 
 import { writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { extractRequirementSpec } from '../src/requirement-spec.js';
 import { selectArchitecture } from '../src/architecture.js';
 import { generateFullStackApp } from '../src/fullstack-codegen.js';
@@ -47,6 +48,26 @@ const opt = (name) => {
 };
 const wantDeploy = args.includes('--deploy');
 const outFile = opt('json');
+
+/**
+ * A STABLE, UNIQUE project id per founder command.
+ *
+ * The previous derivation was `chain_` + the first 10 base64url characters of the command.
+ * base64url ignores the words it cannot encode and starts with the ASCII bytes of the first
+ * ten characters, and all three founder commands begin with "Build a " — so every one of them
+ * produced `chain_qnvpbgqgys`. Three different products, one project id, one D1 database and
+ * one Worker name: the booking deployment silently overwrote the coffee-shop Worker, and the
+ * coffee-shop acceptance then probed the booking product's URL. That is exactly the identity
+ * failure the whole deployment contract exists to prevent, and it looked like a broken DO
+ * binding (501 on /api/live) rather than a name collision.
+ *
+ * A digest of the WHOLE command cannot collide this way, and stays stable across runs so a
+ * repaired product redeploys to the same URL instead of a new one.
+ */
+export function chainProjectId(command) {
+  const digest = createHash('sha256').update(String(command), 'utf8').digest('hex').slice(0, 12);
+  return `chain-${digest}`;
+}
 
 const mark = (ok, label, detail = '') => `${ok === 'N/A' ? 'N/A ' : (ok ? 'PASS' : 'BLOCK')}  ${label}${detail ? `  — ${detail}` : ''}`;
 
@@ -82,7 +103,15 @@ async function deployAndAccept(ctx, projectId) {
       return { deployment: { status: 'DEPLOYED', url: harness.url, deploymentId: harness.id, environment: 'local-network', projectId }, acceptance: out.runtimeAcceptance, boundary: 'local network (real HTTP + real WebSocket, not Cloudflare)' };
     } finally { harness.close(); }
   }
-  const deployed = await deployGeneratedProject({ projectId, files: ctx.built.files, artifactId: projectId });
+  const deployed = await deployGeneratedProject({
+    projectId,
+    files: ctx.built.files,
+    artifactId: projectId,
+    // A specification that demands live updates OWES a Durable Object. If the deployed
+    // Worker answers 501 on /api/live, the binding never went up — a deployment defect.
+    // Saying so here stops a missing binding from being reported as a broken product.
+    requiresRealtime: ctx.spec?.realtime?.required === true
+  });
   if (deployed.deployment.status !== 'DEPLOYED') return { deployment: deployed.deployment, acceptance: null, boundary: 'cloudflare' };
   const out = await runAcceptanceAgainst({
     projectId, files: ctx.built.files, artifactId: projectId, deployment: deployed.deployment,
@@ -95,7 +124,7 @@ async function deployAndAccept(ctx, projectId) {
 export async function runAcceptanceChain({ commands = FOUNDER_COMMANDS } = {}) {
   const chains = [];
   for (const command of commands) {
-    const projectId = `chain_${Buffer.from(command).toString('base64url').slice(0, 10).toLowerCase()}`;
+    const projectId = chainProjectId(command);
     const steps = [];
 
     // 1. requirement specification

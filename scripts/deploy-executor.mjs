@@ -113,10 +113,61 @@ async function provisionDatabase(root, databaseName) {
 }
 
 /**
+ * Wait until the URL wrangler just created actually SERVES this project.
+ *
+ * `wrangler deploy` returning success means the version was uploaded, not that the edge is
+ * already answering with it. Probing too early reads the previous version — or nothing — and
+ * reports a working deployment as broken. Two things are therefore asserted before any
+ * acceptance is allowed to run:
+ *
+ *   * the deployment answers at all (real HTTP over the real hostname), and
+ *   * its bindings are this project's own, checked through the product's own routes.
+ *
+ * The binding check is the important half. A Worker that answers `501` on `/api/live` is not a
+ * product failure — it is a Durable Object binding that was never deployed, which is a
+ * deployment defect. Reading it as a product FAIL sends the founder looking at their app for
+ * a bug that Cloudflare has.
+ */
+export async function waitForDeployment(url, { requiresRealtime = false, attempts = 20, intervalMs = 3000 } = {}) {
+  const probe = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(`${String(url).replace(/\/+$/, '')}/api/health`, { signal: controller.signal });
+      return { reached: true, status: res.status, body: await res.text().catch(() => '') };
+    } finally { clearTimeout(timer); }
+  };
+  let last = null;
+  for (let i = 0; i < attempts; i += 1) {
+    last = await probe().catch((error) => ({ reached: false, status: 0, body: redact(error?.message ?? error) }));
+    if (last.reached) break;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  if (!last?.reached) {
+    return { ready: false, reason: `the deployment at ${url} did not answer on /api/health within ${(attempts * intervalMs) / 1000}s: ${last?.body ?? 'no response'}` };
+  }
+  if (!requiresRealtime) return { ready: true, status: last.status };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const live = await fetch(`${String(url).replace(/\/+$/, '')}/api/live`, { signal: controller.signal });
+    if (live.status === 501) {
+      return {
+        ready: false,
+        reason: 'the deployed Worker has no LIVE Durable Object binding, so a product whose specification requires live updates cannot work. This is a deployment defect (errorCategory "deployment"), not a product failure.'
+      };
+    }
+    return { ready: true, status: last.status, liveStatus: live.status };
+  } catch (error) {
+    return { ready: true, status: last.status, liveStatus: 0, liveWarning: redact(error?.message ?? error) };
+  } finally { clearTimeout(timer); }
+}
+
+/**
  * Build and deploy ONE generated project. Returns a deployment record — never a boolean and
  * never a URL that was not produced by a real `wrangler deploy`.
  */
-export async function deployGeneratedProject({ projectId = null, files = [], artifactId = null, environment = 'production' } = {}) {
+export async function deployGeneratedProject({ projectId = null, files = [], artifactId = null, environment = 'production', requiresRealtime = false, waitForReady = true } = {}) {
   const startedAt = new Date().toISOString();
   const commit = process.env.GIT_COMMIT ?? process.env.GITHUB_SHA ?? null;
   const base = { projectId, artifactId, commit, environment, deployedAt: startedAt, attemptedAt: startedAt };
@@ -180,13 +231,34 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     if (!url) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: 'deployment', errorMessage: 'wrangler reported success without a deployment URL, so there is nothing to run an acceptance against' } };
     }
+    const deploymentId = result.deployment_id ?? result.version_id ?? result.id
+      ?? /Current Version ID:\s*([0-9a-f-]{16,})/i.exec(output)?.[1] ?? null;
+    const finalUrl = String(url).replace(/\/+$/, '');
+
+    // Do not hand a URL to the acceptance runner until the edge is really serving THIS
+    // version. Without this wait, the acceptance probes whatever the previous deployment
+    // left behind — the failure mode that made three different products report one another's
+    // defects.
+    if (waitForReady) {
+      const ready = await waitForDeployment(finalUrl, { requiresRealtime });
+      if (!ready.ready) {
+        return {
+          deployment: {
+            ...base, status: 'FAILED', url: finalUrl, deploymentId,
+            errorCategory: 'deployment',
+            errorMessage: ready.reason,
+            deployedAt: new Date().toISOString(),
+            environment: result.environment ?? environment
+          }
+        };
+      }
+    }
     return {
       deployment: {
         ...base,
         status: 'DEPLOYED',
-        url: String(url).replace(/\/+$/, ''),
-        deploymentId: result.deployment_id ?? result.version_id ?? result.id
-          ?? /Current Version ID:\s*([0-9a-f-]{16,})/i.exec(output)?.[1] ?? null,
+        url: finalUrl,
+        deploymentId,
         deployedAt: new Date().toISOString(),
         environment: result.environment ?? environment
       }
@@ -220,7 +292,8 @@ export function createDeployExecutorServer({ token = null } = {}) {
         projectId: payload.projectId ?? null,
         files: payload.files ?? [],
         artifactId: payload.artifactId ?? null,
-        environment: payload.environment ?? 'production'
+        environment: payload.environment ?? 'production',
+        requiresRealtime: payload.requiresRealtime === true
       });
       return send(out.deployment.status === 'DEPLOYED' ? 200 : 502, { deployment: out.deployment, error: out.deployment.errorMessage ?? null });
     });
