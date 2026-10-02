@@ -219,25 +219,15 @@ function broadcast(sender, message) {
 }
 
 async function broadcastLive(env, message) {
-  if (!env?.LIVE) return;
+  if (!env?.LIVE) return 0;
   if (typeof env.LIVE.idFromName === 'function' && typeof env.LIVE.get === 'function') {
     const id = env.LIVE.idFromName('global');
     const stub = env.LIVE.get(id);
-    await stub.fetch(new Request('https://mauli-live/broadcast', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: message
-    }));
-    return;
+    if (typeof stub.broadcast === 'function') return await stub.broadcast(message);
   }
   // Deterministic in-process harness fallback; never used by a real Cloudflare namespace.
-  if (typeof env.LIVE.fetch === 'function') {
-    await env.LIVE.fetch(new Request('https://mauli-live/broadcast', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: message
-    }), env);
-  }
+  if (typeof env.LIVE.broadcast === 'function') return env.LIVE.broadcast(message);
+  return 0;
 }
 ` : ''}
 async function route(request, env, url) {
@@ -399,18 +389,15 @@ export class LiveConnections extends DurableObject {
   constructor(ctx, state) { super(ctx, state); this.state = state; }
   broadcast(message, sender = null) {
     const sockets = typeof this.ctx?.getWebSockets === 'function' ? this.ctx.getWebSockets() : [];
+    let delivered = 0;
     for (const socket of sockets) {
       if (socket === sender) continue;
-      try { socket.send(message); } catch (_) { /* runtime owns closed sockets */ }
+      try { socket.send(message); delivered++; } catch (_) { /* runtime owns closed sockets */ }
     }
+    return delivered;
   }
   async fetch(request) {
     const pathname = new URL(request.url).pathname;
-    if (pathname === '/api/live/broadcast' && request.method === 'POST') {
-      const message = await request.text();
-      this.broadcast(message);
-      return new Response('ok');
-    }
     if (pathname !== '/api/live') return new Response('Not found', { status: 404 });
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket upgrade', { status: 426 });
     const pair = new WebSocketPair();
