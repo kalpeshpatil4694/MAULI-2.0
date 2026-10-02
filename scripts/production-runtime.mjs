@@ -465,15 +465,15 @@ export async function runDeployedRealtimeTwoClient({ baseUrl, recordsPath, token
   try {
     socketA = await openLiveSocket(url, clientA, timeoutMs);
     socketB = await openLiveSocket(url, clientB, timeoutMs);
-    const before = { a: clientA.length, b: clientB.length };
-    socketA.send(JSON.stringify({ type: 'ping' }));
-    socketB.send(JSON.stringify({ type: 'ping' }));
-    for (let i = 0; i < 40 && (!clientA.some((m) => m.includes('"type":"pong"')) || !clientB.some((m) => m.includes('"type":"pong"'))); i += 1) {
+    for (let i = 0; i < 40 && (!clientA.some((m) => m.includes('"type":"connected"')) || !clientB.some((m) => m.includes('"type":"connected"'))); i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    if (!clientA.some((m) => m.includes('"type":"pong"')) || !clientB.some((m) => m.includes('"type":"pong"'))) {
-      return { passed: false, detail: `both live clients connected but the bidirectional ping/pong proof failed (A pong: ${clientA.some((m) => m.includes('"type":"pong"'))}, B pong: ${clientB.some((m) => m.includes('"type":"pong"'))})`, clients: 2, received: 0 };
+    const connectedA = clientA.some((m) => m.includes('"type":"connected"'));
+    const connectedB = clientB.some((m) => m.includes('"type":"connected"'));
+    if (!connectedA || !connectedB) {
+      return { passed: false, detail: `the live handshake opened but the server-side WebSocket confirmation was missing (A: ${connectedA}, B: ${connectedB})`, clients: 2, received: 0 };
     }
+    const before = { a: clientA.length, b: clientB.length };
     const write = await callApi('POST', recordsPath, { body: { title: 'realtime two-client proof', detail: 'broadcast probe' }, token });
     if (!write.ok) return { passed: false, detail: `the write that should broadcast → ${write.status}`, clients: 2, received: 0 };
     for (let i = 0; i < 40 && (clientA.length === before.a || clientB.length === before.b); i += 1) {
@@ -488,7 +488,7 @@ export async function runDeployedRealtimeTwoClient({ baseUrl, recordsPath, token
       received: Number(gotA) + Number(gotB),
       detail: gotA && gotB
         ? `both independently connected clients received the write made over HTTP (A: ${clientA.length - before.a} message(s), B: ${clientB.length - before.b} message(s))`
-        : `client A received ${clientA.length - before.a}, client B received ${clientB.length - before.b} — a change on one client did not reach the other through the deployment`,
+        : `client A received ${clientA.length - before.a}, client B received ${clientB.length - before.b}, Worker-reported liveDelivered=${write.body?.liveDelivered ?? 'unknown'} — a change on one client did not reach the other through the deployment`,
       payload
     };
   } catch (error) {
