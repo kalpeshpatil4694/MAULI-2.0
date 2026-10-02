@@ -162,7 +162,15 @@ test('a repair re-runs the whole journey, not only the failing step', async () =
   const outcome = await repairUntilTheJourneyPasses(async (attempt) => {
     if (attempt === 0) {
       return built.files.map((f) => f.path === 'worker/index.js'
-        ? { ...f, content: f.content.replace("return json({ ok: true, " + built.table + ": row }, 201);", "return json({ ok: true, " + built.table + ": { title: row.title } }, 201);") }
+        // Break the create response by dropping the row's id. The pattern matches on the
+        // RESPONSE SHAPE rather than one exact line: the create response gained a
+        // `liveDelivered` field along the way, and a literal built from an older revision
+        // silently stopped matching -- so the loop was handed an app that was never broken
+        // and reported zero repairs for a defect it had never introduced.
+        ? { ...f, content: f.content.replace(
+          /return json\(\{ ok: true, (\w+): row(, liveDelivered)? \}, 201\);/,
+          "return json({ ok: true, $1: { title: row.title } }, 201);"
+        ) }
         : f);
     }
     return built.files;
