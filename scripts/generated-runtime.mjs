@@ -250,7 +250,38 @@ class ShimResponse extends Response {
 // The runtime
 // ---------------------------------------------------------------------------
 
-export function createRuntime({ env = {}, fetchImpl = null } = {}) {
+/**
+ * The client-side WebSocket a generated FRONTEND constructs.
+ *
+ * Without this shim the frontend's `new WebSocket(...)` fell through to Node's built-in
+ * client, which opened a real connection to a host that does not exist, sat there until its
+ * close-handshake timer fired and then threw — AFTER the acceptance run had printed its
+ * verdict, failing CI for a run that passed. A frontend's socket attempt is also evidence:
+ * it records that the product tried to open a live channel and where it pointed.
+ */
+class ShimClientWebSocket {
+  constructor(url, protocols) {
+    this.url = String(url ?? '');
+    this.readyState = 0;
+    this.sent = [];
+    this._handlers = {};
+    this._accepted = false;
+    setTimeout(() => {
+      this.readyState = 1;
+      for (const fn of this._handlers.open ?? []) fn({ type: 'open' });
+    }, 0);
+  }
+  addEventListener(type, fn) { (this._handlers[type] ??= []).push(fn); }
+  removeEventListener() {}
+  send(data) { this.sent.push(String(data)); }
+  close() {
+    if (this.readyState === 3) return;
+    this.readyState = 3;
+    for (const fn of this._handlers.close ?? []) fn({ type: 'close', code: 1000 });
+  }
+}
+
+export function createRuntime({ env = {}, fetchImpl = null, files = [] } = {}) {
   const DB = new InMemoryD1();
   const sockets = [];
   const timers = new Set();
@@ -292,6 +323,12 @@ export function createRuntime({ env = {}, fetchImpl = null } = {}) {
       btoa: (s) => Buffer.from(String(s), 'binary').toString('base64'),
       fetch: routeFetch,
       WebSocketPair,
+      // A frontend's live-channel attempt is recorded rather than dialled for real.
+      WebSocket: function ClientWebSocket(url, protocols) {
+        const socket = new ShimClientWebSocket(url, protocols);
+        sockets.push(socket);
+        return socket;
+      },
       console_: undefined
     };
   }
@@ -299,6 +336,7 @@ export function createRuntime({ env = {}, fetchImpl = null } = {}) {
   return {
     DB,
     env: runtimeEnv,
+    files,
     sockets,
     globals,
     routeFetch,
@@ -332,6 +370,7 @@ export async function loadWorker(files, runtime) {
   // Worker sees them.
   try {
     const mod = await import(`data:text/javascript;base64,${Buffer.from(entry.content, 'utf8').toString('base64')}#${encodeURIComponent(entry.path)}`);
+    attachDurableObjectBindings(mod, runtime);
     const handler = typeof mod.default === 'function' ? mod.default
       : typeof mod.default?.fetch === 'function' ? mod.default.fetch.bind(mod.default)
         : typeof mod.fetch === 'function' ? mod.fetch
@@ -342,6 +381,43 @@ export async function loadWorker(files, runtime) {
     // The module is loaded; the globals stay installed for the duration of the run and are
     // released by runtime.disposeGlobals().
   }
+}
+
+/**
+ * Give the loaded module the Durable Object namespaces its own wrangler config declares.
+ *
+ * A generated Worker's live channel is routed through `env.LIVE.fetch(...)`, exactly as it
+ * is on Cloudflare. Without a namespace here, the module's own entry point answered
+ * /api/live with 501 while the feature was reported as working — so the shim reads the
+ * binding table out of the generated wrangler config and puts a real namespace in front of
+ * the exported class. Every client of one binding shares ONE instance, which is what makes
+ * a broadcast from one client reach the others.
+ */
+function attachDurableObjectBindings(mod, runtime) {
+  const files = Array.isArray(runtime?.files) ? runtime.files : [];
+  const config = files.find((f) => /wrangler\.(?:jsonc?|toml)/i.test(String(f?.path ?? '')))?.content ?? '';
+  const bindings = [];
+  const jsonMatch = /"bindings"\s*:\s*\[([\s\S]*?)\]/.exec(config);
+  if (jsonMatch) {
+    for (const m of jsonMatch[1].matchAll(/"name"\s*:\s*"([^"]+)"[\s\S]*?"class_name"\s*:\s*"([^"]+)"/g)) bindings.push({ name: m[1], className: m[2] });
+  } else {
+    for (const m of config.matchAll(/\[\s*durable_objects\s*\]\s*binding\s*=\s*"([^"]+)"[\s\S]*?class_name\s*=\s*"([^"]+)"/g)) bindings.push({ name: m[1], className: m[2] });
+  }
+  for (const binding of bindings) {
+    const Cls = mod?.[binding.className];
+    if (typeof Cls !== 'function') continue;
+    const instance = new Cls({ id: { toString: () => binding.name } });
+    instance.env = runtime.env;
+    // Cloudflare's Durable Object namespace exposes BOTH the stub API (`get`) and the direct
+    // `fetch`. Generated code calls `env.<BINDING>.fetch(...)`, so a shim that only answers
+    // `get` makes the live route answer 501 while the feature still looks present in source.
+    runtime.env[binding.name] = {
+      idFromName: () => ({ name: binding.name }),
+      get: async () => instance,
+      fetch: (request, env) => instance.fetch(request, env ?? runtime.env)
+    };
+  }
+  return bindings.length;
 }
 
 /** Install the runtime's Worker globals on globalThis; returns a restore function. */
@@ -362,4 +438,4 @@ export function installGlobals(runtime) {
   };
 }
 
-export { InMemoryD1, WebSocketPair, ShimSocket, ShimResponse, TYPES };
+export { InMemoryD1, WebSocketPair, ShimSocket, ShimClientWebSocket, ShimResponse, TYPES };

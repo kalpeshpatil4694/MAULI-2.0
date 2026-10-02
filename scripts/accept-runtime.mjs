@@ -37,6 +37,7 @@ const base = String(opt('base') ?? process.env.MAULI_BASE ?? 'https://mauli-2-0.
 // and a missing one must fail loudly rather than silently authenticate as nobody.
 const key = opt('key') ?? process.env.MAULI_KEY ?? null;
 const deployed = opt('deployed');
+const deployFirst = has('deploy');
 const recordDeployment = has('record-deployment');
 const outFile = opt('out');
 
@@ -50,11 +51,14 @@ if (!key) {
   console.error('  A credential is never defaulted in source — a hardcoded fallback is a committed production secret.');
   process.exit(2);
 }
+if (deployFirst && !deployed) {
+  console.log('  target    will be deployed first, then the acceptance runs against the real URL');
+}
+// Point 3: MAULI's own control-plane URL is not a generated application's runtime URL.
 if (deployed && !/^https?:\/\//i.test(deployed)) {
   console.error(`Refusing to run: --deployed "${deployed}" is not an http(s) URL. The acceptance run must hit the generated project's real deployment.`);
   process.exit(2);
 }
-// Point 3: MAULI's own control-plane URL is not a generated application's runtime URL.
 if (deployed && deployed.replace(/\/+$/, '') === base) {
   console.error(`Refusing to run: --deployed ${deployed} is MAULI's own control-plane URL, not the generated application's deployment.`);
   process.exit(4);
@@ -80,8 +84,67 @@ const project = detailRes.data.detail.project ?? {};
 console.log(`\nProduction runtime acceptance — ${project.name ?? project.objective ?? projectId}\n`);
 console.log(`  project   ${projectId}`);
 
-// 2. identity: the URL must belong to THIS project -----------------------------
-const recorded = project.runtimeDeployment ?? null;
+// 2. deployment: build and deploy THIS project, then capture its actual URL ----------
+// Point 2/3. With `--deploy` the generated project's own files are handed to the configured
+// deploy executor and the URL Cloudflare actually returns is what the acceptance runs
+// against. No executor configured is BLOCKED / DEPENDENCY_REQUIRED — never a fabricated
+// URL and never a run against the source in this process.
+let deployment = project.runtimeDeployment ?? null;
+if (deployFirst) {
+  const executor = process.env.MAULI_DEPLOY_EXECUTOR ?? null;
+  if (!executor) {
+    console.error('\nBLOCKED — DEPENDENCY_REQUIRED: MAULI_DEPLOY_EXECUTOR is not configured, so this generated');
+    console.error('  project cannot be deployed. Final Delivery stays blocked; nothing is being skipped.');
+    process.exit(2);
+  }
+  const { deployGeneratedProject } = await import('./deploy-executor.mjs');
+  const files = [];
+  const artifactsRes = await call('GET', `/api/artifacts?projectId=${encodeURIComponent(projectId)}`);
+  for (const artifact of (artifactsRes.data?.artifacts ?? []).filter((a) => a?.type === 'code-workspace')) {
+    for (const file of (artifact.content?.files ?? [])) {
+      if (file && typeof file.path === 'string' && typeof file.content === 'string') files.push({ path: file.path, content: file.content });
+    }
+  }
+  const out = deployFirst && executor === 'local'
+    ? await deployGeneratedProject({ projectId, files, artifactId: project.artifactId ?? null })
+    : await (async () => {
+      const headers = { 'content-type': 'application/json' };
+      if (process.env.MAULI_DEPLOY_EXECUTOR_TOKEN) headers.authorization = `Bearer ${process.env.MAULI_DEPLOY_EXECUTOR_TOKEN}`;
+      const response = await fetch(executor, { method: 'POST', headers, body: JSON.stringify({ projectId, files, artifactId: project.artifactId ?? null }) });
+      const body = await response.json().catch(() => ({}));
+      return { deployment: body.deployment ?? null };
+    })();
+  deployment = out.deployment;
+  if (!deployment || deployment.status !== 'DEPLOYED' || !deployment.url) {
+    console.error(`\nBLOCKED — the generated project failed to deploy (${deployment?.errorCategory ?? 'unknown'}): ${deployment?.errorMessage ?? 'no deployment record came back'}`);
+    process.exit(1);
+  }
+  console.log(`  deployed  ${deployment.url} (${deployment.deploymentId ?? 'no deployment id'})`);
+  const record = await call('POST', `/api/projects/${encodeURIComponent(projectId)}/deployment`, deployment);
+  if (!record.ok) {
+    console.error(`\nBLOCKED — the deployment happened but could not be recorded against this project (HTTP ${record.status}).`);
+    process.exit(4);
+  }
+}
+
+// 3. identity: the URL must belong to THIS project -----------------------------
+const recorded = project.runtimeDeployment ?? deployment ?? null;
+const target = deployment?.url ?? deployed ?? null;
+if (target) {
+  if (recorded?.url && recorded.url.replace(/\/+$/, '') !== target.replace(/\/+$/, '')) {
+    console.error(`\nBLOCKED — identity mismatch: this project is deployed at ${recorded.url}, but the run was pointed at ${target}.`);
+    console.error('  A runtime result produced for another project\'s URL is never attached to this one.');
+    process.exit(4);
+  }
+  const reachable = await fetch(`${target.replace(/\/+$/, '')}/api/health`, { method: 'GET' })
+    .then((r) => ({ ok: r.ok, status: r.status }))
+    .catch((error) => ({ ok: false, status: 0, error: String(error?.message ?? error) }));
+  if (!reachable.ok) {
+    console.error(`\nBLOCKED — the deployment ${target} did not answer (HTTP ${reachable.status}). ${reachable.error ?? ''}`.trim());
+    process.exit(1);
+  }
+}
+console.log(`  target    ${target ? `deployed: ${target}` : base}\n`);
 if (deployed) {
   if (recorded?.url && recorded.url.replace(/\/+$/, '') !== deployed.replace(/\/+$/, '')) {
     console.error(`\nBLOCKED — identity mismatch: this project is deployed at ${recorded.url}, but the run was pointed at ${deployed}.`);
@@ -96,9 +159,9 @@ if (deployed) {
     process.exit(1);
   }
 }
-console.log(`  target    ${deployed ? `deployed: ${deployed}` : base}\n`);
+console.log(`  target    ${target ? `deployed: ${target}` : base}\n`);
 
-// 3. its code -------------------------------------------------------------------
+// 4. its code -------------------------------------------------------------------
 const artifactsRes = await call('GET', `/api/artifacts?projectId=${encodeURIComponent(projectId)}`);
 const artifacts = artifactsRes.data?.artifacts ?? [];
 const seen = new Set();
@@ -118,24 +181,27 @@ if (!files.length) {
   process.exit(3);
 }
 
-// 4. run the acceptance ----------------------------------------------------------
+// 5. run the acceptance ----------------------------------------------------------
 const report = await runProductionRuntimeAcceptance(files, {
   spec: project.requirementSpec ?? {},
   architecture: project.architecture ?? null,
   objective: project.objective ?? '',
   requirements: Array.isArray(project.requirements) ? project.requirements : [],
-  baseUrl: deployed ?? null,
+  baseUrl: target ?? null,
   // Identity travels WITH the report, so the Worker can refuse a run that belongs to
   // another project even if somebody posts it to the wrong project id.
   projectId,
   artifactId: deployedArtifactId,
-  deployment: recorded ?? (deployed ? { url: deployed, status: 'DEPLOYED', projectId } : null),
+  deployment: recorded ?? (target ? { url: target, status: 'DEPLOYED', projectId } : null),
   platform: project.platform ?? null
 });
 
 console.log('  acceptance run');
 line(report.transport === 'deployed-http' ? 'PASS' : 'note', 'transport', report.transport);
-if (deployed && report.transport !== 'deployed-http') {
+if (report.coreFeature) {
+  line(report.coreFeature.status === 'PASS' ? 'PASS' : 'BLOCKED', `core feature "${report.coreFeature.label}"`, report.coreFeature.status);
+}
+if (target && report.transport !== 'deployed-http') {
   console.error('\nBLOCKED — the run did not use real network HTTP, so it cannot be production acceptance.');
   process.exit(1);
 }

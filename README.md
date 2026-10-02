@@ -112,8 +112,58 @@ Center as **Production Runtime: PASS / FAILED / BLOCKED** with tested-at, deploy
 database, authentication, journey and the blocking reason, and re-checked by Final Delivery.
 Secrets are never persisted: the store redacts credential-shaped keys before writing.
 
-### Deploy first, then prove it over the network
+### Prove the founder's own feature, not a CRUD smoke test
 
+A create/read/update/delete round trip is not a product. It is the identical test for a call
+recording app, a medicine tracker and a coffee shop, so it can only prove that the generated
+Worker talks to D1 — never that the feature the founder asked for works.
+
+`src/core-feature.js` therefore derives each product's ACTUAL core feature from the
+requirement specification, and `scripts/production-runtime.mjs` issues the matching probes
+against the DEPLOYED application: a narrowing search really narrows, a schedule really round
+trips, a total really matches what was written. A probe the product cannot perform is FAIL
+and a probe never attempted is MISSING — both block. The generic CRUD result can no longer
+stand in for either.
+
+The same rule applies to everything else the deployment owes:
+
+| Obligation | How it is proved | When it cannot be |
+| --- | --- | --- |
+| journey | every planned step judged against observations made over real HTTP | BLOCKED |
+| real-time | two independent WebSocket clients of the actual deployment both receive the write | BLOCKED |
+| external API | the real endpoint is called and its response parsed | `DEPENDENCY_REQUIRED` |
+| browser-only | the product's own UI journey on the device, named as such | BLOCKED |
+| native | installed and launched on a device/emulator | `ANDROID_RUNTIME = BLOCKED` |
+
+## The two executors
+
+`MAULI_DEPLOY_EXECUTOR` and `MAULI_RUNTIME_EXECUTOR` name runners the Worker cannot be:
+it cannot run wrangler, and it cannot execute generated code. Both are shipped as real,
+runnable services rather than contracts alone:
+
+```bash
+CLOUDFLARE_API_TOKEN=… node scripts/deploy-executor.mjs        # :8788 — builds, provisions D1, wrangler deploys
+node scripts/runtime-executor-server.mjs                       # :8789 — runs the acceptance against a real deployment URL
+```
+
+`scripts/deploy-executor.mjs` provisions the D1 database the generated `wrangler.jsonc`
+declares, runs `wrangler deploy --dry-run` before deploying, and answers with the
+deployment id, URL, environment and timestamp Cloudflare actually returned — or with an
+explicit failure category. `scripts/runtime-executor-server.mjs` refuses any request without
+a real deployment URL, because running the source inside the runner is a fixture, not
+production evidence.
+
+Follow a whole lifecycle yourself:
+
+```bash
+node scripts/acceptance-chain.mjs            # real network deployment boundary
+node scripts/acceptance-chain.mjs --deploy   # real Cloudflare deployment
+```
+
+It takes three different founder commands and prints every link from the command to Final
+Delivery. A link that produced no real evidence is printed as BLOCKED.
+
+## Deploy first, then prove it over the network
 A backend product is proved by running **its own deployed URL**, so the deployment is part of
 the evidence rather than a detail beside it. Every generated project carries a deployment
 record — `status`, `url`, `deploymentId`, `deployedAt`, `commit`, `environment` and the id of

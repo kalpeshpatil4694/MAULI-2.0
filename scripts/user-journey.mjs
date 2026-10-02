@@ -116,7 +116,7 @@ export async function runUserJourney(files, { spec = {}, architecture = {}, env 
     return 'id' in payload ? payload : null;
   };
   const plan = planJourney(spec, architecture);
-  const runtime = createRuntime({ env, fetchImpl });
+  const runtime = createRuntime({ env, fetchImpl, files });
   const app = verifyGeneratedApp(files, {
     objective,
     requirements,
@@ -276,7 +276,22 @@ export async function runUserJourney(files, { spec = {}, architecture = {}, env 
         `a new request sees the earlier row: ${stillThere} (D1 holds ${rowsOf(runtime.DB).length} row(s))`);
     } else {
       // Offline product: persistence is proven through the app's own store across a reload.
-      await interact(app, { fill: {}, call: pickCreateHandler(app) ?? undefined });
+      // A browser-only product has no API to POST to, so the journey has to do what a user
+      // does: fill the form and press the button. Calling a guessed handler wrote nothing,
+      // which made every local product look like it had no persistence at all.
+      const elements = [...app.elements.entries()];
+      const fill = {};
+      for (const [id, el] of elements) {
+        if (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') continue;
+        const type = String(el.type ?? 'text').toLowerCase();
+        if (type === 'email') fill[id] = 'journey@acceptance.local';
+        else if (type === 'number' || type === 'range') fill[id] = 42;
+        else if (type === 'password') fill[id] = 'Acceptance-1234!';
+        else fill[id] = 'Acceptance record';
+      }
+      const submit = elements.find(([, el]) => el.tagName === 'BUTTON' && !el.hidden
+        && /save|add|create|submit|record|log|entry/i.test(String(el.textContent ?? el.value ?? '')));
+      await interact(app, { fill, click: submit?.[0], call: pickCreateHandler(app) ?? undefined });
       await drainMicrotasks(app);
       const before = app.storage.size;
       push(findStep('create'), before > 0, `offline app wrote ${before} localStorage key(s)`);

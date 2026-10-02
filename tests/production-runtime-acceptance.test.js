@@ -54,8 +54,22 @@ function passingRun(architecture, spec, { projectId = FIXTURE_PROJECT_ID, url = 
   const obligations = runtimeObligations({ architecture, spec, files: BACKEND_FILES, hasBackend: true });
   const tests = {};
   for (const id of obligations.requiredTests) {
-    tests[id] = { status: 'PASS', detail: `${id} observed against the generated application`, request: `GET /probe/${id}`, responseStatus: 200 };
+    // `deployed` and `called` are what the gate reads to tell a real observation from a
+    // fixture. A run that cannot say WHERE it observed something cannot claim production.
+    tests[id] = { status: 'PASS', detail: `${id} observed against the generated application`, request: `GET /probe/${id}`, responseStatus: 200, deployed: transport === 'deployed-http', called: true };
   }
+  const coreFeature = obligations.coreFeature
+    ? {
+      label: obligations.coreFeature.label,
+      featureKeys: obligations.coreFeature.featureKeys,
+      basis: 'requirement-specification',
+      status: 'PASS',
+      probes: obligations.coreFeature.probes.map((p) => ({
+        probeId: p.id, status: 'PASS', executable: p.executable, detail: `${p.label} — observed over real HTTP`,
+        request: 'POST /api/orders', responseStatus: 201, persisted: true, requirementIds: []
+      }))
+    }
+    : null;
   return {
     status: 'passed',
     transport,
@@ -67,7 +81,8 @@ function passingRun(architecture, spec, { projectId = FIXTURE_PROJECT_ID, url = 
     tests,
     failures: [],
     evidence: [],
-    rowsInDb: 3
+    rowsInDb: 3,
+    coreFeature
   };
 }
 

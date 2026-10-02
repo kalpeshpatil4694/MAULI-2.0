@@ -47,22 +47,43 @@ const BACKEND_FILES = [
 
 const specFor = (command) => extractRequirementSpec({ command, platform: 'web' });
 
-/** A run in which every required test was really observed, over real HTTP. */
+/**
+ * A run in which every required test was really observed, over real HTTP.
+ *
+ * The flags here are the ones the gate reads to tell a real deployed observation from a
+ * fixture: `deployed:true` on the journey and the live proof, `called:true` on an external
+ * service, and per-probe core-feature rows. A fixture that omits them is refused — which is
+ * the point: a run that cannot say WHERE it observed something cannot claim production.
+ */
 function greenRun(spec, architecture, { projectId, url, artifactId, overrides = {} } = {}) {
   const obligations = runtimeObligations({ architecture, spec, files: BACKEND_FILES, hasBackend: true });
   const tests = {};
   for (const id of obligations.requiredTests) {
     tests[id] = {
       status: 'PASS', detail: `${id} observed against the deployed application`,
-      request: `GET /api/${id}`, responseStatus: 200, persisted: ['create', 'update', 'delete', 'refresh'].includes(id)
+      request: `GET /api/${id}`, responseStatus: 200, persisted: ['create', 'update', 'delete', 'refresh'].includes(id),
+      // Network-observed, not executed in the harness that produced this run.
+      deployed: true, called: true
     };
   }
   for (const [id, test] of Object.entries(overrides)) tests[id] = test;
+  const coreFeature = obligations.coreFeature
+    ? {
+      label: obligations.coreFeature.label,
+      featureKeys: obligations.coreFeature.featureKeys,
+      basis: obligations.coreFeature.basis,
+      status: 'PASS',
+      probes: obligations.coreFeature.probes.map((p) => ({
+        probeId: p.id, status: 'PASS', executable: p.executable, detail: `${p.label} — observed over real HTTP`,
+        request: `POST /api/orders`, responseStatus: 201, persisted: true, requirementIds: []
+      }))
+    }
+    : null;
   return {
     status: 'passed', transport: 'deployed-http', projectId, artifactId,
     deployment: { url, deploymentId: 'dep_1', deployedAt: '2026-10-02T00:00:00.000Z', environment: 'production' },
     environment: `deployed worker at ${url} + D1`, testedAt: '2026-10-02T00:00:00.000Z',
-    tests, failures: [], evidence: [], rowsInDb: 4
+    tests, failures: [], evidence: [], rowsInDb: 4, coreFeature
   };
 }
 
@@ -165,13 +186,21 @@ test('D — Backend + realtime: a live requirement owes a two-client proof', () 
   };
   const obligationsIds = obligations.requiredTests.filter((id) => id !== 'realtime');
   const tests = {};
-  for (const id of obligationsIds) tests[id] = { status: 'PASS', detail: 'observed', request: `GET /api/${id}`, responseStatus: 200 };
-  const without = evaluateRuntimeAcceptance({ ...base, acceptance: { status: 'passed', transport: 'deployed-http', projectId: 'p', deployment: { url: 'https://live-app.mauli.generated.workers.dev' }, testedAt: '2026-10-02T00:00:00.000Z', tests } });
+  for (const id of obligationsIds) tests[id] = { status: 'PASS', detail: 'observed', request: `GET /api/${id}`, responseStatus: 200, deployed: true, called: true };
+  const coreFeature = {
+    label: obligations.coreFeature?.label ?? 'n/a', featureKeys: obligations.coreFeature?.featureKeys ?? [],
+    basis: 'requirement-specification', status: 'PASS',
+    probes: (obligations.coreFeature?.probes ?? []).map((p) => ({
+      probeId: p.id, status: 'PASS', executable: p.executable, detail: `${p.label} — observed over real HTTP`,
+      request: 'POST /api/counters', responseStatus: 201, persisted: true, requirementIds: []
+    }))
+  };
+  const without = evaluateRuntimeAcceptance({ ...base, acceptance: { status: 'passed', transport: 'deployed-http', projectId: 'p', deployment: { url: 'https://live-app.mauli.generated.workers.dev' }, testedAt: '2026-10-02T00:00:00.000Z', tests, coreFeature } });
   assert.equal(without.status, RUNTIME_STATUS.BLOCKED);
   assert.match(without.blockingReason, /second connected client live|realtime/i);
 
-  tests.realtime = { status: 'PASS', detail: 'a write made through the API reached two independently connected clients' };
-  const with_ = evaluateRuntimeAcceptance({ ...base, acceptance: { status: 'passed', transport: 'deployed-http', projectId: 'p', deployment: { url: 'https://live-app.mauli.generated.workers.dev' }, testedAt: '2026-10-02T00:00:00.000Z', tests } });
+  tests.realtime = { status: 'PASS', detail: 'a write made through the API reached two independently connected clients', deployed: true };
+  const with_ = evaluateRuntimeAcceptance({ ...base, acceptance: { status: 'passed', transport: 'deployed-http', projectId: 'p', deployment: { url: 'https://live-app.mauli.generated.workers.dev' }, testedAt: '2026-10-02T00:00:00.000Z', tests, coreFeature } });
   assert.equal(with_.status, RUNTIME_STATUS.PASSED, with_.blockingReason ?? '');
   assert.equal(with_.realtime, 'PASS');
 });
