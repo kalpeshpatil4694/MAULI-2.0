@@ -76,21 +76,40 @@ export async function stageProject(files, { root }) {
 }
 
 /**
- * Provision the D1 database the generated wrangler config declares, and write its id back.
- * A generated project that declares a database it does not have fails on its first query,
- * so this is part of deploying, not an optional extra.
+ * Provision (or find) the D1 database the generated wrangler config declares, and write its
+ * id back. A generated project that declares a database it does not have fails on its first
+ * query, so this is part of deploying, not an optional extra.
+ *
+ * It REUSES an existing database of that name rather than creating a second one. Deploying
+ * the same product again is normal — after a repair, or on the next CI run — and "a database
+ * with that name already exists" is not a product failure, it is this function having no
+ * memory. Reusing also keeps a repaired deployment pointed at the same data, which is what
+ * a redeploy means.
  */
 async function provisionDatabase(root, databaseName) {
-  const created = await run('npx', ['--yes', 'wrangler', 'd1', 'create', databaseName], { cwd: root });
-  if (created.code !== 0) return { ok: false, message: redact(created.stderr || created.stdout) };
-  const match = /database_id\s*=\s*"?([0-9a-f-]{32,})"?/i.exec(`${created.stdout}\n${created.stderr}`)
-    ?? /"database_id"\s*:\s*"([0-9a-f-]{32,})"/i.exec(created.stdout);
-  if (!match) return { ok: false, message: 'wrangler created the database but reported no database_id to bind' };
+  const listed = await run('npx', ['--yes', 'wrangler', 'd1', 'list', '--json'], { cwd: root });
+  let existingId = null;
+  if (listed.code === 0) {
+    try {
+      const list = JSON.parse(listed.stdout);
+      const hit = (Array.isArray(list) ? list : []).find((d) => d?.name === databaseName);
+      existingId = hit?.uuid ?? hit?.database_id ?? null;
+    } catch (_) { existingId = null; }
+  }
+  let databaseId = existingId;
+  if (!databaseId) {
+    const created = await run('npx', ['--yes', 'wrangler', 'd1', 'create', databaseName], { cwd: root });
+    if (created.code !== 0) return { ok: false, message: redact(created.stderr || created.stdout) };
+    databaseId = /database_id\s*=\s*"?([0-9a-f-]{32,})"?/i.exec(`${created.stdout}\n${created.stderr}`)?.[1]
+      ?? /"database_id"\s*:\s*"([0-9a-f-]{32,})"/i.exec(created.stdout)?.[1]
+      ?? null;
+    if (!databaseId) return { ok: false, message: 'wrangler created the database but reported no database_id to bind' };
+  }
   const configPath = join(root, 'wrangler.jsonc');
   const config = await readFile(configPath, 'utf8').catch(() => null);
-  if (config === null) return { ok: true, databaseId: match[1] };
-  await writeFile(configPath, config.replace(/("database_id"\s*:\s*)"[^"]*"/i, `$1"${match[1]}"`), 'utf8');
-  return { ok: true, databaseId: match[1] };
+  if (config === null) return { ok: true, databaseId, reused: Boolean(existingId) };
+  await writeFile(configPath, config.replace(/("database_id"\s*:\s*)"[^"]*"/i, `$1"${databaseId}"`), 'utf8');
+  return { ok: true, databaseId, reused: Boolean(existingId) };
 }
 
 /**
@@ -119,6 +138,18 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     const written = await stageProject(list, { root });
     if (!written) {
       return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: 'build', errorMessage: 'no file could be staged from the generated project' } };
+    }
+    // Each project gets its OWN Worker name. Two generated products can share a record
+    // noun ("order", "entry"), and a shared name would let the second deployment silently
+    // replace the first project's URL — which is precisely the identity failure the whole
+    // deployment contract exists to prevent.
+    if (projectId) {
+      const configPath = join(root, 'wrangler.jsonc');
+      const config = await readFile(configPath, 'utf8').catch(() => null);
+      if (config) {
+        const safe = String(projectId).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+        await writeFile(configPath, config.replace(/("name"\s*:\s*)"[^"]*"/i, `$1"generated-${safe}"`), 'utf8');
+      }
     }
     const config = await readFile(join(root, 'wrangler.jsonc'), 'utf8').catch(() => null);
     const dbName = /"database_name"\s*:\s*"([^"]+)"/i.exec(config ?? '')?.[1] ?? null;
