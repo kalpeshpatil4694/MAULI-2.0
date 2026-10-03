@@ -95,6 +95,16 @@ class InMemoryD1 {
     if (/^INSERT/i.test(upper)) {
       const name = (statement.match(new RegExp(`INSERT\\s+(?:OR\\s+\\w+\\s+)?INTO\\s+${IDENT}`, 'i')) ?? [])[1];
       const t = this.table(name);
+      // A VALUES list may only contain placeholders and literals. A bare identifier there is the
+      // column name written into the row values — `VALUES (?, ?, ?, ?, ?, ?, due)` — which real
+      // D1/SQLite rejects as `no such column: due`. The shim used to ignore the VALUES clause
+      // entirely, so a generated INSERT that was invalid SQL passed every local test.
+      const valuesClause = /VALUES\s*\(([^)]*)\)/i.exec(statement)?.[1] ?? '';
+      for (const token of valuesClause.split(',').map((part) => part.trim()).filter(Boolean)) {
+        if (!/^(\?|'[^']*'|-?\d+(?:\.\d+)?|NULL)$/i.test(token)) {
+          throw new Error(`invalid INSERT VALUES in generated backend (a placeholder, literal or NULL is required): ${token}`);
+        }
+      }
       const cols = [...(statement.match(/\(([^)]*)\)/i)?.[1] ?? '').split(',')].map((c) => c.trim().replace(/["'`]/g, '')).filter(Boolean);
       const explicit = cols.length > 0;
       const names = explicit ? cols.map((c) => c.toLowerCase()) : t.columns.map((c) => c.name);

@@ -586,30 +586,39 @@ client leaving the broadcast set, and a reconnected client receiving the next wr
 negative control — removing the disconnect notification — reproduces the leak, so the check
 cannot quietly stop testing anything.
 
-**The migration and the Worker must describe the same table, or the deployed product is broken
-in a way no in-process run can see.** Two real defects survived every local check because both
-lived only on the **deployed** boundary:
+**Generated SQL is only as correct as the runtime that executes it, and the in-process shim
+executed less of it than D1 does.** A scheduling product (a booking app) stores WHEN something
+is due, so the Worker writes a `due` column. Its INSERT was:
 
-1. **The migration omitted a column the Worker wrote.** A product that schedules (a booking
-   app) stores WHEN something is due: the Worker's `ensureSchema` creates a `due` column and
-   its INSERT names it. The generated migration `0001_init.sql` was built from
+```text
+INSERT INTO "booking" (…, owner_email, due) VALUES (?, ?, ?, ?, ?, ?, due)
+```
+
+The column list was right and the **VALUES** list wrote the column NAME again instead of a
+placeholder — invalid SQL that a real D1 rejects with `no such column: due at offset 114`,
+where offset 114 is exactly that second `due`. It had shipped since the `due` feature was
+added. Every local test passed because the in-memory D1 shim read the INSERT's column list and
+IGNORED the VALUES clause, mapping bound values positionally; the missing seventh value was
+simply `undefined`. The INSERT now uses a real placeholder (`DUE_PLACEHOLDER`) and binds the
+value, and the shim **validates** the VALUES clause — a bare identifier there is refused, so the
+same class of invalid SQL can never again pass a local run while failing on D1.
+
+Two more defects sat behind it:
+
+1. **The migration omitted a column the Worker wrote.** `0001_init.sql` was built from
    `schemaSql({ table, auth, realtime })` — without the `due` flag — so it created the table
-   WITHOUT the column. The deploy executor applies the migration to the real D1 *before*
-   deploying, so the table already existed when the Worker first ran; `CREATE TABLE IF NOT
-   EXISTS` is a no-op on it, and `POST /api/bookings` answered `500 D1_ERROR: no such column:
-   due`. Locally this never reproduced: the harness runs the Worker's own DDL and never applies
-   the migration. The migration now takes the same `due` flag as the Worker.
-2. **A column added later needs a fresh database, not an ALTER.** Even with the migration
-   fixed, an already-provisioned D1 keeps its old shape: `CREATE TABLE IF NOT EXISTS` never
-   alters an existing table, a migration is applied only once, and D1's runtime `ALTER TABLE`
-   is a silent no-op through the Worker binding (a known D1 issue — the statement reports
-   success and the column never appears; a runtime `PRAGMA table_info` through the driver
-   returns no rows either). Two attempts to reconcile the column from inside the Worker were
-   deployed and both left the deployed product answering `no such column: due`, so a stale
-   database cannot be repaired from there at all. The deploy executor now derives the database
-   NAME from a digest of the generated migrations (`schemaHashSuffix`): a schema change deploys
-   alongside a freshly migrated database whose table matches the new Worker, and an unchanged
-   schema reuses the same database so a repair keeps its data.
+   without the column. The deploy executor applies the migration to the real D1 *before*
+   deploying, so a database it provisioned would have been missing `due` even after the INSERT
+   was fixed. The migration now takes the same `due` flag as the Worker.
+2. **A column added later needs a fresh database, not an ALTER.** An already-provisioned D1
+   keeps its old shape — `CREATE TABLE IF NOT EXISTS` never alters an existing table, a
+   migration is applied only once, and D1's runtime `ALTER TABLE` is a silent no-op through the
+   Worker binding (a known D1 issue: the statement reports success and the column never appears;
+   a runtime `PRAGMA table_info` through the driver returns no rows either). The deploy executor
+   therefore derives the database NAME from a digest of the generated migrations
+   (`schemaHashSuffix`): a schema change deploys alongside a freshly migrated database whose
+   table matches the new Worker, and an unchanged schema reuses the same database so a repair
+   keeps its data.
 
 **A readiness probe that fires once is not a readiness probe.** `waitForDeployment` checked
 `/api/live` exactly once after `/api/health` answered. A freshly deployed Worker can still serve

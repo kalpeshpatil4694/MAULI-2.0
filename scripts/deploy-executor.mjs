@@ -297,11 +297,7 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
       if (!db.ok) {
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(db.message, ''), errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}` } };
       }
-      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: database ${dbName} ${db.reused ? 'reused' : 'created'} id=${db.databaseId}`);
-    }
-    if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
-      const bound = /"database_id"\s*:\s*"([^"]+)"/i.exec(await readFile(join(root, 'wrangler.jsonc'), 'utf8').catch(() => ''))?.[1] ?? null;
-      console.error(`[deploy-executor] ${safe}: config database_id=${bound}`);
+      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: database ${dbName} ${db.reused ? 'reused' : 'created'}`);
     }
     // A newly provisioned remote D1 is empty. Generated Workers also create their schema
     // defensively on first request, but production acceptance must not depend on request-time
@@ -309,19 +305,7 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     // deployment. This prevents a valid generated API from reaching a real D1 with no schema.
     const migrationDir = join(root, 'migrations');
     if (existsSync(migrationDir) && dbName) {
-      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
-        const sql = await readFile(join(migrationDir, '0001_init.sql'), 'utf8').catch(() => '');
-        console.error(`[deploy-executor] ${safe}: applying migrations to ${dbName} (due column present: ${/due TEXT/.test(sql)})`);
-      }
       const migrated = await run(wranglerCommand(), ['d1', 'migrations', 'apply', dbName, '--remote'], { cwd: root, input: 'y\n' });
-      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: migrations exit=${migrated.code} ${JSON.stringify(String(migrated.stdout || migrated.stderr || '').replace(/\s+/g, ' ').slice(-240))}`);
-      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
-        const boundId = /"database_id"\s*:\s*"([^"]+)"/i.exec(await readFile(join(root, 'wrangler.jsonc'), 'utf8').catch(() => ''))?.[1] ?? dbName;
-        const probe = await run(wranglerCommand(), ['d1', 'execute', boundId, '--remote', '--json', '--command', "SELECT sql FROM sqlite_master WHERE name='booking'"], { cwd: root });
-        console.error(`[deploy-executor] ${safe}: booking schema exit=${probe.code} ${JSON.stringify(String(probe.stdout || probe.stderr || '').replace(/\s+/g, ' ').slice(0, 900))}`);
-        const legacy = await run(wranglerCommand(), ['d1', 'execute', `generated-${safe}`, '--remote', '--json', '--command', "SELECT sql FROM sqlite_master WHERE name='booking'"], { cwd: root });
-        console.error(`[deploy-executor] ${safe}: legacy exit=${legacy.code} ${JSON.stringify(String(legacy.stdout || legacy.stderr || '').replace(/\s+/g, ' ').slice(0, 600))}`);
-      }
       if (migrated.code !== 0) {
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(migrated.stderr, migrated.stdout), errorMessage: `the generated project's D1 migrations could not be applied: ${redact(migrated.stderr || migrated.stdout)}` } };
       }
@@ -340,10 +324,6 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     // itself, so a deployment that "succeeded" while quietly dropping a Durable Object
     // binding produced no evidence anywhere and the only symptom was a 501 at runtime.
     // Redacted before it is ever printed; secrets are never written to a CI log.
-    if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
-      const boundLine = /env\.DB \(([^)]+)\)/.exec(`${deployed.stdout}\n${deployed.stderr}`)?.[1] ?? null;
-      console.error(`[deploy-executor] ${safe}: wrangler bound D1 name=${boundLine}`);
-    }
     const deployLog = redact([deployed.stdout, deployed.stderr].filter(Boolean).join('\n'));
     // The binding table is the whole point of this log: it is the only place that says
     // whether Cloudflare accepted the Durable Object binding.
