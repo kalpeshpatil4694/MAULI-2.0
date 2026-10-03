@@ -143,7 +143,16 @@ test('a second founder command gets its own core-feature test, not the first one
 
 // =========================================================================== 6
 test('an external API is called for real, and a missing credential stays BLOCKED', async () => {
-  const weather = await callExternalServiceForReal({ service: { key: 'weather', label: 'Weather API', envVar: 'WEATHER_API_KEY' }, fetchImpl: nativeFetch });
+  // This is the one test that dials a THIRD-PARTY endpoint over the open internet, so it is
+  // subject to a transient network failure that has nothing to do with the code under test.
+  // A bounded retry makes it fail for a wrong answer rather than a dropped packet; the
+  // assertions (the real endpoint was dialled, and its real response parsed) are unchanged.
+  let weather;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    weather = await callExternalServiceForReal({ service: { key: 'weather', label: 'Weather API', envVar: 'WEATHER_API_KEY' }, fetchImpl: nativeFetch });
+    if (weather.usable) break;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
   assert.equal(weather.called, true, 'the real endpoint must be dialled, not simulated');
   assert.equal(weather.usable, true, `the real response must parse: ${weather.detail}`);
 
