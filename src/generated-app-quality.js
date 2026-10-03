@@ -374,8 +374,12 @@ export function analyzeGeneratedApp(files, { objective = '', requirements = [] }
 
   // 1. Placeholder / demo wording anywhere in shipped source. The HTML `placeholder="…"`
   // attribute is a legitimate input hint, not a placeholder implementation, so strip it
-  // before scanning.
-  const allText = list.map((f) => f.content).join('\n').replace(/\bplaceholder\s*=\s*(["'])[^"']*\1/gi, '');
+  // before scanning — and so is the CSS `::placeholder` pseudo-element, which styles that
+  // same hint. A designed product styles its input hints; refusing the selector would ban
+  // polish, not unfinished work.
+  const allText = list.map((f) => f.content).join('\n')
+    .replace(/\bplaceholder\s*=\s*(["'])[^"']*\1/gi, '')
+    .replace(/::?-?placeholder\b/gi, '');
   for (const { re, code } of PLACEHOLDER_PATTERNS) {
     if (re.test(allText)) push(code, SEVERITY.CRITICAL, `${code} found in generated source`);
   }

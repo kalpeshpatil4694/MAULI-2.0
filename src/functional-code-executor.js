@@ -200,8 +200,11 @@ CRITICAL RULES:
 4. The app MUST be fully functional when opened in a browser
 5. Use modern CSS (flexbox, grid, variables) and clean JavaScript (ES6+)
 6. Include proper error handling and user feedback
-7. Make it visually polished with good colors, spacing, and typography
-8. Include ALL features mentioned in the task description
+7. Make it visually polished with good colors, spacing, and typography. A working app that LOOKS like a demo is not finished: ship real product presentation, not a bare wireframe.
+7a. DESIGN THE UI LIKE A PRODUCT, NOT A DEMO: a sticky sidebar or top bar with the product name and ICON navigation (inline SVG icons, never an icon font or CDN), a gradient hero/header, card-based sections with rounded corners and soft shadows, colour-coded stat/KPI cards, an illustrated EMPTY STATE (inline SVG), hover states on every interactive row, and real spacing hierarchy.
+7b. GRAPHICS MUST BE INLINE AND DATA-DRIVEN: all artwork as inline <svg> or CSS (gradients, shapes). NEVER <img src="..."> to a file you did not emit, and never reference an external image/font/chart CDN — an asset that does not load is the "graphics missing" defect. Any chart must be computed from the app's own data (bars sized by the stored values), never a hard-coded picture.
+7c. Derive the accent colour from the product (CSS variables, one hue + one gradient partner). Two products must not ship the identical purple.
+8. Include ALL features mentioned in the task description. Every screen must be RESPONSIVE (media queries for phone/tablet), and long lists need an empty state, not a blank gap.
 9. Persist data with localStorage so it survives refresh — a tracker/list/history/note app MUST call localStorage.setItem (or fetch to a real API) from the handler that adds/changes data, and MUST reload persisted data on startup
 10. NO placeholders, NO "TODO", NO incomplete code
 11. MULTI-SCREEN APPS SHIP REAL PAGES: if the product has more than one screen (dashboard, list/queue, reports, settings, auth), emit ONE .html file per screen under www/ — for example www/index.html, www/reports.html, www/settings.html — and connect them with a shared top navigation of plain links: <a href="reports.html">Reports</a>. Every href and src in your HTML MUST point to a file that EXISTS in your files array; never link to a page you did not emit (a link that opens nothing is a broken product). Single-screen tools (a calculator, a timer, a converter) stay one page.

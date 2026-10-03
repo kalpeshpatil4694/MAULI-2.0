@@ -456,22 +456,74 @@ export class LiveConnections extends DurableObject {
 // that opens nothing, which is exactly how a founder ends up with a "second page that does
 // not open". src/generated-app-quality.js refuses that shape.
 const PAGES = [
-  { key: 'dashboard', file: 'index.html', label: 'Dashboard' },
-  { key: 'reports', file: 'reports.html', label: 'Reports' },
-  { key: 'settings', file: 'settings.html', label: 'Settings' }
+  { key: 'dashboard', file: 'index.html', label: 'Dashboard', icon: 'grid' },
+  { key: 'reports', file: 'reports.html', label: 'Reports', icon: 'chart' },
+  { key: 'settings', file: 'settings.html', label: 'Settings', icon: 'gear' }
 ];
+
+// Inline SVG artwork. Every graphic the product draws ships inside the page: an <img> that
+// points at a file the generator never emitted is a broken product, and an icon CDN is a
+// network dependency that fails silently. One inline file always resolves and always paints.
+const ICONS = {
+  grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
+  chart: '<path d="M4 20V11"/><path d="M10 20V4"/><path d="M16 20v-6"/><path d="M22 20H2"/>',
+  gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8M5.3 5.3l2 2M16.7 16.7l2 2M18.7 5.3l-2 2M7.3 16.7l-2 2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-3.6-3.6"/>',
+  edit: '<path d="M4 20.5h4.5L20 9l-4.5-4.5L4 16v4.5z"/><path d="M14 6l4 4"/>',
+  trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 12.5h9L17.5 7"/>',
+  download: '<path d="M12 3.5v11M7.5 10.5l4.5 4.5 4.5-4.5M4 20.5h16"/>',
+  logout: '<path d="M14.5 4.5H19v15h-4.5M10.5 8L6.5 12l4 4M6.5 12h9"/>',
+  signin: '<path d="M9.5 4.5H5v15h4.5M14 8.5l3.5 3.5-3.5 3.5M17 12H9"/>',
+  shield: '<path d="M12 3l7 2.5v5.5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V5.5L12 3z"/><path d="M9 12l2 2 4-4"/>',
+  user: '<circle cx="12" cy="8.5" r="3.5"/><path d="M4.5 20.5c0-4 3.4-6.5 7.5-6.5s7.5 2.5 7.5 6.5"/>',
+  layers: '<path d="M12 3l8.5 4.5L12 12 3.5 7.5 12 3z"/><path d="M3.5 12.5L12 17l8.5-4.5"/>',
+  spark: '<path d="M12 3.2l1.9 5.4 5.4 1.9-5.4 1.9L12 17.8l-1.9-5.4L4.7 10.5l5.4-1.9L12 3.2z"/>',
+  wallet: '<path d="M3.5 7.5A2.5 2.5 0 016 5h11.5a2 2 0 012 2v1.5"/><rect x="3.5" y="7.5" width="17" height="11.5" rx="2.5"/><circle cx="16.5" cy="13" r="1.2"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
+};
+
+function icon(name, cls) {
+  const body = ICONS[name] ?? ICONS.spark;
+  return `<svg class="icon${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
+}
+
+function logoMark() {
+  return '<svg class="mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">' +
+    '<defs><linearGradient id="mauli-g" x1="0" y1="0" x2="1" y2="1">' +
+    '<stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/></linearGradient></defs>' +
+    '<rect x="1" y="1" width="38" height="38" rx="12" fill="url(#mauli-g)"/>' +
+    '<path d="M12.5 28V12.5h7.5a5 5 0 010 10h-4.2l6.7 5.5" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+/**
+ * A stable accent hue per product, so two generated products never look like the same
+ * template with a different noun in it.
+ */
+function accentFor(label) {
+  let h = 0;
+  for (const ch of String(label ?? '')) h = (h * 31 + ch.codePointAt(0)) % 360;
+  return h;
+}
 
 function navHtml(page, label) {
   const links = PAGES.map((p) => {
     const active = p.key === page;
-    return `      <a class="nav-link${active ? ' active' : ''}" href="${p.file}"${active ? ' aria-current="page"' : ''}>${p.label}</a>`;
+    return `        <a class="nav-link${active ? ' active' : ''}" href="${p.file}"${active ? ' aria-current="page"' : ''}>${icon(p.icon)}<span>${p.label}</span></a>`;
   }).join('\n');
-  return `  <nav class="nav" aria-label="Main navigation">
-    <a class="brand" href="index.html">${label}</a>
-    <div class="links">
+  return `  <aside class="sidebar">
+    <a class="brand" href="index.html">
+      ${logoMark()}
+      <span class="brand-text"><strong>${label}</strong><small>${page === 'reports' ? 'Reports' : (page === 'settings' ? 'Settings' : 'Overview')}</small></span>
+    </a>
+    <nav class="nav" aria-label="Main navigation">
 ${links}
+    </nav>
+    <div class="sidebar-foot">
+      <span class="pulse" aria-hidden="true"></span>
+      <span>Live data &middot; no sample rows</span>
     </div>
-  </nav>`;
+  </aside>`;
 }
 
 function frontendHtml({ spec, architecture, table, entity, label, page = 'dashboard' }) {
@@ -479,71 +531,107 @@ function frontendHtml({ spec, architecture, table, entity, label, page = 'dashbo
   // The account card sits on EVERY page: a founder who lands on Reports first must be able
   // to sign in there instead of being told, on a page with no login form, to go elsewhere.
   const authBlock = auth ? `
-      <section id="mauli-auth" class="card">
-        <h2>Account</h2>
+      <section id="mauli-auth" class="card auth">
+        <div class="card-head">
+          <h2>Account</h2>
+          ${icon('user', 'card-icon')}
+        </div>
         <div id="mauli-auth-msg" class="msg" role="status"></div>
         <form id="mauli-login-form">
           <label for="mauli-login-email">Email</label>
           <input id="mauli-login-email" type="email" autocomplete="email" required>
           <label for="mauli-login-password">Password</label>
           <input id="mauli-login-password" type="password" autocomplete="current-password" required>
-          <button type="submit" id="mauli-login">Log in</button>
-          <button type="button" id="mauli-register">Register</button>
+          <div class="btn-row">
+            <button type="submit" id="mauli-login">${icon('signin', 'btn-icon')}Log in</button>
+            <button type="button" id="mauli-register" class="secondary">Create account</button>
+          </div>
         </form>
-        <button type="button" id="mauli-logout" class="secondary" hidden>Log out</button>
+        <button type="button" id="mauli-logout" class="secondary full" hidden>${icon('logout', 'btn-icon')}Log out</button>
         <p class="who" id="mauli-who"></p>
       </section>` : '';
 
   const dashboardBody = `
-  <section class="card">
-    <h2>Overview</h2>
+  <section class="card stats-card">
+    <div class="card-head">
+      <h2>Overview</h2>
+      <span class="tag">Live</span>
+    </div>
     <div id="mauli-stats" class="stats"></div>
+    <div id="mauli-chart" class="chart" role="img" aria-label="Activity over the last 14 days"></div>
   </section>
 ${authBlock}
+  <div class="cols">
   <section class="card">
-    <h2>Add a ${entity}</h2>
+    <div class="card-head">
+      <h2>Add a ${entity}</h2>
+      ${icon('plus', 'card-icon')}
+    </div>
     <form id="mauli-create-form">
       <label for="mauli-title">Title</label>
       <input id="mauli-title" name="title" required maxlength="200">
       <label for="mauli-due">Scheduled for</label>
       <input id="mauli-due" name="due" type="date">
-      <label for="mauli-detail">Details</label>
-      <textarea id="mauli-detail" name="detail" rows="3"></textarea>
       <label for="mauli-amount">Amount</label>
       <input id="mauli-amount" name="amount" type="number" min="0" step="0.01" value="0">
-      <button type="submit" id="mauli-save">Save</button>
+      <label for="mauli-detail">Details</label>
+      <textarea id="mauli-detail" name="detail" rows="3"></textarea>
+      <button type="submit" id="mauli-save">${icon('plus', 'btn-icon')}Save ${entity}</button>
     </form>
     <div id="mauli-error" class="msg error" role="alert"></div>
   </section>
-  <section class="card">
-    <h2>All ${table}s</h2>
-    <div class="row">
-      <input id="mauli-search" type="search" placeholder="Search ${table}s">
+  <section class="card list-card">
+    <div class="card-head">
+      <h2>All ${table}s</h2>
+      <span class="count" id="mauli-count">0</span>
+    </div>
+    <div class="row search-row">
+      <span class="search-icon">${icon('search')}</span>
+      <input id="mauli-search" type="search" placeholder="Search ${table}s" aria-label="Search ${table}s">
       <button type="button" id="mauli-clear" class="secondary">Clear</button>
     </div>
     <ul id="mauli-list"></ul>
-    <p id="mauli-empty" class="muted">No ${table}s yet.</p>
-  </section>`;
+    <div id="mauli-empty" class="empty">
+      ${icon('layers', 'empty-icon')}
+      <p>No ${table}s yet.</p>
+      <p class="muted">Add your first ${entity} and it appears here instantly.</p>
+    </div>
+  </section>
+  </div>`;
 
   const reportsBody = `
 ${authBlock}
   <section class="card">
-    <h2>Reports</h2>
+    <div class="card-head">
+      <h2>Reports</h2>
+      ${icon('chart', 'card-icon')}
+    </div>
     <p class="sub">Live totals computed from the same data the Dashboard stores — no second copy.</p>
-    <div id="mauli-report" class="report"><p class="muted">Loading…</p></div>
+    <div id="mauli-report" class="report"><p class="muted">Loading&hellip;</p></div>
   </section>`;
 
   const settingsBody = `
 ${authBlock}
   <section class="card">
-    <h2>Your data</h2>
+    <div class="card-head">
+      <h2>Your data</h2>
+      ${icon('download', 'card-icon')}
+    </div>
     <p class="muted">Take everything with you: exports every ${entity} as a JSON file.</p>
-    <button type="button" id="mauli-export">Export data (JSON)</button>
+    <button type="button" id="mauli-export">${icon('download', 'btn-icon')}Export data (JSON)</button>
     <div id="mauli-settings-msg" class="msg" role="status"></div>
   </section>
   <section class="card">
-    <h2>About</h2>
+    <div class="card-head">
+      <h2>About</h2>
+      ${icon('spark', 'card-icon')}
+    </div>
     <p class="muted">${label} — built by MAULI 2.0 on the ${architecture.label}.</p>
+    <ul class="facts">
+      <li>${icon('layers')}<span>Storage: ${architecture.backend ? 'Cloudflare D1 + Worker API' : 'this device'}</span></li>
+      <li>${icon('user')}<span>Accounts: ${architecture.auth ? 'email and password' : 'single workspace'}</span></li>
+      <li>${icon('clock')}<span>Live updates: ${architecture.realtime ? 'WebSocket broadcast' : 'on every load'}</span></li>
+    </ul>
   </section>`;
 
   const body = page === 'reports' ? reportsBody : (page === 'settings' ? settingsBody : dashboardBody);
@@ -559,18 +647,26 @@ ${authBlock}
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="${label} — ${sub}">
 <title>${heading} · ${label}</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<main class="wrap">
+<div class="glow" aria-hidden="true"></div>
+<div class="shell">
 ${navHtml(page, label)}
-  <header>
-    <h1>${heading}</h1>
-    <p class="sub" id="mauli-status">${sub}</p>
+  <main class="main">
+  <header class="hero">
+    <div class="hero-text">
+      <span class="eyebrow">${icon('spark')} ${label}</span>
+      <h1>${heading}</h1>
+      <p class="sub" id="mauli-status">${sub}</p>
+    </div>
+    <div class="hero-art" aria-hidden="true">${icon(page === 'reports' ? 'chart' : (page === 'settings' ? 'gear' : 'layers'), 'hero-icon')}</div>
   </header>
 ${body}
-</main>
+  </main>
+</div>
 <script src="app.js"></script>
 </body>
 </html>
@@ -692,50 +788,119 @@ ${architecture.backend ? '' : `  // The device store. Records written here survi
       visible.forEach(function (item) {
         var li = document.createElement('li');
         li.setAttribute('data-id', String(item.id));
+        li.className = 'row-item';
+        var badge = document.createElement('span');
+        badge.className = 'avatar';
+        badge.setAttribute('aria-hidden', 'true');
+        badge.textContent = initials(item.title);
+        var body = document.createElement('div');
+        body.className = 'row-body';
         var title = document.createElement('span');
         title.className = 'title';
         title.textContent = item.title;
         var meta = document.createElement('span');
         meta.className = 'meta';
-        meta.textContent = (item.amount ? Number(item.amount).toFixed(2) : '0.00') + ' · ' + String(item.created_at || '').slice(0, 10);
+        meta.textContent = String(item.created_at || '').slice(0, 10) + (item.due ? ' · due ' + String(item.due).slice(0, 10) : '');
+        body.appendChild(title);
+        body.appendChild(meta);
+        var amount = document.createElement('span');
+        amount.className = 'amount';
+        amount.textContent = Number(item.amount || 0).toFixed(2);
+        var actions = document.createElement('span');
+        actions.className = 'actions';
         var edit = document.createElement('button');
         edit.type = 'button';
-        edit.className = 'link';
-        edit.textContent = 'Edit';
+        edit.className = 'icon-btn';
+        edit.title = 'Edit';
+        edit.setAttribute('aria-label', 'Edit ' + item.title);
+        edit.textContent = '\u270E';
         edit.addEventListener('click', function () { startEdit(item); });
         var remove = document.createElement('button');
         remove.type = 'button';
-        remove.className = 'link danger';
-        remove.textContent = 'Delete';
+        remove.className = 'icon-btn danger';
+        remove.title = 'Delete';
+        remove.setAttribute('aria-label', 'Delete ' + item.title);
+        remove.textContent = '\u2715';
         remove.addEventListener('click', function () { removeItem(item.id); });
-        li.appendChild(title);
-        li.appendChild(meta);
-        li.appendChild(edit);
-        li.appendChild(remove);
+        actions.appendChild(edit);
+        actions.appendChild(remove);
+        li.appendChild(badge);
+        li.appendChild(body);
+        li.appendChild(amount);
+        li.appendChild(actions);
         list.appendChild(li);
       });
       var empty = el('mauli-empty');
       if (empty) empty.hidden = visible.length > 0;
+      var count = el('mauli-count');
+      if (count) count.textContent = String(visible.length);
     }
     // Every page renders from the same loaded data: the Dashboard's overview cards, the
     // Reports page's totals, and the list itself. A page that has none of those elements
     // simply has nothing to draw here.
     renderStats();
+    renderChart();
     renderReport();
   }
 
-  function statCard(labelText, valueText) {
+  function initials(text) {
+    var parts = String(text || '?').trim().split(/\\s+/).slice(0, 2);
+    return parts.map(function (word) { return word.charAt(0).toUpperCase(); }).join('') || '?';
+  }
+
+  function statCard(labelText, valueText, iconName, tone) {
     var card = document.createElement('div');
-    card.className = 'stat';
-    var value = document.createElement('span');
-    value.className = 'stat-v';
-    value.textContent = valueText;
+    card.className = 'stat' + (tone ? ' tone-' + tone : '');
+    var head = document.createElement('div');
+    head.className = 'stat-top';
     var name = document.createElement('span');
     name.className = 'stat-k';
     name.textContent = labelText;
+    head.appendChild(name);
+    var value = document.createElement('span');
+    value.className = 'stat-v';
+    value.textContent = valueText;
+    card.appendChild(head);
     card.appendChild(value);
-    card.appendChild(name);
+    if (iconName) card.setAttribute('data-icon', iconName);
     return card;
+  }
+
+  // The chart is drawn from the same loaded rows as every other number on the page: one
+  // bar per day for the last 14 days, height proportional to what was added that day. A
+  // decorative graphic that did not read the data would be a picture of a dashboard.
+  function renderChart() {
+    var box = el('mauli-chart');
+    if (!box) return;
+    var days = 14;
+    var today = new Date();
+    var buckets = [];
+    var i;
+    for (i = days - 1; i >= 0; i -= 1) {
+      var day = new Date(today.getTime() - i * 86400000);
+      buckets.push({ key: day.toISOString().slice(0, 10), count: 0, total: 0 });
+    }
+    var index = {};
+    buckets.forEach(function (bucket) { index[bucket.key] = bucket; });
+    ${varName}s.forEach(function (item) {
+      var key = String(item.created_at || '').slice(0, 10);
+      if (index[key]) {
+        index[key].count += 1;
+        index[key].total += Number(item.amount) || 0;
+      }
+    });
+    var peak = buckets.reduce(function (max, bucket) { return Math.max(max, bucket.total); }, 0);
+    // A product whose rows carry no amounts would draw fourteen identical stubs. When
+    // there is nothing to total, the chart falls back to the count it really has.
+    var useCount = peak <= 0;
+    if (useCount) peak = buckets.reduce(function (max, bucket) { return Math.max(max, bucket.count); }, 0);
+    var bars = buckets.map(function (bucket) {
+      var value = useCount ? bucket.count : bucket.total;
+      var height = peak > 0 ? Math.max(4, Math.round((value / peak) * 100)) : 4;
+      var caption = useCount ? (bucket.count + ' added') : bucket.total.toFixed(2);
+      return '<div class="bar" style="height:' + height + '%" title="' + bucket.key + ': ' + caption + '"></div>';
+    }).join('');
+    box.innerHTML = bars + '<div class="chart-base"></div>';
   }
 
   function totals() {
@@ -758,9 +923,10 @@ ${architecture.backend ? '' : `  // The device store. Records written here survi
     if (!box) return;
     var t = totals();
     box.innerHTML = '';
-    box.appendChild(statCard('Total ${table}s', String(t.count)));
-    box.appendChild(statCard('Added today', String(t.addedToday)));
-    box.appendChild(statCard('Total amount', t.amount.toFixed(2)));
+    box.appendChild(statCard('Total ${table}s', String(t.count), 'layers', 'a'));
+    box.appendChild(statCard('Added today', String(t.addedToday), 'spark', 'b'));
+    box.appendChild(statCard('Total amount', t.amount.toFixed(2), 'wallet', 'c'));
+    box.appendChild(statCard('Last activity', t.latest ? t.latest.slice(0, 10) : '—', 'clock', 'd'));
   }
 
   function renderReport() {
@@ -770,9 +936,9 @@ ${architecture.backend ? '' : `  // The device store. Records written here survi
     box.innerHTML = '';
     var summary = document.createElement('div');
     summary.className = 'stats';
-    summary.appendChild(statCard('Total ${table}s', String(t.count)));
-    summary.appendChild(statCard('Total amount', t.amount.toFixed(2)));
-    summary.appendChild(statCard('Last activity', t.latest ? t.latest.slice(0, 16).replace('T', ' ') : '—'));
+    summary.appendChild(statCard('Total ${table}s', String(t.count), 'layers', 'a'));
+    summary.appendChild(statCard('Total amount', t.amount.toFixed(2), 'wallet', 'c'));
+    summary.appendChild(statCard('Last activity', t.latest ? t.latest.slice(0, 16).replace('T', ' ') : '—', 'clock', 'd'));
     box.appendChild(summary);
     if (!t.count) {
       var none = document.createElement('p');
@@ -1023,117 +1189,397 @@ ${architecture.realtime ? `    connectLive();` : ''}  });
 `;
 }
 
-function frontendCss({ label }) {
+function frontendCss({ label, hue = 250 }) {
   return `/* Generated by MAULI 2.0 — styles for ${label}. */
 :root {
-  --bg: #0d1117;
-  --panel: #161b22;
-  --line: #26303d;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --accent: #2f81f7;
-  --danger: #f85149;
+  --bg: #070b16;
+  --bg-2: #0b1222;
+  --panel: rgba(19, 26, 45, 0.82);
+  --panel-solid: #131a2d;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --text: #eef2ff;
+  --muted: #97a3c0;
+  --accent: hsl(${hue} 92% 66%);
+  --accent-2: hsl(${(hue + 58) % 360} 90% 62%);
+  --accent-soft: hsl(${hue} 92% 66% / 0.14);
+  --danger: #ff6b81;
+  --ok: #4ade80;
+  --radius: 18px;
+  --radius-sm: 12px;
+  --shadow: 0 18px 40px rgba(2, 6, 23, 0.55);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 * { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.5;
   min-height: 100vh;
-}
-.wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 64px; }
-.nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding: 12px 16px;
-  margin-bottom: 24px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-.nav .brand { font-weight: 700; font-size: 1rem; color: var(--text); text-decoration: none; letter-spacing: -0.01em; }
-.nav .links { display: flex; gap: 6px; flex-wrap: wrap; }
-.nav-link {
-  color: var(--muted);
-  text-decoration: none;
-  padding: 6px 13px;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-.nav-link:hover { color: var(--text); background: #1c2430; }
-.nav-link.active { background: var(--accent); color: #fff; }
-header h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.01em; }
-.sub { color: var(--muted); margin: 4px 0 20px; font-size: 0.9rem; }
-.sub.error, .msg.error { color: var(--danger); }
-.card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-.card h2 { margin: 0 0 14px; font-size: 1.05rem; }
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.stat { background: #0d1117; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
-.stat .stat-v { display: block; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
-.stat .stat-k { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
-.report .stats { margin-bottom: 16px; }
-.tbl { width: 100%; border-collapse: collapse; }
-.tbl th, .tbl td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); font-size: 0.88rem; }
-.tbl th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.tbl tr:last-child td { border-bottom: none; }
-label { display: block; font-size: 0.82rem; color: var(--muted); margin: 12px 0 4px; }
-input, textarea {
-  width: 100%;
-  padding: 9px 11px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: #0d1117;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: radial-gradient(1200px 700px at 12% -10%, hsl(${hue} 90% 40% / 0.28), transparent 60%),
+              radial-gradient(900px 600px at 105% 0%, hsl(${(hue + 70) % 360} 88% 44% / 0.22), transparent 55%),
+              var(--bg);
+  background-attachment: fixed;
   color: var(--text);
-  font-size: 0.95rem;
-  font-family: inherit;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
-input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-button {
-  margin-top: 14px;
-  padding: 9px 18px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 600;
-  font-size: 0.92rem;
-  cursor: pointer;
+.glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(600px 300px at 50% 0%, hsl(${hue} 95% 60% / 0.12), transparent 70%);
+  z-index: 0;
 }
-button:hover { filter: brightness(1.1); }
-button.secondary { background: transparent; border-color: var(--line); color: var(--text); }
-button.link { background: none; border: none; color: var(--accent); margin: 0 0 0 8px; padding: 4px; }
-button.link.danger { color: var(--danger); }
-.row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
-.row input { flex: 1; }
-ul { list-style: none; margin: 0; padding: 0; }
-li {
+.shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  gap: 28px;
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 28px 24px 72px;
+}
+
+/* ---- sidebar ---- */
+.sidebar {
+  position: sticky;
+  top: 28px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 22px 16px;
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+.brand .mark { width: 40px; height: 40px; border-radius: 12px; flex: none; box-shadow: 0 8px 20px hsl(${hue} 90% 50% / 0.35); }
+.brand-text { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.brand-text strong { font-size: 1rem; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.brand-text small { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.09em; }
+.nav { display: flex; flex-direction: column; gap: 4px; }
+.nav-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease), transform 0.18s var(--ease);
 }
-li:last-child { border-bottom: none; }
-li .title { flex: 1; font-weight: 500; }
-li .meta { color: var(--muted); font-size: 0.82rem; }
+.nav-link .icon { width: 18px; height: 18px; flex: none; }
+.nav-link:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); transform: translateX(2px); }
+.nav-link.active {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  color: #fff;
+  box-shadow: 0 10px 24px hsl(${hue} 90% 50% / 0.35);
+}
+.sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 var(--ok); animation: pulse 2.2s infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
+  70% { box-shadow: 0 0 0 9px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+}
+
+/* ---- hero ---- */
+.main { min-width: 0; }
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 26px 28px;
+  margin-bottom: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, hsl(${hue} 90% 50% / 0.16), transparent 55%),
+    var(--panel);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.hero-text { min-width: 0; }
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid hsl(${hue} 90% 66% / 0.35);
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.eyebrow .icon { width: 14px; height: 14px; }
+.hero h1 {
+  margin: 12px 0 6px;
+  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  background: linear-gradient(100deg, #ffffff, hsl(${hue} 90% 82%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero-art {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 108px;
+  height: 108px;
+  border-radius: 26px;
+  background: linear-gradient(135deg, hsl(${hue} 90% 55% / 0.35), hsl(${(hue + 60) % 360} 90% 55% / 0.15));
+  border: 1px solid var(--line-strong);
+}
+.hero-icon { width: 52px; height: 52px; color: var(--accent); stroke-width: 1.3; }
+.sub { color: var(--muted); margin: 0; font-size: 0.94rem; }
+.sub.error, .msg.error { color: var(--danger); }
+
+/* ---- cards ---- */
+.cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 22px; align-items: start; }
+.card {
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  margin-bottom: 22px;
+  box-shadow: var(--shadow);
+  transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.card:hover { border-color: var(--line-strong); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.card h2 { margin: 0; font-size: 1.05rem; letter-spacing: -0.01em; }
+.card-icon { width: 20px; height: 20px; color: var(--accent); }
+.tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--ok);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.count {
+  min-width: 30px;
+  text-align: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* ---- stats + chart ---- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.stat {
+  position: relative;
+  padding: 16px 16px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  overflow: hidden;
+}
+.stat::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent);
+}
+.stat.tone-b::after { background: var(--accent-2); }
+.stat.tone-c::after { background: #fbbf24; }
+.stat.tone-d::after { background: var(--ok); }
+.stat .stat-k { display: block; color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.07em; }
+.stat .stat-v { display: block; margin-top: 6px; font-size: 1.55rem; font-weight: 800; letter-spacing: -0.03em; }
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 132px;
+  margin-top: 20px;
+  padding: 12px 12px 0;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent);
+  border: 1px solid var(--line);
+  position: relative;
+}
+.bar {
+  flex: 1;
+  min-width: 4px;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  box-shadow: 0 6px 14px hsl(${hue} 90% 50% / 0.3);
+  transition: height 0.5s var(--ease), filter 0.2s var(--ease);
+}
+.bar:hover { filter: brightness(1.25); }
+.chart-base { position: absolute; left: 12px; right: 12px; bottom: 10px; height: 1px; background: var(--line-strong); }
+
+/* ---- forms ---- */
+label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--muted); margin: 14px 0 6px; letter-spacing: 0.02em; }
+input, textarea {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgba(6, 11, 24, 0.72);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+input::placeholder, textarea::placeholder { color: #64708f; }
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px hsl(${hue} 92% 66% / 0.22);
+}
+textarea { resize: vertical; }
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 11px 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.92rem;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 10px 22px hsl(${hue} 90% 50% / 0.28);
+  transition: transform 0.16s var(--ease), box-shadow 0.16s var(--ease), filter 0.16s var(--ease);
+}
+button:hover { transform: translateY(-1px); filter: brightness(1.06); }
+button:active { transform: translateY(0); }
+.btn-icon { width: 16px; height: 16px; }
+button.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line-strong);
+  color: var(--text);
+  box-shadow: none;
+}
+button.secondary:hover { background: rgba(255, 255, 255, 0.09); }
+button.full { width: 100%; margin-top: 14px; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn-row button { flex: 1 1 140px; }
+
+/* ---- list ---- */
+.search-row { position: relative; margin-bottom: 14px; }
+.search-row input { padding-left: 38px; }
+.search-row button { margin-top: 0; }
+.search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); display: grid; place-items: center; }
+.search-icon .icon { width: 17px; height: 17px; }
+ul { list-style: none; margin: 0; padding: 0; }
+.row-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease);
+  animation: rise 0.32s var(--ease) both;
+}
+.row-item:hover { transform: translateX(3px); border-color: var(--line-strong); background: rgba(255, 255, 255, 0.06); }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+.row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.row-body .title { font-weight: 600; overflow-wrap: anywhere; }
+.row-body .meta { color: var(--muted); font-size: 0.79rem; }
+.amount { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent); font-size: 0.9rem; }
+.actions { display: flex; gap: 6px; }
+button.icon-btn {
+  margin: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+  box-shadow: none;
+}
+button.icon-btn:hover { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+button.icon-btn.danger:hover { color: var(--danger); border-color: rgba(255, 107, 129, 0.5); }
+.empty { text-align: center; padding: 34px 12px; color: var(--muted); }
+.empty p { margin: 6px 0; }
+.empty-icon { width: 46px; height: 46px; color: var(--accent); opacity: 0.6; }
+
+/* ---- reports ---- */
+.report .stats { margin-bottom: 18px; }
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th, .tbl td { text-align: left; padding: 11px 10px; border-bottom: 1px solid var(--line); font-size: 0.88rem; }
+.tbl th { color: var(--muted); font-weight: 700; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.tbl tbody tr { transition: background 0.16s var(--ease); }
+.tbl tbody tr:hover { background: rgba(255, 255, 255, 0.04); }
+.tbl tr:last-child td { border-bottom: none; }
+.facts { margin-top: 14px; display: grid; gap: 10px; }
+.facts li { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.88rem; }
+.facts .icon { width: 17px; height: 17px; color: var(--accent); flex: none; }
+
 .muted { color: var(--muted); }
-.msg { min-height: 1.2em; font-size: 0.86rem; margin-top: 8px; }
-.who { color: var(--muted); font-size: 0.86rem; }
+.msg { min-height: 1.2em; font-size: 0.86rem; margin-top: 10px; }
+.who { color: var(--muted); font-size: 0.86rem; margin: 10px 0 0; }
+.icon { width: 20px; height: 20px; }
+
+@media (max-width: 980px) {
+  .shell { grid-template-columns: 1fr; gap: 18px; padding: 18px 16px 56px; }
+  .sidebar { position: static; flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 14px; }
+  .nav { flex-direction: row; flex-wrap: wrap; }
+  .sidebar-foot { display: none; }
+  .cols { grid-template-columns: 1fr; }
+  .hero { padding: 20px; }
+  .hero-art { width: 76px; height: 76px; border-radius: 20px; }
+  .hero-icon { width: 36px; height: 36px; }
+}
 @media (max-width: 520px) {
-  .wrap { padding: 20px 14px 48px; }
-  li { flex-wrap: wrap; }
+  .row-item { flex-wrap: wrap; }
+  .amount { margin-left: 48px; }
+  .card { padding: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
 }
 `;
 }
@@ -1200,9 +1646,18 @@ may be a SQL keyword.
 
 Every page is a real file and every page links to the others through the top navigation:
 
-- \`www/index.html\` — Dashboard: account, overview cards, add an entry, and the full ${table} list
+- \`www/index.html\` — Dashboard: account, overview cards, a 14-day activity chart, add an entry, and the full ${table} list
 - \`www/reports.html\` — Reports: totals, activity and the latest ${table}s
-- \`www/settings.html\` — Settings: account controls and a JSON export of your data
+- \`www/settings.html\` — Settings: account controls, a JSON export of your data, and what the product is built on
+
+## The look
+
+The UI is a designed product surface, not a wireframe: a sticky sidebar with icon
+navigation, a gradient hero, colour-coded stat cards, an empty state with artwork, and
+row hover states. Every icon is inline SVG and the chart is drawn from the stored rows,
+so the pages render identically offline — there is no image, font or chart library to
+fetch and nothing that can 404. The accent hue is derived from the product name, so two
+products do not ship the same purple.
 
 ## Requirements this build implements
 
@@ -1241,7 +1696,7 @@ export function generateFullStackApp(spec, architecture, { objective = '' } = {}
     { path: 'www/reports.html', content: frontendHtml({ spec, architecture, table: frontTable, entity: frontEntity, label: frontLabel, page: 'reports' }) },
     { path: 'www/settings.html', content: frontendHtml({ spec, architecture, table: frontTable, entity: frontEntity, label: frontLabel, page: 'settings' }) },
     { path: 'www/app.js', content: frontendJs({ spec, architecture, table: frontTable, entity: frontEntity, label: frontLabel }) },
-    { path: 'www/styles.css', content: frontendCss({ label: frontLabel }) },
+    { path: 'www/styles.css', content: frontendCss({ label: frontLabel, hue: accentFor(frontLabel) }) },
     ...(architecture.backend
       ? [
         { path: 'worker/index.js', content: workerSource({ spec, architecture, table, entity, label }) },
