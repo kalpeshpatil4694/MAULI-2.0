@@ -14,7 +14,18 @@ test('the tool buttons the founder actually taps are routed to the live layer', 
   // override this layer installs on window was bypassed for the Projects table and
   // the Builds page — the per-file download loop and window.open() kept running.
   assert.match(live, /document\.addEventListener\('click',e=>\{/);
-  assert.match(live, /closest\('\.dl-btn,\.bld-btn,\.pv-btn'\)/);
+  // Each founder-tapped button class must be in the delegated selector. This was an exact
+  // string match, so adding .proj-detail (the Projects table's Details button, which had no
+  // handler at all and did nothing when pressed) failed the test even though every original
+  // button was still routed. Assert the classes, not the exact selector text.
+  const selector = live.match(/closest\('([^']+)'\)/);
+  assert.ok(selector, 'the delegated handler must select the button classes');
+  for (const buttonClass of ['.dl-btn', '.bld-btn', '.pv-btn']) {
+    assert.ok(
+      selector[1].split(',').includes(buttonClass),
+      `${buttonClass} must stay routed to the live layer`
+    );
+  }
   assert.match(live, /e\.preventDefault\(\);e\.stopPropagation\(\);/);
   // Capture phase, so it runs before the dashboard's own bubble-phase handler.
   assert.match(live, /\},true\);/);

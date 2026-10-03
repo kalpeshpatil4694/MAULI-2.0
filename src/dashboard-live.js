@@ -184,6 +184,10 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       overlay.appendChild(modal);document.body.appendChild(overlay);
     }catch(e){alert('Error loading project: '+e.message)}
   }
+  // Published unconditionally, not only from poll(): the Projects table's Details button is
+  // rendered by the base dashboard and can be clicked before (or without) any live command
+  // card, and an undefined __showProjDetail left that click silently doing nothing.
+  window.__showProjDetail=showProjectDetail;
   // Add view details button to live progress
   function addDetailButton(pid){
     const e=get('cmdRes');if(!e)return;
@@ -422,11 +426,15 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   // window.open(s.downloadUrl), which cannot send the founder key and answered 401.
   // A capture-phase listener runs first and stops the event from reaching the old one.
   document.addEventListener('click',e=>{
-    const t=(e.target&&e.target.closest)?e.target.closest('.dl-btn,.bld-btn,.pv-btn'):null;
+    const t=(e.target&&e.target.closest)?e.target.closest('.dl-btn,.bld-btn,.pv-btn,.proj-detail'):null;
     if(!t)return;
     e.preventDefault();e.stopPropagation();
     if(t.classList.contains('dl-btn')){window.downloadZip(t.dataset.pid);return;}
     if(t.classList.contains('bld-btn')){window.startBuild(t.dataset.pid,t.dataset.plat,t);return;}
+    // The Projects table's "📄 Details" button carries .proj-detail and was in neither this
+    // selector nor any bubble handler in dashboard.js, so pressing it did nothing at all —
+    // the detail view was reachable only from the live command card.
+    if(t.classList.contains('proj-detail')){showProjectDetail(t.dataset.pid);return;}
     window.__mauliOpenPreview(t.dataset.pid);
   },true);
   // /api/preview-app is founder-protected too, so the html has to be fetched with the
