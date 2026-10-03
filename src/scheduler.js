@@ -51,12 +51,39 @@ export function stale(run,at=Date.now()){const stamp=Date.parse(run?.heartbeatAt
   if(runOverLifetime(run,at))return true;return age>LEASE_MS||age<-LEASE_MS;}
 function releaseAgent(task){if(!task?.agentId&&!task?.assignedAgentId)return;const agent=store.get('agents',task.agentId??task.assignedAgentId);if(agent)updateAgent(agent.id,{state:'available',currentTaskId:null,heartbeatAt:now()});}
 function chooseAgent(task){const tools=task.requiredTools??task.toolNames??[];return selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true})[0]??selectAgents(task.requiredCapabilities??[],null,{requireAllTools:false})[0]??selectAgents(task.requiredCapabilities??[],null,{requiredTools:tools,requireAllTools:true,allowPartialCapabilities:true})[0]??null;}
+// An agent is claimable when it is free — OR when it is busy with THIS task. assignTask()
+// marks the agent 'assigned' to the task it assigns, and gates/generation tasks are
+// created pre-assigned, so by the time the scheduler reaches a task the only agent able to
+// run it is recorded as busy with that very task. Treating that as a conflict made
+// claimNextTask return null forever: the blocked-retry loop re-assigned the task every tick
+// (re-creating the same busy agent) and the pipeline never left its first gate — a project
+// read "active" with two tasks stuck in [assigned] and every dependent stuck in [blocked].
+function claimableBy(agent,task){
+  if(!agent)return false;
+  if(['available','registered'].includes(agent.state))return true;
+  return agent.currentTaskId===task.id;
+}
+// An agent selected while still pointing at a different task would be double-booked. That
+// happens whenever the previous owner's run died without releasing it, so release the stale
+// claim before re-using the agent instead of leaving two tasks pointing at one agent.
+// Returns the refreshed row: the caller must re-check the agent it was handed, not the
+// pre-release snapshot.
+function releaseStaleOwnership(agent,task){
+  if(!agent?.currentTaskId||agent.currentTaskId===task.id)return agent;
+  const owner=store.get('tasks',agent.currentTaskId);
+  if(owner&&(!STUCK_STATES.has(owner.state)||activeRun(owner.id)))return agent;
+  return updateAgent(agent.id,{state:'available',currentTaskId:null,heartbeatAt:now()})??agent;
+}
 export function claimNextTask(taskId){const task=store.get('tasks',taskId);if(!task||!RUNNABLE.has(task.state)||!dependenciesReady(task))return null;const project=task.projectId?store.get('projects',task.projectId):null;if(project?.state==='awaiting_approval')return null;const existing=activeRun(task.id);if(existing&&!stale(existing))return null;// The pre-assigned agent may be a stale duplicate that is busy/offline/cooldown
   // (agent table had ~60 copies per name from old cold-start registration). Fall back
   // to the best available agent instead of leaving the task stuck in 'assigned' forever.
   let agent=task.assignedAgentId?store.get('agents',task.assignedAgentId):null;
-  if(!agent||!['available','registered'].includes(agent.state))agent=chooseAgent(task);
-  if(!agent||!['available','registered'].includes(agent.state))return null;
+  if(!claimableBy(agent,task))agent=chooseAgent(task);
+  // Free a recoverable agent from a previous owner that never released it BEFORE the
+  // availability guard runs — selection deliberately returns agents that are busy but
+  // recoverable, so releasing afterwards could never make one claimable.
+  if(agent)agent=releaseStaleOwnership(agent,task);
+  if(!claimableBy(agent,task))return null;
   if(task.assignedAgentId&&task.assignedAgentId!==agent.id){const old=store.get('agents',task.assignedAgentId);if(old&&old.currentTaskId===task.id)updateAgent(old.id,{state:'available',currentTaskId:null,heartbeatAt:now()});}
   const claimedAt=now();const claimed=store.put('tasks',{...task,state:'assigned',agentId:agent.id,assignedAgentId:agent.id,claimedAt,leaseUntil:new Date(Date.now()+LEASE_MS).toISOString(),updatedAt:claimedAt,id:task.id});updateAgent(agent.id,{state:'assigned',currentTaskId:task.id,heartbeatAt:claimedAt});store.addEvent('scheduler.task_claimed',{projectId:task.projectId,taskId:task.id,agentId:agent.id,at:claimedAt});return claimed;}
 async function requeueAfterInfraFailure(task,reason,stamp,extra={}){
@@ -154,8 +181,15 @@ async function finalizeCommand(projectId,env={},indexedTasks=null){const project
     catch(error){
       const reason=String(error?.message??error);
       store.addEvent('delivery.blocked',{projectId,reason,at:now()});
-      store.put('projects',{...store.get('projects',projectId),blockedReason:`Delivery blocked: ${reason}`,id:projectId});
-      return null;
+      // Every task is terminal here, so there is nothing left for a later tick to advance:
+      // leaving the project 'active' made it read as "still building" on the dashboard
+      // forever, with a frozen percentage and no way to tell the run was over. Record the
+      // refusal and take the project to a terminal state — honest, not a silent success.
+      const blocked=await store.putDurable('projects',{...store.get('projects',projectId),state:'failed',failedAt:now(),blockedReason:`Delivery blocked: ${reason}`,id:projectId});
+      const blockedResult={status:'failed',runId,command:project.founderCommand,project:blocked,tasks,error:`Delivery blocked: ${reason}`,blockedReason:`Delivery blocked: ${reason}`};
+      await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result:blockedResult},env).catch(()=>null);
+      store.addEvent('command.failed',{runId,projectId,status:'failed',reason:`Delivery blocked: ${reason}`,at:now()});
+      return blockedResult;
     }
   }
   const finalDeliveryId=finalDelivery?.id??project.finalDeliveryId??null;finalProject=await store.putDurable('projects',{...project,state:'completed',finalDeliveryId,completedAt:project.completedAt??now(),id:project.id}),result={status:'completed',runId,command:project.founderCommand,project:finalProject,tasks,finalDelivery};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.completed',{runId,projectId,status:'completed',at:now()});return result;}if(hasFailed&&!hasQueued&&!hasRunning){const failedProject=await store.putDurable('projects',{...project,state:'failed',failedAt:project.failedAt??now(),id:project.id}),result={status:'failed',runId,command:project.founderCommand,project:failedProject,tasks,error:'One or more tasks failed after recovery/retry limits.'};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.failed',{runId,projectId,status:'failed',at:now()});return result;}return null;}

@@ -84,7 +84,17 @@ export async function resumeApprovedCommand(approvalId,env={}){const approval=st
 function ensureExecutablePlan(command,plan,platform,structured=null){
   const text=String(command??'').trim();
   const software=/\b(website|web app|application|platform|software|app|mobile|android|ios|game|e-commerce|ecommerce|online store|shop|store|messenger|chat|calculator|todo|dashboard|bluetooth|barcode|build|develop|implement|create)\b/i.test(text);
-  if(!software)return plan;
+  // The keyword list alone decided this, and it is a closed vocabulary the founder never
+  // has to use. "Design a customer support ticket management system with secure
+  // authentication, real-time updates, and data persistence in D1" contains none of those
+  // words, so the command was treated as a note to plan rather than a product to build: the
+  // project got a single "define the plan" task, no frontend/backend/database/security work
+  // was ever scheduled, and every delivery gate failed with "no generated artifact". The
+  // extracted specification already carries the real evidence — a command that demands
+  // persisted records, a server or live updates is software whether or not it says "app".
+  const architecture=structured?.architecture??null;
+  const specDemandsSoftware=(Array.isArray(structured?.spec?.dataRequirements)&&structured.spec.dataRequirements.length>0)||architecture?.backend===true||architecture?.realtime===true;
+  if(!software&&!specDemandsSoftware)return plan;
   const capabilities=new Set(plan?.capabilities??[]);
   for(const cap of ['research','product-planning','frontend','backend','database','security','testing'])capabilities.add(cap);
   // The extracted specification decides which capabilities the product actually needs. A
