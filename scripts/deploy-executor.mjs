@@ -319,6 +319,8 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
         const boundId = /"database_id"\s*:\s*"([^"]+)"/i.exec(await readFile(join(root, 'wrangler.jsonc'), 'utf8').catch(() => ''))?.[1] ?? dbName;
         const probe = await run(wranglerCommand(), ['d1', 'execute', boundId, '--remote', '--json', '--command', "SELECT sql FROM sqlite_master WHERE name='booking'"], { cwd: root });
         console.error(`[deploy-executor] ${safe}: booking schema exit=${probe.code} ${JSON.stringify(String(probe.stdout || probe.stderr || '').replace(/\s+/g, ' ').slice(0, 900))}`);
+        const legacy = await run(wranglerCommand(), ['d1', 'execute', `generated-${safe}`, '--remote', '--json', '--command', "SELECT sql FROM sqlite_master WHERE name='booking'"], { cwd: root });
+        console.error(`[deploy-executor] ${safe}: legacy exit=${legacy.code} ${JSON.stringify(String(legacy.stdout || legacy.stderr || '').replace(/\s+/g, ' ').slice(0, 600))}`);
       }
       if (migrated.code !== 0) {
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(migrated.stderr, migrated.stdout), errorMessage: `the generated project's D1 migrations could not be applied: ${redact(migrated.stderr || migrated.stdout)}` } };
@@ -338,6 +340,10 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     // itself, so a deployment that "succeeded" while quietly dropping a Durable Object
     // binding produced no evidence anywhere and the only symptom was a 501 at runtime.
     // Redacted before it is ever printed; secrets are never written to a CI log.
+    if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
+      const boundLine = /env\.DB \(([^)]+)\)/.exec(`${deployed.stdout}\n${deployed.stderr}`)?.[1] ?? null;
+      console.error(`[deploy-executor] ${safe}: wrangler bound D1 name=${boundLine}`);
+    }
     const deployLog = redact([deployed.stdout, deployed.stderr].filter(Boolean).join('\n'));
     // The binding table is the whole point of this log: it is the only place that says
     // whether Cloudflare accepted the Durable Object binding.
