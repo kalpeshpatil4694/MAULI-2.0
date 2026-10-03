@@ -297,7 +297,11 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
       if (!db.ok) {
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(db.message, ''), errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}` } };
       }
-      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: database ${dbName} ${db.reused ? 'reused' : 'created'}`);
+      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: database ${dbName} ${db.reused ? 'reused' : 'created'} id=${db.databaseId}`);
+    }
+    if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
+      const bound = /"database_id"\s*:\s*"([^"]+)"/i.exec(await readFile(join(root, 'wrangler.jsonc'), 'utf8').catch(() => ''))?.[1] ?? null;
+      console.error(`[deploy-executor] ${safe}: config database_id=${bound}`);
     }
     // A newly provisioned remote D1 is empty. Generated Workers also create their schema
     // defensively on first request, but production acceptance must not depend on request-time
@@ -312,7 +316,8 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
       const migrated = await run(wranglerCommand(), ['d1', 'migrations', 'apply', dbName, '--remote'], { cwd: root, input: 'y\n' });
       if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: migrations exit=${migrated.code} ${JSON.stringify(String(migrated.stdout || migrated.stderr || '').replace(/\s+/g, ' ').slice(-240))}`);
       if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
-        const probe = await run(wranglerCommand(), ['d1', 'execute', dbName, '--remote', '--json', '--command', "SELECT sql FROM sqlite_master WHERE name='booking'"], { cwd: root });
+        const boundId = /"database_id"\s*:\s*"([^"]+)"/i.exec(await readFile(join(root, 'wrangler.jsonc'), 'utf8').catch(() => ''))?.[1] ?? dbName;
+        const probe = await run(wranglerCommand(), ['d1', 'execute', boundId, '--remote', '--json', '--command', "SELECT sql FROM sqlite_master WHERE name='booking'"], { cwd: root });
         console.error(`[deploy-executor] ${safe}: booking schema exit=${probe.code} ${JSON.stringify(String(probe.stdout || probe.stderr || '').replace(/\s+/g, ' ').slice(0, 900))}`);
       }
       if (migrated.code !== 0) {
