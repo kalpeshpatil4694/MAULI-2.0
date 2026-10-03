@@ -297,6 +297,7 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
       if (!db.ok) {
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(db.message, ''), errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}` } };
       }
+      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: database ${dbName} ${db.reused ? 'reused' : 'created'}`);
     }
     // A newly provisioned remote D1 is empty. Generated Workers also create their schema
     // defensively on first request, but production acceptance must not depend on request-time
@@ -304,7 +305,12 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     // deployment. This prevents a valid generated API from reaching a real D1 with no schema.
     const migrationDir = join(root, 'migrations');
     if (existsSync(migrationDir) && dbName) {
+      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
+        const sql = await readFile(join(migrationDir, '0001_init.sql'), 'utf8').catch(() => '');
+        console.error(`[deploy-executor] ${safe}: applying migrations to ${dbName} (due column present: ${/due TEXT/.test(sql)})`);
+      }
       const migrated = await run(wranglerCommand(), ['d1', 'migrations', 'apply', dbName, '--remote'], { cwd: root, input: 'y\n' });
+      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: migrations exit=${migrated.code} ${JSON.stringify(String(migrated.stdout || migrated.stderr || '').replace(/\s+/g, ' ').slice(-240))}`);
       if (migrated.code !== 0) {
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(migrated.stderr, migrated.stdout), errorMessage: `the generated project's D1 migrations could not be applied: ${redact(migrated.stderr || migrated.stdout)}` } };
       }
