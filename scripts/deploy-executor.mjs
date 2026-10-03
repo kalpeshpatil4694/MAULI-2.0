@@ -175,10 +175,30 @@ export async function waitForDeployment(url, { requiresRealtime = false, attempt
       };
     } finally { clearTimeout(timer); }
   };
+  // The live route is checked INSIDE the same wait, not once after it. A Worker that has just
+  // been deployed can still be serving the PREVIOUS version's /api/health for a moment, so a
+  // one-shot /api/live probe read 501 from the old Worker and recorded a perfectly healthy
+  // deployment as a defect. A 501 here is only conclusive once the whole window has elapsed.
+  const probeLive = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const live = await fetch(`${String(url).replace(/\/+$/, '')}/api/live`, { signal: controller.signal });
+      return live.status;
+    } finally { clearTimeout(timer); }
+  };
   let last = null;
+  let liveStatus = null;
   for (let i = 0; i < attempts; i += 1) {
     last = await probe().catch((error) => ({ reached: false, status: 0, body: redact(error?.message ?? error) }));
-    if (last.reached) break;
+    if (last.reached) {
+      if (!requiresRealtime) break;
+      // Anything other than 501 proves the LIVE binding is present: 426 "expected a WebSocket
+      // upgrade" and 101 both come FROM the Durable Object. A `null` (socket error / timeout)
+      // is not treated as proof either way, so the wait keeps polling.
+      liveStatus = await probeLive().catch(() => null);
+      if (liveStatus !== null && liveStatus !== 501) break;
+    }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   if (!last?.reached) {
@@ -188,20 +208,13 @@ export async function waitForDeployment(url, { requiresRealtime = false, attempt
     };
   }
   if (!requiresRealtime) return { ready: true, status: last.status, service: last.service };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
-  try {
-    const live = await fetch(`${String(url).replace(/\/+$/, '')}/api/live`, { signal: controller.signal });
-    if (live.status === 501) {
-      return {
-        ready: false,
-        reason: 'the deployed Worker has no LIVE Durable Object binding, so a product whose specification requires live updates cannot work. This is a deployment defect (errorCategory "deployment"), not a product failure.'
-      };
-    }
-    return { ready: true, status: last.status, service: last.service, liveStatus: live.status };
-  } catch (error) {
-    return { ready: true, status: last.status, service: last.service, liveStatus: 0, liveWarning: redact(error?.message ?? error) };
-  } finally { clearTimeout(timer); }
+  if (liveStatus === 501) {
+    return {
+      ready: false,
+      reason: 'the deployed Worker has no LIVE Durable Object binding, so a product whose specification requires live updates cannot work. This is a deployment defect (errorCategory "deployment"), not a product failure.'
+    };
+  }
+  return { ready: true, status: last.status, service: last.service, liveStatus: liveStatus ?? 0 };
 }
 
 /**

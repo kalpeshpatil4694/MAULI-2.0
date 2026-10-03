@@ -586,6 +586,38 @@ client leaving the broadcast set, and a reconnected client receiving the next wr
 negative control — removing the disconnect notification — reproduces the leak, so the check
 cannot quietly stop testing anything.
 
+**The migration and the Worker must describe the same table, or the deployed product is broken
+in a way no in-process run can see.** Two real defects survived every local check because both
+lived only on the **deployed** boundary:
+
+1. **The migration omitted a column the Worker wrote.** A product that schedules (a booking
+   app) stores WHEN something is due: the Worker's `ensureSchema` creates a `due` column and
+   its INSERT names it. The generated migration `0001_init.sql` was built from
+   `schemaSql({ table, auth, realtime })` — without the `due` flag — so it created the table
+   WITHOUT the column. The deploy executor applies the migration to the real D1 *before*
+   deploying, so the table already existed when the Worker first ran; `CREATE TABLE IF NOT
+   EXISTS` is a no-op on it, and `POST /api/bookings` answered `500 D1_ERROR: no such column:
+   due`. Locally this never reproduced: the harness runs the Worker's own DDL and never applies
+   the migration. The migration now takes the same `due` flag as the Worker.
+2. **A column added later needs reconciling, not assuming.** Even with the migration fixed, an
+   already-provisioned D1 keeps its old shape (`CREATE TABLE IF NOT EXISTS` never alters an
+   existing table, and a migration is only applied once). `ensureSchema` now introspects with
+   `PRAGMA table_info` and issues `ALTER TABLE … ADD COLUMN` for a missing column, so a
+   redeploy over a stale database heals instead of staying broken forever. The in-memory shim
+   answers `PRAGMA table_info` and `ALTER TABLE … ADD COLUMN` so the local run exercises the
+   same statement.
+
+**A readiness probe that fires once is not a readiness probe.** `waitForDeployment` checked
+`/api/live` exactly once after `/api/health` answered. A freshly deployed Worker can still serve
+the PREVIOUS version's `/api/health` for a moment, so the single `/api/live` probe read `501`
+from the old Worker — the coffee-shop Worker had already deployed with `env.LIVE
+(LiveConnections)` in wrangler's own binding table, and the acceptance still recorded "no LIVE
+Durable Object binding". The probe now runs **inside** the poll, alongside the health probe, and
+a `501` is only conclusive once the whole window has elapsed; anything else (`426`, `101`, any
+non-`501`) proves the binding arrives. `tests/acceptance-identity.test.js` pins the retry with a
+live route that answers `501` twice before `426`, the migration/Worker column agreement, and a
+runtime run against a database created without `due`.
+
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
 Everything above proves the code is a working app. None of it proved the app **ran**. The

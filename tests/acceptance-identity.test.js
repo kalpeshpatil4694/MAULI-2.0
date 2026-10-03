@@ -102,6 +102,30 @@ test('a Worker that answers 501 on /api/live is a DEPLOYMENT defect, not a broke
   } finally { server.close(); }
 });
 
+test('the live-route wait keeps polling while the new version propagates', async () => {
+  // On the run that failed, the coffee-shop Worker HAD deployed with `env.LIVE (LiveConnections)`
+  // in wrangler's binding table, and the acceptance still recorded "no LIVE Durable Object
+  // binding". A freshly deployed Worker can keep serving the PREVIOUS version's /api/health for
+  // a moment, so the single /api/live probe read 501 from the OLD Worker. A 501 is only
+  // conclusive once the whole window has elapsed, so the probe belongs INSIDE the poll.
+  let calls = 0;
+  const server = await startStubWorker({
+    '/api/health': [200, '{"ok":true,"service":"Order"}'],
+    '/api/live': () => {
+      calls += 1;
+      return calls < 3
+        ? [501, '{"ok":false,"error":{"message":"Live updates are not configured for this deployment"}}']
+        : [426, 'Expected a WebSocket upgrade'];
+    }
+  });
+  try {
+    const ready = await waitForDeployment(server.url, { requiresRealtime: true, attempts: 8, intervalMs: 5 });
+    assert.equal(ready.ready, true, 'a transient 501 from the previous version must not fail a working deployment');
+    assert.equal(ready.liveStatus, 426);
+    assert.ok(calls >= 3, 'the wait must have retried the live route');
+  } finally { server.close(); }
+});
+
 test('a realtime Worker whose live route answers is ready', async () => {
   // The wait probes /api/live with a plain fetch, which carries no Upgrade header, so a
   // working Durable Object answers 426 "Expected a WebSocket upgrade" — not 101. Only the
@@ -124,6 +148,54 @@ test('a backend product is not required to have a live route at all', async () =
     assert.equal(ready.ready, true);
     assert.equal(ready.service, 'Booking');
   } finally { server.close(); }
+});
+
+// The migration and the Worker's own request-time DDL must describe the SAME table. The
+// deploy executor applies the migration to the real D1 BEFORE deploying, so a migration that
+// omits a column the Worker writes creates the table without it; `CREATE TABLE IF NOT EXISTS`
+// in the Worker is then a no-op, and every insert fails with `D1_ERROR: no such column: due`.
+// The in-process harness never saw it because it runs the Worker's own DDL and never applies
+// the migration — so the defect existed only on the deployed product.
+test('the generated migration creates the due column the Worker writes', () => {
+  const command = 'Build a booking app where customers book appointments and staff view the schedule';
+  const spec = extractRequirementSpec({ command, platform: 'web' });
+  const architecture = selectArchitecture(spec);
+  const built = generateFullStackApp(spec, architecture, { objective: command });
+  const worker = built.files.find((f) => f.path === 'worker/index.js').content;
+  const migration = built.files.find((f) => f.path === 'migrations/0001_init.sql').content;
+  assert.match(worker, /const DUE = ", due"/, 'this product schedules, so the Worker writes the column');
+  assert.match(migration, /due TEXT/, 'the migration must create every column the Worker writes');
+});
+
+test('a database that predates the due column is reconciled at request time', async () => {
+  const command = 'Build a booking app where customers book appointments and staff view the schedule';
+  const spec = extractRequirementSpec({ command, platform: 'web' });
+  const architecture = selectArchitecture(spec);
+  const built = generateFullStackApp(spec, architecture, { objective: command });
+  const runtime = createRuntime({ files: built.files });
+  try {
+    // The shape a pre-fix deployment left in D1: no `due` column, and the migration that would
+    // have added it is already recorded as applied, so it never runs again.
+    await runtime.env.DB.prepare(
+      'CREATE TABLE IF NOT EXISTS "booking" (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, detail TEXT, amount REAL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, owner_email TEXT)'
+    ).run();
+    const loaded = await loadWorker(built.files, runtime);
+    const call = (path, options) => loaded.handler(new Request(`https://generated.app${path}`, options), runtime.env, {});
+    await call('/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'reconcile@example.test', password: 'Reconcile-1234' }) });
+    const login = await (await call('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'reconcile@example.test', password: 'Reconcile-1234' }) })).json();
+    const created = await call('/api/bookings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${login.token}` },
+      body: JSON.stringify({ title: 'reconcile probe' })
+    });
+    assert.equal(created.status, 201, 'a redeploy over a stale database must heal, not stay broken');
+    const body = await created.json();
+    assert.equal(body.ok, true);
+    assert.ok(Object.prototype.hasOwnProperty.call(body.booking, 'due'), 'the reconciled column is part of the record');
+  } finally {
+    runtime.disposeGlobals();
+    await runtime.dispose();
+  }
 });
 
 // A class the config declares as a SQLite-backed Durable Object but that does not extend
