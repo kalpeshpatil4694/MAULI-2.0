@@ -123,7 +123,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     try{
       const r=await fetch('/api/projects/'+encodeURIComponent(pid)+'/detail',{headers:(window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{})});
       const d=await r.json();
-      if(!r.ok||!d.ok){let err=d.error||d.message||'API error';if(typeof err!=='string')err=JSON.stringify(err);alert('Error: '+err);return;}
+      if(!r.ok||!d.ok){let err=d.error||d.message||'API error';if(err&&typeof err==='object')err=err.message||JSON.stringify(err);err=String(err);if(!err||err==='[object Object]'||err==='{}'||err==='undefined')err='Request failed (HTTP '+r.status+')';alert('Error: '+err);return;}
       const det=d.detail||d.data?.detail;
       if(!det)return alert('Project not found');
       const p=det.project;const s=det.summary;

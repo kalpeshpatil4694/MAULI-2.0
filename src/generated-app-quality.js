@@ -56,6 +56,88 @@ function isWeb(files) {
   return files.some((f) => /(^|\/)index\.html$/i.test(f.path));
 }
 
+// ---------------------------------------------------------------------------
+// Navigation integrity
+//
+// The failure this catches: a generated app ships a nav whose links point at pages the
+// product never emitted ("Reports" opens nothing, the second page 404s), or a stylesheet /
+// script the HTML references but the file set does not contain. File count and a passing
+// interaction check cannot see it — the buttons exist and they are wired. Only resolving
+// every reference against the files that actually ship can.
+//
+// Judged only for references that LOOK like a static file (a known extension or a trailing
+// slash). Extensionless hrefs are left alone on purpose: a client-side router owns those,
+// and flagging them would refuse working single-page apps.
+// ---------------------------------------------------------------------------
+
+const STATIC_REF_RE = /\.(?:html?|css|m?js|json|svg|png|jpe?g|gif|webp|ico|txt|xml|webmanifest|woff2?)$/i;
+const EXTERNAL_REF_RE = /^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i;
+// JS-driven navigation, literal targets only — `location.href = var` cannot be judged.
+const JS_NAV_PATTERNS = [
+  /\blocation\.href\s*=\s*["']([^"']+)["']/g,
+  /\blocation\.(?:assign|replace)\s*\(\s*["']([^"']+)["']/g,
+  /\bwindow\.open\s*\(\s*["']([^"']+)["']/g
+];
+
+/**
+ * Resolve one reference from one shipped file against the files that actually exist.
+ * @returns {'skip'|'ok'|'missing'} `skip` = not a locally-judgeable static reference.
+ */
+function classifyRef(list, fromPath, rawRef) {
+  const ref = String(rawRef ?? '').split('#')[0].split('?')[0].trim();
+  if (!ref || EXTERNAL_REF_RE.test(ref)) return 'skip';
+  // Templated or computed targets (`${page}.html`, `{{url}}`) are not literal links.
+  if (/[${}]/.test(ref)) return 'skip';
+  const directory = ref.endsWith('/');
+  if (!directory && !STATIC_REF_RE.test(ref)) return 'skip';
+  const dir = fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/')) : '';
+  const rel = `${dir ? dir + '/' : ''}${ref.replace(/^\.\//, '')}`.replace(/\/{2,}/g, '/');
+  const bare = ref.replace(/^\//, '');
+  const candidates = new Set([rel, bare, `www/${bare}`]);
+  if (directory) {
+    for (const c of [...candidates]) candidates.add(`${c.replace(/\/$/, '')}/index.html`);
+  }
+  for (const file of list) if (candidates.has(file.path)) return 'ok';
+  return 'missing';
+}
+
+/**
+ * Every shipped reference that does not resolve to a shipped file.
+ *
+ * `blocking` marks the references a product cannot work without: a page that does not
+ * open, a stylesheet that does not load, a script that never runs. A missing image or
+ * favicon is recorded too, but as a non-blocking defect — cosmetic damage must not veto
+ * a working product the way a dead page must.
+ */
+export function brokenNavigation(list) {
+  const broken = [];
+  const check = (fromPath, refs) => {
+    for (const ref of refs) {
+      if (classifyRef(list, fromPath, ref) !== 'missing') continue;
+      const clean = String(ref).split('#')[0].split('?')[0];
+      broken.push({
+        from: fromPath,
+        ref: String(ref).slice(0, 120),
+        blocking: /\.(?:html?|css|m?js)$/i.test(clean)
+      });
+    }
+  };
+  for (const f of list) {
+    if (/\.html?$/i.test(f.path)) {
+      const refs = [
+        ...String(f.content ?? '').matchAll(/\b(?:href|src)\s*=\s*["']([^"']+)["']/gi)
+      ].map((m) => m[1]);
+      check(f.path, refs);
+    }
+    if (/\.(m?js)$/i.test(f.path)) {
+      for (const pattern of JS_NAV_PATTERNS) {
+        check(f.path, [...String(f.content ?? '').matchAll(pattern)].map((m) => m[1]));
+      }
+    }
+  }
+  return broken;
+}
+
 function htmlOf(files) {
   return files.filter((f) => /\.html?$/i.test(f.path)).map((f) => String(f.content ?? '')).join('\n');
 }
@@ -344,6 +426,19 @@ export function analyzeGeneratedApp(files, { objective = '', requirements = [] }
     push('realtime-not-implemented', SEVERITY.WARNING, 'real-time was requested but no WebSocket/SSE/subscription exists');
   }
 
+  // 9. Navigation: every link and asset reference must open something the product ships.
+  // A nav link to a page that was never generated is the literal "second page does not
+  // open" defect — the UI looks complete and every click on it goes nowhere.
+  const broken = brokenNavigation(list);
+  const blockingBroken = broken.filter((b) => b.blocking);
+  if (blockingBroken.length) {
+    push('broken-navigation', SEVERITY.CRITICAL,
+      `links point at files the product does not ship: ${blockingBroken.slice(0, 6).map((b) => `${b.ref} (in ${b.from})`).join(', ')}`);
+  } else if (broken.length) {
+    push('missing-asset', SEVERITY.WARNING,
+      `referenced assets the product does not ship: ${broken.slice(0, 6).map((b) => `${b.ref} (in ${b.from})`).join(', ')}`);
+  }
+
   // Coverage reads executed source only — see evaluateRequirementCoverage(). The
   // allText scan above stays for placeholder wording, which is a red flag wherever it
   // ships, including docs.
@@ -373,6 +468,9 @@ export function analyzeGeneratedApp(files, { objective = '', requirements = [] }
       handlerRefs: refs.size,
       interactionCount,
       hasPersistence,
+      pages: list.filter((f) => /\.html?$/i.test(f.path)).length,
+      brokenLinks: blockingBroken.length,
+      missingAssets: broken.length - blockingBroken.length,
       web
     }
   };

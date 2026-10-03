@@ -451,9 +451,33 @@ export class LiveConnections extends DurableObject {
 // Frontend
 // ---------------------------------------------------------------------------
 
-function frontendHtml({ spec, architecture, table, entity, label }) {
+// The product's pages. Every page is a REAL file under www/, and every page carries the
+// same navigation — a nav link that points at a file the product does not ship is a button
+// that opens nothing, which is exactly how a founder ends up with a "second page that does
+// not open". src/generated-app-quality.js refuses that shape.
+const PAGES = [
+  { key: 'dashboard', file: 'index.html', label: 'Dashboard' },
+  { key: 'reports', file: 'reports.html', label: 'Reports' },
+  { key: 'settings', file: 'settings.html', label: 'Settings' }
+];
+
+function navHtml(page, label) {
+  const links = PAGES.map((p) => {
+    const active = p.key === page;
+    return `      <a class="nav-link${active ? ' active' : ''}" href="${p.file}"${active ? ' aria-current="page"' : ''}>${p.label}</a>`;
+  }).join('\n');
+  return `  <nav class="nav" aria-label="Main navigation">
+    <a class="brand" href="index.html">${label}</a>
+    <div class="links">
+${links}
+    </div>
+  </nav>`;
+}
+
+function frontendHtml({ spec, architecture, table, entity, label, page = 'dashboard' }) {
   const auth = architecture.auth;
-  const api = `/api/${plural(table)}`;
+  // The account card sits on EVERY page: a founder who lands on Reports first must be able
+  // to sign in there instead of being told, on a page with no login form, to go elsewhere.
   const authBlock = auth ? `
       <section id="mauli-auth" class="card">
         <h2>Account</h2>
@@ -470,20 +494,11 @@ function frontendHtml({ spec, architecture, table, entity, label }) {
         <p class="who" id="mauli-who"></p>
       </section>` : '';
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${label}</title>
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-<main class="wrap">
-  <header>
-    <h1>${label}</h1>
-    <p class="sub" id="mauli-status">Loading from the server…</p>
-  </header>
+  const dashboardBody = `
+  <section class="card">
+    <h2>Overview</h2>
+    <div id="mauli-stats" class="stats"></div>
+  </section>
 ${authBlock}
   <section class="card">
     <h2>Add a ${entity}</h2>
@@ -508,7 +523,53 @@ ${authBlock}
     </div>
     <ul id="mauli-list"></ul>
     <p id="mauli-empty" class="muted">No ${table}s yet.</p>
+  </section>`;
+
+  const reportsBody = `
+${authBlock}
+  <section class="card">
+    <h2>Reports</h2>
+    <p class="sub">Live totals computed from the same data the Dashboard stores — no second copy.</p>
+    <div id="mauli-report" class="report"><p class="muted">Loading…</p></div>
+  </section>`;
+
+  const settingsBody = `
+${authBlock}
+  <section class="card">
+    <h2>Your data</h2>
+    <p class="muted">Take everything with you: exports every ${entity} as a JSON file.</p>
+    <button type="button" id="mauli-export">Export data (JSON)</button>
+    <div id="mauli-settings-msg" class="msg" role="status"></div>
   </section>
+  <section class="card">
+    <h2>About</h2>
+    <p class="muted">${label} — built by MAULI 2.0 on the ${architecture.label}.</p>
+  </section>`;
+
+  const body = page === 'reports' ? reportsBody : (page === 'settings' ? settingsBody : dashboardBody);
+  const headings = {
+    dashboard: ['Dashboard', 'Everything below is live — it reads and writes the real store.'],
+    reports: ['Reports', `Totals, activity and the latest ${table}s at a glance.`],
+    settings: ['Settings', `Account and data controls for ${label}.`]
+  };
+  const [heading, sub] = headings[page] ?? headings.dashboard;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${heading} · ${label}</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="wrap">
+${navHtml(page, label)}
+  <header>
+    <h1>${heading}</h1>
+    <p class="sub" id="mauli-status">${sub}</p>
+  </header>
+${body}
 </main>
 <script src="app.js"></script>
 </body>
@@ -620,41 +681,154 @@ ${architecture.backend ? '' : `  // The device store. Records written here survi
 
   function render() {
     var list = el('mauli-list');
-    if (!list) return;
-    var query = (el('mauli-search') && el('mauli-search').value || '').trim().toLowerCase();
-    var visible = ${varName}s.filter(function (item) {
-      if (!query) return true;
-      return String(item.title || '').toLowerCase().indexOf(query) !== -1
-        || String(item.detail || '').toLowerCase().indexOf(query) !== -1;
+    if (list) {
+      var query = (el('mauli-search') && el('mauli-search').value || '').trim().toLowerCase();
+      var visible = ${varName}s.filter(function (item) {
+        if (!query) return true;
+        return String(item.title || '').toLowerCase().indexOf(query) !== -1
+          || String(item.detail || '').toLowerCase().indexOf(query) !== -1;
+      });
+      list.innerHTML = '';
+      visible.forEach(function (item) {
+        var li = document.createElement('li');
+        li.setAttribute('data-id', String(item.id));
+        var title = document.createElement('span');
+        title.className = 'title';
+        title.textContent = item.title;
+        var meta = document.createElement('span');
+        meta.className = 'meta';
+        meta.textContent = (item.amount ? Number(item.amount).toFixed(2) : '0.00') + ' · ' + String(item.created_at || '').slice(0, 10);
+        var edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'link';
+        edit.textContent = 'Edit';
+        edit.addEventListener('click', function () { startEdit(item); });
+        var remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'link danger';
+        remove.textContent = 'Delete';
+        remove.addEventListener('click', function () { removeItem(item.id); });
+        li.appendChild(title);
+        li.appendChild(meta);
+        li.appendChild(edit);
+        li.appendChild(remove);
+        list.appendChild(li);
+      });
+      var empty = el('mauli-empty');
+      if (empty) empty.hidden = visible.length > 0;
+    }
+    // Every page renders from the same loaded data: the Dashboard's overview cards, the
+    // Reports page's totals, and the list itself. A page that has none of those elements
+    // simply has nothing to draw here.
+    renderStats();
+    renderReport();
+  }
+
+  function statCard(labelText, valueText) {
+    var card = document.createElement('div');
+    card.className = 'stat';
+    var value = document.createElement('span');
+    value.className = 'stat-v';
+    value.textContent = valueText;
+    var name = document.createElement('span');
+    name.className = 'stat-k';
+    name.textContent = labelText;
+    card.appendChild(value);
+    card.appendChild(name);
+    return card;
+  }
+
+  function totals() {
+    var amount = 0;
+    var latest = '';
+    var today = new Date().toISOString().slice(0, 10);
+    var addedToday = 0;
+    ${varName}s.forEach(function (item) {
+      amount += Number(item.amount) || 0;
+      var created = String(item.created_at || '').slice(0, 10);
+      var updated = String(item.updated_at || '');
+      if (updated > latest) latest = updated;
+      if (created === today) addedToday += 1;
     });
-    list.innerHTML = '';
-    visible.forEach(function (item) {
-      var li = document.createElement('li');
-      li.setAttribute('data-id', String(item.id));
-      var title = document.createElement('span');
-      title.className = 'title';
-      title.textContent = item.title;
-      var meta = document.createElement('span');
-      meta.className = 'meta';
-      meta.textContent = (item.amount ? Number(item.amount).toFixed(2) : '0.00') + ' · ' + String(item.created_at || '').slice(0, 10);
-      var edit = document.createElement('button');
-      edit.type = 'button';
-      edit.className = 'link';
-      edit.textContent = 'Edit';
-      edit.addEventListener('click', function () { startEdit(item); });
-      var remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'link danger';
-      remove.textContent = 'Delete';
-      remove.addEventListener('click', function () { removeItem(item.id); });
-      li.appendChild(title);
-      li.appendChild(meta);
-      li.appendChild(edit);
-      li.appendChild(remove);
-      list.appendChild(li);
+    return { count: ${varName}s.length, amount: amount, latest: latest, addedToday: addedToday };
+  }
+
+  function renderStats() {
+    var box = el('mauli-stats');
+    if (!box) return;
+    var t = totals();
+    box.innerHTML = '';
+    box.appendChild(statCard('Total ${table}s', String(t.count)));
+    box.appendChild(statCard('Added today', String(t.addedToday)));
+    box.appendChild(statCard('Total amount', t.amount.toFixed(2)));
+  }
+
+  function renderReport() {
+    var box = el('mauli-report');
+    if (!box) return;
+    var t = totals();
+    box.innerHTML = '';
+    var summary = document.createElement('div');
+    summary.className = 'stats';
+    summary.appendChild(statCard('Total ${table}s', String(t.count)));
+    summary.appendChild(statCard('Total amount', t.amount.toFixed(2)));
+    summary.appendChild(statCard('Last activity', t.latest ? t.latest.slice(0, 16).replace('T', ' ') : '—'));
+    box.appendChild(summary);
+    if (!t.count) {
+      var none = document.createElement('p');
+      none.className = 'muted';
+      none.textContent = 'No ${table}s yet — add one from the Dashboard.';
+      box.appendChild(none);
+      return;
+    }
+    var table = document.createElement('table');
+    table.className = 'tbl';
+    var head = document.createElement('thead');
+    var headRow = document.createElement('tr');
+    ['Title', 'Amount', 'Created'].forEach(function (labelText) {
+      var th = document.createElement('th');
+      th.textContent = labelText;
+      headRow.appendChild(th);
     });
-    var empty = el('mauli-empty');
-    if (empty) empty.hidden = visible.length > 0;
+    head.appendChild(headRow);
+    table.appendChild(head);
+    var bodyEl = document.createElement('tbody');
+    ${varName}s.slice(0, 20).forEach(function (item) {
+      var row = document.createElement('tr');
+      var title = document.createElement('td');
+      title.textContent = item.title || '';
+      var amount = document.createElement('td');
+      amount.textContent = Number(item.amount || 0).toFixed(2);
+      var created = document.createElement('td');
+      created.textContent = String(item.created_at || '').slice(0, 10);
+      row.appendChild(title);
+      row.appendChild(amount);
+      row.appendChild(created);
+      bodyEl.appendChild(row);
+    });
+    table.appendChild(bodyEl);
+    box.appendChild(table);
+  }
+
+  // The Settings page's export is a real download of the real data — no server needed,
+  // and it refuses to pretend: an empty list exports an empty file with an honest count.
+  function exportRecords() {
+    var msg = el('mauli-settings-msg');
+    try {
+      var payload = JSON.stringify({ exportedAt: new Date().toISOString(), count: ${varName}s.length, records: ${varName}s }, null, 2);
+      var blob = new Blob([payload], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = '${table}-export.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+      if (msg) msg.textContent = 'Exported ' + ${varName}s.length + ' ${table}(s)';
+    } catch (error) {
+      if (msg) msg.textContent = 'Export failed: ' + error.message;
+    }
   }
 
   var editingId = null;
@@ -835,6 +1009,8 @@ ${auth ? `
     if (search) search.addEventListener('input', render);
     var clear = el('mauli-clear');
     if (clear) clear.addEventListener('click', function () { search.value = ''; render(); });
+    var exportBtn = el('mauli-export');
+    if (exportBtn) exportBtn.addEventListener('click', exportRecords);
 ${auth ? `    var loginForm = el('mauli-login-form');
     if (loginForm) loginForm.addEventListener('submit', login);
     var registerBtn = el('mauli-register');
@@ -867,7 +1043,31 @@ body {
   line-height: 1.5;
   min-height: 100vh;
 }
-.wrap { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 24px 20px 64px; }
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.nav .brand { font-weight: 700; font-size: 1rem; color: var(--text); text-decoration: none; letter-spacing: -0.01em; }
+.nav .links { display: flex; gap: 6px; flex-wrap: wrap; }
+.nav-link {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 13px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.nav-link:hover { color: var(--text); background: #1c2430; }
+.nav-link.active { background: var(--accent); color: #fff; }
 header h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.01em; }
 .sub { color: var(--muted); margin: 4px 0 20px; font-size: 0.9rem; }
 .sub.error, .msg.error { color: var(--danger); }
@@ -879,6 +1079,15 @@ header h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.01em; }
   margin-bottom: 20px;
 }
 .card h2 { margin: 0 0 14px; font-size: 1.05rem; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { background: #0d1117; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.stat .stat-v { display: block; font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+.stat .stat-k { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+.report .stats { margin-bottom: 16px; }
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th, .tbl td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); font-size: 0.88rem; }
+.tbl th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.tbl tr:last-child td { border-bottom: none; }
 label { display: block; font-size: 0.82rem; color: var(--muted); margin: 12px 0 4px; }
 input, textarea {
   width: 100%;
@@ -982,10 +1191,18 @@ npx wrangler dev                               # serves the frontend AND the Wor
 \`\`\`
 
 The frontend (\`www/\`) is bound as the Worker's static assets and the Worker
-(\`worker/index.js\`) serves the API, so one deploy is the whole product. The page calls
+(\`worker/index.js\`) serves the API, so one deploy is the whole product. The pages call
 \`/api/${table}s\` for every read and write, so there is no second copy of the data in the
 browser. The table name is quoted in every statement — \`${table}\` is your own noun, and it
 may be a SQL keyword.
+
+## Pages
+
+Every page is a real file and every page links to the others through the top navigation:
+
+- \`www/index.html\` — Dashboard: account, overview cards, add an entry, and the full ${table} list
+- \`www/reports.html\` — Reports: totals, activity and the latest ${table}s
+- \`www/settings.html\` — Settings: account controls and a JSON export of your data
 
 ## Requirements this build implements
 
@@ -1020,7 +1237,9 @@ export function generateFullStackApp(spec, architecture, { objective = '' } = {}
   // product that promised to keep its records on the device gave the founder a product whose
   // own documentation contradicted its own code.
   const files = [
-    { path: 'www/index.html', content: frontendHtml({ spec, architecture, table: frontTable, entity: frontEntity, label: frontLabel }) },
+    { path: 'www/index.html', content: frontendHtml({ spec, architecture, table: frontTable, entity: frontEntity, label: frontLabel, page: 'dashboard' }) },
+    { path: 'www/reports.html', content: frontendHtml({ spec, architecture, table: frontTable, entity: frontEntity, label: frontLabel, page: 'reports' }) },
+    { path: 'www/settings.html', content: frontendHtml({ spec, architecture, table: frontTable, entity: frontEntity, label: frontLabel, page: 'settings' }) },
     { path: 'www/app.js', content: frontendJs({ spec, architecture, table: frontTable, entity: frontEntity, label: frontLabel }) },
     { path: 'www/styles.css', content: frontendCss({ label: frontLabel }) },
     ...(architecture.backend
