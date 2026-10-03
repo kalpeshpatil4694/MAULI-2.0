@@ -7,6 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check": "node scripts/check-syntax.mjs",
+    "test:dashboard": "node scripts/dashboard-key-check.mjs",
     "test": "node --test",
     "test:routes": "node scripts/dryrun-durable-routes.mjs",
     "test:runtime": "node scripts/verify-generated-app.mjs --self-test",

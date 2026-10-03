@@ -222,8 +222,11 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   async function fetchProjectFiles(pid,retried){
     const r=await fetch('/api/app-files?projectId='+encodeURIComponent(pid),{headers:window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{}});
     if(r.status===401||r.status===503){
-      if(!retried&&window.__mauliRequestFounderKey&&window.__mauliRequestFounderKey())return fetchProjectFiles(pid,true);
-      throw new Error('Founder key needed — paste it to download');
+      // requestFounderKey is now async (it opens the visible key modal), so this has to
+      // await it. Left unawaited, a Promise is always truthy and the retry fired with no
+      // key at all — which is how downloads reported a bare "founder key needed".
+      if(!retried&&window.__mauliRequestFounderKey&&await window.__mauliRequestFounderKey())return fetchProjectFiles(pid,true);
+      throw new Error('Founder key needed — paste it with the 🔑 button in the top bar');
     }
     if(!r.ok){
       let body={};try{body=await r.json();}catch(_){ }
@@ -241,8 +244,8 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
   async function fetchAsBlob(url,retried){
     const r=await fetch(url,{headers:window.__mauliFounderHeaders?window.__mauliFounderHeaders({}):{}});
     if(r.status===401||r.status===503){
-      if(!retried&&window.__mauliRequestFounderKey&&window.__mauliRequestFounderKey())return fetchAsBlob(url,true);
-      throw new Error('Founder key needed — paste it to download');
+      if(!retried&&window.__mauliRequestFounderKey&&await window.__mauliRequestFounderKey())return fetchAsBlob(url,true);
+      throw new Error('Founder key needed — paste it with the 🔑 button in the top bar');
     }
     if(!r.ok){
       let body={};try{body=await r.json();}catch(_){ }
@@ -333,7 +336,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
     if(/No code artifact/i.test(message)){
       return 'या project ने अजून code generate केलेला नाही. आधी command पूर्ण होऊ द्या, मग 📱 APK दाबा.';
     }
-    if(/Founder key/i.test(message))return 'Founder key लागत आहे. डॅशबोर्डवर key भरा आणि पुन्हा प्रयत्न करा.';
+    if(/Founder key/i.test(message))return 'Founder key लागत आहे. टॉपबारमधील 🔑 बटण दाबून MAULI_FOUNDER_KEY भरा आणि पुन्हा प्रयत्न करा.';
     if(/does not have push permissions|GitHub token/i.test(message)){
       return 'GitHub token ला push permission नाही. GITHUB_TOKEN तपासा (Settings → Environment).';
     }

@@ -41,6 +41,14 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      # Executes the dashboard's own script in a DOM and drives the founder-key flow the
+      # way a founder does. Eight dashboard options (Chat, Learning, Messaging, API
+      # Explorer, Docs, Editor, Integrations, Builds) are founder-protected; when the key
+      # could not be entered they rendered empty and Chat answered with a raw JSON
+      # envelope, which the founder read as "the options are missing".
+      - name: Dashboard founder-key behaviour
+        run: npm run test:dashboard
+
       - name: Integration tests
         run: npm run test:routes
 

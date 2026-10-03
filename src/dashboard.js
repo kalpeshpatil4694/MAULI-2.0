@@ -135,6 +135,27 @@ select.inp{cursor:pointer}
 .loading{display:none;padding:16px;text-align:center}
 .loading.show{display:block}
 
+/* Founder key control — every protected panel (Chat, Learning, Messaging, API Explorer,
+   Docs, File Editor, Integrations, Builds) answers 401 without this key. It used to be
+   reachable only through a window.prompt() that the founder can dismiss without noticing,
+   so those panels silently rendered as empty and read as "the options are missing". */
+.mauli-keybar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;margin-bottom:14px;border:1px solid rgba(234,179,8,.45);background:rgba(234,179,8,.1);border-radius:var(--r);font-size:12px;color:var(--yellow)}
+.mauli-keybar[hidden]{display:none}
+.mauli-keybar button{margin-top:0}
+.mauli-keymodal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(4,7,15,.82);backdrop-filter:blur(4px)}
+.mauli-keymodal[hidden]{display:none}
+.mauli-keycard{width:100%;max-width:440px;background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+.mauli-keycard h3{margin:0 0 6px;font-size:15px}
+.mauli-keycard p{margin:0 0 12px;font-size:11px;color:var(--text2);line-height:1.5}
+.mauli-keyremember{display:flex;align-items:center;gap:7px;margin-top:10px;font-size:11px;color:var(--text2);font-weight:400}
+.mauli-keyremember input{width:auto;margin:0}
+.mauli-keyrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.mauli-keyrow button{flex:1 1 110px;margin-top:0}
+.mauli-keymsg{min-height:1.2em;margin-top:10px;font-size:11px;color:var(--text2)}
+.mauli-keymsg.err{color:var(--red)}
+.mauli-keymsg.ok{color:var(--green)}
+.key-btn-off{color:var(--yellow)!important;border-color:rgba(234,179,8,.5)!important}
+
 /* Responsive */
 @media(max-width:768px){
   .hamburger{display:block}
@@ -194,11 +215,16 @@ select.inp{cursor:pointer}
         <span style="font-size:13px;font-weight:600;margin-left:8px" id="pageTitle">Command Center</span>
       </div>
       <div class="topbar-r">
-        <button class="btn btn-a btn-s" onclick="go('chat')">💬</button>
+        <button class="btn btn-a btn-s" id="mauliKeyBtn" onclick="openFounderKey()" title="Founder key — required by Chat, Learning, Messaging, API Explorer, Docs, Editor and Builds">🔑 <span id="mauliKeyState">locked</span></button>
+        <button class="btn btn-a btn-s" onclick="go('chat')" title="Chat">💬</button>
         <span style="font-size:11px;color:var(--text3)" id="clock"></span>
       </div>
     </header>
     <div class="content">
+      <div class="mauli-keybar" id="mauliKeyBar" hidden>
+        <span>🔒 <b>Founder key लागत आहे.</b> Chat, Learning, Messaging, API Explorer, Docs, File Editor, Integrations आणि Builds — ही panels रिकामी दिसतात कारण तीं founder-protected endpoints वरून 401 मिळतात.</span>
+        <button class="btn btn-p btn-s" onclick="openFounderKey()">🔑 Key भरा</button>
+      </div>
       <!-- COMMAND CENTER -->
       <div class="page on" id="pg-command">
         <div class="g g4" style="margin-bottom:16px">
@@ -400,6 +426,20 @@ select.inp{cursor:pointer}
     </div>
   </div>
 </div>
+<div class="mauli-keymodal" id="mauliKeyModal" hidden>
+  <div class="mauli-keycard">
+    <h3>🔑 MAULI founder key</h3>
+    <p>Cloudflare dashboard → या Worker चे <b>Settings → Variables and Secrets</b> → <b>MAULI_FOUNDER_KEY</b>. Key browser मध्येच राहते, server ला फक्त header म्हणून जाते.</p>
+    <input class="inp" id="mauliKeyInput" type="password" placeholder="Paste MAULI_FOUNDER_KEY" autocomplete="off">
+    <label class="mauli-keyremember"><input type="checkbox" id="mauliKeyRemember"> या device वर लक्षात ठेवा (browser बंद केल्यावर पण राहते)</label>
+    <div class="mauli-keyrow">
+      <button class="btn btn-p" id="mauliKeySave">Save &amp; continue</button>
+      <button class="btn" id="mauliKeyCancel">Cancel</button>
+      <button class="btn btn-r" id="mauliKeyClear">Clear key</button>
+    </div>
+    <div class="mauli-keymsg" id="mauliKeyMsg"></div>
+  </div>
+</div>
 <div class="toast-c" id="toastC"></div>
 
 <script>
@@ -475,21 +515,120 @@ async function searchApiCatalog(){const q=$('apiQ').value.trim();if(!q){await lo
 // Founder-protected endpoints require the MAULI_FOUNDER_KEY. It is kept in
 // sessionStorage (never localStorage/cookie) and attached to every API call.
 const FOUNDER_KEY_STORAGE='mauli_founder_key';
-function founderKey(){try{return sessionStorage.getItem(FOUNDER_KEY_STORAGE)||''}catch(_){return ''}}
-function setFounderKey(k){try{if(k)sessionStorage.setItem(FOUNDER_KEY_STORAGE,k);else sessionStorage.removeItem(FOUNDER_KEY_STORAGE)}catch(_){}}
+const FOUNDER_KEY_REMEMBER='mauli_founder_key_remember';
+function founderKey(){try{return sessionStorage.getItem(FOUNDER_KEY_STORAGE)||localStorage.getItem(FOUNDER_KEY_STORAGE)||''}catch(_){return ''}}
+function clearFounderKey(){
+  try{sessionStorage.removeItem(FOUNDER_KEY_STORAGE);localStorage.removeItem(FOUNDER_KEY_STORAGE)}catch(_){}
+  // Repaint here, not only in the button handler: window.__mauliClearFounderKey is a public
+  // entry point, and clearing the key without restoring the banner left the UI still
+  // claiming "key set" while every protected request was being refused.
+  try{paintFounderKeyState()}catch(_){}
+}
+function setFounderKey(k,remember){
+  try{
+    if(!k){clearFounderKey();return}
+    (remember?localStorage:sessionStorage).setItem(FOUNDER_KEY_STORAGE,k);
+    // Exactly one copy survives, so "Clear" can never leave a stale key behind.
+    (remember?sessionStorage:localStorage).removeItem(FOUNDER_KEY_STORAGE);
+    localStorage.setItem(FOUNDER_KEY_REMEMBER,remember?'1':'0');
+  }catch(_){}
+}
 function founderHeaders(h){const k=founderKey();return k?{...h,'x-mauli-founder':k}:h}
 function founderAuthNeeded(r){return r&&(r.status===401||r.status===503)}
-function requestFounderKey(){try{const k=window.prompt('MAULI founder key required. Paste MAULI_FOUNDER_KEY:');if(k&&k.trim()){setFounderKey(k.trim());return true}}catch(_){}return false}
-window.__mauliFounderKey=founderKey;window.__mauliSetFounderKey=setFounderKey;window.__mauliFounderHeaders=founderHeaders;
+
+// The one place that decides whether the founder is signed in, and the only place that
+// draws the consequence. Without it a refused request looked identical to an empty
+// collection: Chat answered with a raw JSON envelope and every other panel rendered its
+// "No items" state, so a missing key read as missing features.
+let founderKeyPrompt=null;
+function paintFounderKeyState(){
+  const on=!!founderKey();
+  const btn=$('mauliKeyBtn');const label=$('mauliKeyState');const bar=$('mauliKeyBar');
+  if(label)label.textContent=on?'key set':'locked';
+  if(btn)btn.classList.toggle('key-btn-off',!on);
+  if(bar)bar.hidden=on;
+  return on;
+}
+function showFounderKeyModal(){
+  if(founderKeyPrompt)return founderKeyPrompt;
+  const modal=$('mauliKeyModal');if(!modal)return Promise.resolve(!!founderKey());
+  let remember=false;try{remember=localStorage.getItem(FOUNDER_KEY_REMEMBER)==='1'}catch(_){}
+  const input=$('mauliKeyInput');const box=$('mauliKeyRemember');const msg=$('mauliKeyMsg');
+  if(input)input.value=founderKey();
+  if(box)box.checked=remember;
+  if(msg){msg.textContent='';msg.className='mauli-keymsg'}
+  modal.hidden=false;
+  let settle=null;
+  founderKeyPrompt=new Promise(resolve=>{settle=resolve});
+  const close=result=>{
+    modal.hidden=true;
+    const p=founderKeyPrompt;founderKeyPrompt=null;
+    document.removeEventListener('keydown',onKey);
+    if(p)settle(result);
+  };
+  const onKey=e=>{if(e.key==='Escape')close(false)};
+  document.addEventListener('keydown',onKey);
+  const save=()=>{
+    const value=(input&&input.value||'').trim();
+    if(!value){if(msg){msg.textContent='Key रिकामी आहे — MAULI_FOUNDER_KEY paste करा.';msg.className='mauli-keymsg err'}return}
+    setFounderKey(value,!!(box&&box.checked));
+    const ok=paintFounderKeyState();
+    if(msg){msg.textContent=ok?'✓ Key save झाली. Panels आता load होतात…':'Key save झाली नाही';msg.className='mauli-keymsg '+(ok?'ok':'err')}
+    // Re-run whatever the founder was looking at, so the panel they came to fix is the
+    // one that repaints — not a different one.
+    close(true);
+    if(ok){refreshAfterFounderKey();toast('Founder key saved','ok')}
+  };
+  const cancel=$('mauliKeyCancel');if(cancel)cancel.onclick=()=>close(false);
+  const clear=$('mauliKeyClear');if(clear)clear.onclick=()=>{clearFounderKey();if(msg){msg.textContent='Key clear केली';msg.className='mauli-keymsg'}close(false);toast('Founder key cleared','info')};
+  const saveBtn=$('mauliKeySave');if(saveBtn)saveBtn.onclick=save;
+  if(input)input.onkeydown=e=>{if(e.key==='Enter')save()};
+  modal.onclick=e=>{if(e.target===modal)close(false)};
+  if(input)setTimeout(()=>{try{input.focus();input.select()}catch(_){}},0);
+  return founderKeyPrompt;
+}
+function openFounderKey(){return showFounderKeyModal()}
+function refreshAfterFounderKey(){
+  try{renderPage(curPage)}catch(_){}
+  try{updateStats()}catch(_){}
+  try{loadState&&loadState()}catch(_){}
+}
+// Resolves true only when the founder actually supplied a key. Every 401/503 in the app
+// funnels through here, so a founder who cancels sees the panels stay honestly empty and
+// the banner stay up — instead of a raw "{"ok":false...}" string in the chat bubble.
+function requestFounderKey(){return showFounderKeyModal()}
+window.__mauliFounderKey=founderKey;window.__mauliSetFounderKey=setFounderKey;window.__mauliClearFounderKey=clearFounderKey;window.__mauliFounderHeaders=founderHeaders;window.__mauliOpenFounderKey=openFounderKey;
+paintFounderKeyState();
 // downloadZip lives in this script; the injected live layer calls it for the
 // project-details modal's Download button (function declarations are hoisted).
 window.__mauliDownloadProject=downloadZip;window.__mauliRequestFounderKey=requestFounderKey;
+// A refused call used to throw the whole response body, so a founder-key error reached the
+// UI as the literal text {"ok":false,"error":{...}} — the chat bubble printed raw JSON and
+// every panel's catch() swallowed the real reason. Read the envelope and speak plainly.
+function readableApiError(raw,status){
+  const text=String(raw||'').trim();
+  if(text){
+    try{
+      const body=JSON.parse(text);
+      const message=body&&(body.error&&body.error.message||body.error||body.message);
+      if(typeof message==='string'&&message.trim())return message.trim();
+    }catch(_){}
+    if(!/^[\[{]/.test(text))return text;
+  }
+  return 'Request failed (HTTP '+status+')';
+}
 async function api(path,opts={},retried=false){
   try{const m=(opts.method||'GET').toUpperCase();const hdrs={...(opts.headers||{})};
     if(m==='POST'||m==='PUT'||m==='PATCH')hdrs['Content-Type']='application/json';
     const r=await fetch(path,{method:m,headers:founderHeaders(hdrs),body:opts.body});
-    if(founderAuthNeeded(r)&&!retried&&requestFounderKey())return api(path,opts,true);
-    if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(t||r.status)}
+    if(founderAuthNeeded(r)){
+      if(!retried&&await requestFounderKey())return api(path,opts,true);
+      paintFounderKeyState();
+      throw new Error(founderKey()
+        ? 'Founder key चुकीची आहे — settings मध्ये MAULI_FOUNDER_KEY तपासा.'
+        : 'Founder key लागत आहे — टॉपबारमधील 🔑 बटण दाबून key भरा.');
+    }
+    if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(readableApiError(t,r.status))}
     const j=await r.json();
     // Unwrap the {ok, data} envelope so every panel reads its own fields directly
     // (stats/skillTree/messages/servers/... all live under data). Keep the ok flag
@@ -871,10 +1010,16 @@ async function sendChat(){
   c.innerHTML+='<div class="chat-msg user"><div class="mr">You</div>'+esc(msg)+'</div>';inp.value='';c.scrollTop=c.scrollHeight;
   addTyping();
   try{const r=await api('/api/chat',{method:'POST',body:JSON.stringify({message:msg})});rmTyping();
-    const d=r.data||r;const resp=d.result||d;const txt=resp.reply||resp.message||(resp.response&&resp.response.text)||JSON.stringify(r,null,2);
+    const d=r.data||r;const resp=d.result||d;
+    // The engine answers {userMessage, assistantMessage, response:{text,quickReplies}}.
+    // Every earlier shape is still accepted, but a response with no readable text now says
+    // so instead of printing the raw payload into the chat bubble.
+    const txt=(resp.response&&resp.response.text)||resp.reply||resp.message||resp.text
+      ||(typeof resp.assistantMessage==='object'&&resp.assistantMessage&&resp.assistantMessage.content)
+      ||'मला काही उत्तर मिळाले नाही. दुसऱ्या शब्दांत विचारा.';
     c.innerHTML+='<div class="chat-msg bot"><div class="mr">MAULI</div><div>'+md(txt)+'</div></div>';
     const qr=(resp.response&&resp.response.quickReplies)||resp.quickReplies;if(qr)addQuickReplies(qr);c.scrollTop=c.scrollHeight
-  }catch(e){rmTyping();c.innerHTML+='<div class="chat-msg bot" style="border-color:var(--red)"><div class="mr">Error</div>'+esc(e.message)+'</div>';c.scrollTop=c.scrollHeight}
+  }catch(e){rmTyping();c.innerHTML+='<div class="chat-msg bot" style="border-color:var(--red)"><div class="mr">Error</div>'+esc(e.message||'Chat failed')+'</div>';c.scrollTop=c.scrollHeight}
 }
 function addQuickReplies(arr){if(!arr?.length)return;const c=$('chatMsgs');const w=document.createElement('div');w.style.cssText='display:flex;flex-wrap:wrap;gap:4px;padding:4px 0 6px 40px';arr.forEach(r=>{const b=document.createElement('button');b.className='btn btn-a btn-s';b.style.cssText='font-size:10px;padding:3px 8px;border-radius:10px';b.textContent=r;b.onclick=()=>{$('chatIn').value=r;sendChat()};w.appendChild(b)});c.appendChild(w);c.scrollTop=c.scrollHeight}
 function addTyping(){const c=$('chatMsgs');const d=document.createElement('div');d.className='chat-msg bot';d.id='typing';d.innerHTML='<div class="mr">MAULI</div><div style="display:flex;gap:3px;padding:4px 0"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite"></span><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite .2s"></span><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite .4s"></span></div>';c.appendChild(d);c.scrollTop=c.scrollHeight}
