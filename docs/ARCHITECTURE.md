@@ -601,11 +601,13 @@ lived only on the **deployed** boundary:
    the migration. The migration now takes the same `due` flag as the Worker.
 2. **A column added later needs reconciling, not assuming.** Even with the migration fixed, an
    already-provisioned D1 keeps its old shape (`CREATE TABLE IF NOT EXISTS` never alters an
-   existing table, and a migration is only applied once). `ensureSchema` now introspects with
-   `PRAGMA table_info` and issues `ALTER TABLE … ADD COLUMN` for a missing column, so a
-   redeploy over a stale database heals instead of staying broken forever. The in-memory shim
-   answers `PRAGMA table_info` and `ALTER TABLE … ADD COLUMN` so the local run exercises the
-   same statement.
+   existing table, and a migration is only applied once). `ensureSchema` now issues
+   `ALTER TABLE … ADD COLUMN` once per isolate, tolerating the "duplicate column name" answer a
+   database that already has the column gives, so a redeploy over a stale database heals
+   instead of staying broken forever. (PRAGMA-through-the-driver was tried first — the deployed
+   Worker still failed, because the query returned no rows on a real D1, so the column is
+   reconciled by adding it rather than by inspecting it.) The in-memory shim answers
+   `ALTER TABLE … ADD COLUMN` idempotently, so the local run exercises the same statement.
 
 **A readiness probe that fires once is not a readiness probe.** `waitForDeployment` checked
 `/api/live` exactly once after `/api/health` answered. A freshly deployed Worker can still serve

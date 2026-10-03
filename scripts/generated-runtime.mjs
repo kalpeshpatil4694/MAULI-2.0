@@ -145,17 +145,11 @@ class InMemoryD1 {
       this.writes += changes;
       return new D1Result([], { changes });
     }
-    // Schema introspection and reconciliation. The generated backend uses these to bring an
-    // already-provisioned database up to date after a column is added (a real D1 that predates
-    // the column keeps its old shape), so the shim has to answer them or a correct product
-    // would be reported as broken here.
-    if (/^PRAGMA\s+table_info/i.test(upper)) {
-      const name = (statement.match(new RegExp(`PRAGMA\\s+table_info\\s*\\(?\\s*${IDENT}`, 'i')) ?? [])[1];
-      const t = this.table(name);
-      return new D1Result(t.columns.map((c, i) => ({
-        cid: i, name: c.name, type: c.type, notnull: 0, dflt_value: null, pk: c.name === 'id' ? 1 : 0
-      })), { changes: 0 });
-    }
+    // Schema reconciliation. The generated backend brings an already-provisioned database up
+    // to date after a column is added (a real D1 that predates the column keeps its old shape),
+    // so the shim has to answer the ALTER or a correct product would be reported as broken here.
+    // Like the real column, it is idempotent: adding a column that is already present is a
+    // no-op rather than an error.
     if (/^ALTER\s+TABLE/i.test(upper)) {
       const name = (statement.match(new RegExp(`ALTER\\s+TABLE\\s+${IDENT}`, 'i')) ?? [])[1];
       const t = this.table(name);
