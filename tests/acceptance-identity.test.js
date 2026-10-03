@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FOUNDER_COMMANDS, chainProjectId } from '../scripts/acceptance-chain.mjs';
-import { waitForDeployment } from '../scripts/deploy-executor.mjs';
+import { waitForDeployment, schemaHashSuffix } from '../scripts/deploy-executor.mjs';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { extractRequirementSpec } from '../src/requirement-spec.js';
 import { selectArchitecture } from '../src/architecture.js';
 import { generateFullStackApp } from '../src/fullstack-codegen.js';
@@ -167,34 +170,27 @@ test('the generated migration creates the due column the Worker writes', () => {
   assert.match(migration, /due TEXT/, 'the migration must create every column the Worker writes');
 });
 
-test('a database that predates the due column is reconciled at request time', async () => {
-  const command = 'Build a booking app where customers book appointments and staff view the schedule';
-  const spec = extractRequirementSpec({ command, platform: 'web' });
-  const architecture = selectArchitecture(spec);
-  const built = generateFullStackApp(spec, architecture, { objective: command });
-  const runtime = createRuntime({ files: built.files });
+test('the deployed database is versioned by the schema, so a changed migration gets a fresh one', async () => {
+  // D1's runtime `ALTER TABLE` is a silent no-op through the Worker binding, a migration is
+  // applied only once, and `CREATE TABLE IF NOT EXISTS` never alters an existing table. A
+  // database that predates a column therefore cannot be repaired from inside the Worker, so the
+  // deploy executor derives the database NAME from a digest of the generated migrations: a
+  // schema change deploys alongside a database that matches it, and an unchanged schema reuses
+  // the same database — so a repair keeps the founder's data.
+  const root = await mkdtemp(join(tmpdir(), 'mauli-schema-'));
+  const withDue = 'CREATE TABLE IF NOT EXISTS "booking" (id INTEGER PRIMARY KEY, title TEXT, due TEXT);\n';
+  const withoutDue = 'CREATE TABLE IF NOT EXISTS "booking" (id INTEGER PRIMARY KEY, title TEXT);\n';
   try {
-    // The shape a pre-fix deployment left in D1: no `due` column, and the migration that would
-    // have added it is already recorded as applied, so it never runs again.
-    await runtime.env.DB.prepare(
-      'CREATE TABLE IF NOT EXISTS "booking" (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, detail TEXT, amount REAL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, owner_email TEXT)'
-    ).run();
-    const loaded = await loadWorker(built.files, runtime);
-    const call = (path, options) => loaded.handler(new Request(`https://generated.app${path}`, options), runtime.env, {});
-    await call('/api/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'reconcile@example.test', password: 'Reconcile-1234' }) });
-    const login = await (await call('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'reconcile@example.test', password: 'Reconcile-1234' }) })).json();
-    const created = await call('/api/bookings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${login.token}` },
-      body: JSON.stringify({ title: 'reconcile probe' })
-    });
-    assert.equal(created.status, 201, 'a redeploy over a stale database must heal, not stay broken');
-    const body = await created.json();
-    assert.equal(body.ok, true);
-    assert.ok(Object.prototype.hasOwnProperty.call(body.booking, 'due'), 'the reconciled column is part of the record');
+    await mkdir(join(root, 'migrations'), { recursive: true });
+    await writeFile(join(root, 'migrations', '0001_init.sql'), withDue);
+    const a = await schemaHashSuffix(root);
+    const b = await schemaHashSuffix(root);
+    assert.equal(a, b, 'the same schema must resolve to the same database, so a repair keeps its data');
+    assert.match(a, /^-[0-9a-f]{10}$/, 'the suffix is a bounded digest that keeps the database name valid');
+    await writeFile(join(root, 'migrations', '0001_init.sql'), withoutDue);
+    assert.notEqual(a, await schemaHashSuffix(root), 'a changed migration must resolve to a different database');
   } finally {
-    runtime.disposeGlobals();
-    await runtime.dispose();
+    await rm(root, { recursive: true, force: true });
   }
 });
 

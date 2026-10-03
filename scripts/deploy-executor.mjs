@@ -19,12 +19,12 @@
 //   node scripts/deploy-executor.mjs --once <file.json> # deploy one payload and print JSON
 
 import { createServer } from 'node:http';
-import { mkdtemp, writeFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, relative, isAbsolute } from 'node:path';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 // Secrets must never appear in a deployment record, a log line or an API response.
 const WRANGLER_BIN = join(process.cwd(), 'node_modules', '.bin', 'wrangler');
@@ -126,6 +126,27 @@ async function provisionDatabase(root, databaseName) {
   if (config === null) return { ok: true, databaseId, reused: Boolean(existingId) };
   await writeFile(configPath, config.replace(/("database_id"\s*:\s*)"[^"]*"/i, `$1"${databaseId}"`), 'utf8');
   return { ok: true, databaseId, reused: Boolean(existingId) };
+}
+
+/**
+ * The database a generated project is bound to.
+ *
+ * The name carries a digest of the generated migrations, so a SCHEMA CHANGE deploys alongside a
+ * database whose schema actually matches it. This is not decoration: D1's runtime `ALTER TABLE`
+ * is a silent no-op through the Worker binding (a known D1 issue), a migration is applied only
+ * once, and `CREATE TABLE IF NOT EXISTS` never alters an existing table — so a database
+ * provisioned before a column was added cannot be repaired from inside the Worker. Versioning
+ * the name by the schema guarantees the deployed Worker's statements match the deployed table.
+ * Redeploying the SAME schema reuses the same database, so a repair keeps the founder's data.
+ */
+export async function schemaHashSuffix(root) {
+  const dir = join(root, 'migrations');
+  if (!existsSync(dir)) return '';
+  const names = (await readdir(dir)).filter((name) => name.endsWith('.sql')).sort();
+  if (!names.length) return '';
+  const parts = [];
+  for (const name of names) parts.push(await readFile(join(dir, name), 'utf8'));
+  return `-${createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 10)}`;
 }
 
 /**
@@ -258,7 +279,9 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
         // Founder commands see each other's rows. The name is deterministic so redeploys
         // of the same project reuse the same database and preserve its data.
         const workerName = `generated-${safe}`.slice(0, 63);
-        const databaseName = `generated-${safe}`.slice(0, 63);
+        // Schema-versioned: a changed migration means a fresh database whose table matches the
+        // new Worker, and an unchanged one reuses the existing database. See schemaHashSuffix().
+        const databaseName = `generated-${safe}${await schemaHashSuffix(root)}`.slice(0, 63);
         // Kept in scope for the deploy log below.
         const rewritten = config
           .replace(/("name"\s*:\s*)"[^"]*"/i, `$1"${workerName}"`)

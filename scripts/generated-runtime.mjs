@@ -145,20 +145,6 @@ class InMemoryD1 {
       this.writes += changes;
       return new D1Result([], { changes });
     }
-    // Schema reconciliation. The generated backend brings an already-provisioned database up
-    // to date after a column is added (a real D1 that predates the column keeps its old shape),
-    // so the shim has to answer the ALTER or a correct product would be reported as broken here.
-    // Like the real column, it is idempotent: adding a column that is already present is a
-    // no-op rather than an error.
-    if (/^ALTER\s+TABLE/i.test(upper)) {
-      const name = (statement.match(new RegExp(`ALTER\\s+TABLE\\s+${IDENT}`, 'i')) ?? [])[1];
-      const t = this.table(name);
-      const added = statement.match(/ADD\s+COLUMN\s+([A-Za-z_][\w]*)\s+(TEXT|INTEGER|REAL)/i);
-      if (added && !t.columns.some((c) => c.name === added[1].toLowerCase())) {
-        t.columns.push({ name: added[1].toLowerCase(), type: added[2].toUpperCase() });
-      }
-      return new D1Result([], { changes: 0 });
-    }
     throw new Error(`unsupported SQL in generated backend: ${statement.slice(0, 120)}`);
   }
 

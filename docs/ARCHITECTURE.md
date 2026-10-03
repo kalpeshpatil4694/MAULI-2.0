@@ -599,15 +599,17 @@ lived only on the **deployed** boundary:
    EXISTS` is a no-op on it, and `POST /api/bookings` answered `500 D1_ERROR: no such column:
    due`. Locally this never reproduced: the harness runs the Worker's own DDL and never applies
    the migration. The migration now takes the same `due` flag as the Worker.
-2. **A column added later needs reconciling, not assuming.** Even with the migration fixed, an
-   already-provisioned D1 keeps its old shape (`CREATE TABLE IF NOT EXISTS` never alters an
-   existing table, and a migration is only applied once). `ensureSchema` now issues
-   `ALTER TABLE … ADD COLUMN` once per isolate, tolerating the "duplicate column name" answer a
-   database that already has the column gives, so a redeploy over a stale database heals
-   instead of staying broken forever. (PRAGMA-through-the-driver was tried first — the deployed
-   Worker still failed, because the query returned no rows on a real D1, so the column is
-   reconciled by adding it rather than by inspecting it.) The in-memory shim answers
-   `ALTER TABLE … ADD COLUMN` idempotently, so the local run exercises the same statement.
+2. **A column added later needs a fresh database, not an ALTER.** Even with the migration
+   fixed, an already-provisioned D1 keeps its old shape: `CREATE TABLE IF NOT EXISTS` never
+   alters an existing table, a migration is applied only once, and D1's runtime `ALTER TABLE`
+   is a silent no-op through the Worker binding (a known D1 issue — the statement reports
+   success and the column never appears; a runtime `PRAGMA table_info` through the driver
+   returns no rows either). Two attempts to reconcile the column from inside the Worker were
+   deployed and both left the deployed product answering `no such column: due`, so a stale
+   database cannot be repaired from there at all. The deploy executor now derives the database
+   NAME from a digest of the generated migrations (`schemaHashSuffix`): a schema change deploys
+   alongside a freshly migrated database whose table matches the new Worker, and an unchanged
+   schema reuses the same database so a repair keeps its data.
 
 **A readiness probe that fires once is not a readiness probe.** `waitForDeployment` checked
 `/api/live` exactly once after `/api/health` answered. A freshly deployed Worker can still serve
@@ -617,8 +619,8 @@ from the old Worker — the coffee-shop Worker had already deployed with `env.LI
 Durable Object binding". The probe now runs **inside** the poll, alongside the health probe, and
 a `501` is only conclusive once the whole window has elapsed; anything else (`426`, `101`, any
 non-`501`) proves the binding arrives. `tests/acceptance-identity.test.js` pins the retry with a
-live route that answers `501` twice before `426`, the migration/Worker column agreement, and a
-runtime run against a database created without `due`.
+live route that answers `501` twice before `426`, the migration/Worker column agreement, and the
+schema-scoped database name.
 
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
