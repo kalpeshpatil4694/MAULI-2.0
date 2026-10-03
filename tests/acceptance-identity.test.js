@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FOUNDER_COMMANDS, chainProjectId } from '../scripts/acceptance-chain.mjs';
-import { waitForDeployment } from '../scripts/deploy-executor.mjs';
+import { waitForDeployment, schemaHashSuffix } from '../scripts/deploy-executor.mjs';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { extractRequirementSpec } from '../src/requirement-spec.js';
 import { selectArchitecture } from '../src/architecture.js';
 import { generateFullStackApp } from '../src/fullstack-codegen.js';
@@ -102,6 +105,30 @@ test('a Worker that answers 501 on /api/live is a DEPLOYMENT defect, not a broke
   } finally { server.close(); }
 });
 
+test('the live-route wait keeps polling while the new version propagates', async () => {
+  // On the run that failed, the coffee-shop Worker HAD deployed with `env.LIVE (LiveConnections)`
+  // in wrangler's binding table, and the acceptance still recorded "no LIVE Durable Object
+  // binding". A freshly deployed Worker can keep serving the PREVIOUS version's /api/health for
+  // a moment, so the single /api/live probe read 501 from the OLD Worker. A 501 is only
+  // conclusive once the whole window has elapsed, so the probe belongs INSIDE the poll.
+  let calls = 0;
+  const server = await startStubWorker({
+    '/api/health': [200, '{"ok":true,"service":"Order"}'],
+    '/api/live': () => {
+      calls += 1;
+      return calls < 3
+        ? [501, '{"ok":false,"error":{"message":"Live updates are not configured for this deployment"}}']
+        : [426, 'Expected a WebSocket upgrade'];
+    }
+  });
+  try {
+    const ready = await waitForDeployment(server.url, { requiresRealtime: true, attempts: 8, intervalMs: 5 });
+    assert.equal(ready.ready, true, 'a transient 501 from the previous version must not fail a working deployment');
+    assert.equal(ready.liveStatus, 426);
+    assert.ok(calls >= 3, 'the wait must have retried the live route');
+  } finally { server.close(); }
+});
+
 test('a realtime Worker whose live route answers is ready', async () => {
   // The wait probes /api/live with a plain fetch, which carries no Upgrade header, so a
   // working Durable Object answers 426 "Expected a WebSocket upgrade" — not 101. Only the
@@ -124,6 +151,47 @@ test('a backend product is not required to have a live route at all', async () =
     assert.equal(ready.ready, true);
     assert.equal(ready.service, 'Booking');
   } finally { server.close(); }
+});
+
+// The migration and the Worker's own request-time DDL must describe the SAME table. The
+// deploy executor applies the migration to the real D1 BEFORE deploying, so a migration that
+// omits a column the Worker writes creates the table without it; `CREATE TABLE IF NOT EXISTS`
+// in the Worker is then a no-op, and every insert fails with `D1_ERROR: no such column: due`.
+// The in-process harness never saw it because it runs the Worker's own DDL and never applies
+// the migration — so the defect existed only on the deployed product.
+test('the generated migration creates the due column the Worker writes', () => {
+  const command = 'Build a booking app where customers book appointments and staff view the schedule';
+  const spec = extractRequirementSpec({ command, platform: 'web' });
+  const architecture = selectArchitecture(spec);
+  const built = generateFullStackApp(spec, architecture, { objective: command });
+  const worker = built.files.find((f) => f.path === 'worker/index.js').content;
+  const migration = built.files.find((f) => f.path === 'migrations/0001_init.sql').content;
+  assert.match(worker, /const DUE = ", due"/, 'this product schedules, so the Worker writes the column');
+  assert.match(migration, /due TEXT/, 'the migration must create every column the Worker writes');
+});
+
+test('the deployed database is versioned by the schema, so a changed migration gets a fresh one', async () => {
+  // D1's runtime `ALTER TABLE` is a silent no-op through the Worker binding, a migration is
+  // applied only once, and `CREATE TABLE IF NOT EXISTS` never alters an existing table. A
+  // database that predates a column therefore cannot be repaired from inside the Worker, so the
+  // deploy executor derives the database NAME from a digest of the generated migrations: a
+  // schema change deploys alongside a database that matches it, and an unchanged schema reuses
+  // the same database — so a repair keeps the founder's data.
+  const root = await mkdtemp(join(tmpdir(), 'mauli-schema-'));
+  const withDue = 'CREATE TABLE IF NOT EXISTS "booking" (id INTEGER PRIMARY KEY, title TEXT, due TEXT);\n';
+  const withoutDue = 'CREATE TABLE IF NOT EXISTS "booking" (id INTEGER PRIMARY KEY, title TEXT);\n';
+  try {
+    await mkdir(join(root, 'migrations'), { recursive: true });
+    await writeFile(join(root, 'migrations', '0001_init.sql'), withDue);
+    const a = await schemaHashSuffix(root);
+    const b = await schemaHashSuffix(root);
+    assert.equal(a, b, 'the same schema must resolve to the same database, so a repair keeps its data');
+    assert.match(a, /^-[0-9a-f]{10}$/, 'the suffix is a bounded digest that keeps the database name valid');
+    await writeFile(join(root, 'migrations', '0001_init.sql'), withoutDue);
+    assert.notEqual(a, await schemaHashSuffix(root), 'a changed migration must resolve to a different database');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 // A class the config declares as a SQLite-backed Durable Object but that does not extend

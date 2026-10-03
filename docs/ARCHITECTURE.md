@@ -586,6 +586,51 @@ client leaving the broadcast set, and a reconnected client receiving the next wr
 negative control — removing the disconnect notification — reproduces the leak, so the check
 cannot quietly stop testing anything.
 
+**Generated SQL is only as correct as the runtime that executes it, and the in-process shim
+executed less of it than D1 does.** A scheduling product (a booking app) stores WHEN something
+is due, so the Worker writes a `due` column. Its INSERT was:
+
+```text
+INSERT INTO "booking" (…, owner_email, due) VALUES (?, ?, ?, ?, ?, ?, due)
+```
+
+The column list was right and the **VALUES** list wrote the column NAME again instead of a
+placeholder — invalid SQL that a real D1 rejects with `no such column: due at offset 114`,
+where offset 114 is exactly that second `due`. It had shipped since the `due` feature was
+added. Every local test passed because the in-memory D1 shim read the INSERT's column list and
+IGNORED the VALUES clause, mapping bound values positionally; the missing seventh value was
+simply `undefined`. The INSERT now uses a real placeholder (`DUE_PLACEHOLDER`) and binds the
+value, and the shim **validates** the VALUES clause — a bare identifier there is refused, so the
+same class of invalid SQL can never again pass a local run while failing on D1.
+
+Two more defects sat behind it:
+
+1. **The migration omitted a column the Worker wrote.** `0001_init.sql` was built from
+   `schemaSql({ table, auth, realtime })` — without the `due` flag — so it created the table
+   without the column. The deploy executor applies the migration to the real D1 *before*
+   deploying, so a database it provisioned would have been missing `due` even after the INSERT
+   was fixed. The migration now takes the same `due` flag as the Worker.
+2. **A column added later needs a fresh database, not an ALTER.** An already-provisioned D1
+   keeps its old shape — `CREATE TABLE IF NOT EXISTS` never alters an existing table, a
+   migration is applied only once, and D1's runtime `ALTER TABLE` is a silent no-op through the
+   Worker binding (a known D1 issue: the statement reports success and the column never appears;
+   a runtime `PRAGMA table_info` through the driver returns no rows either). The deploy executor
+   therefore derives the database NAME from a digest of the generated migrations
+   (`schemaHashSuffix`): a schema change deploys alongside a freshly migrated database whose
+   table matches the new Worker, and an unchanged schema reuses the same database so a repair
+   keeps its data.
+
+**A readiness probe that fires once is not a readiness probe.** `waitForDeployment` checked
+`/api/live` exactly once after `/api/health` answered. A freshly deployed Worker can still serve
+the PREVIOUS version's `/api/health` for a moment, so the single `/api/live` probe read `501`
+from the old Worker — the coffee-shop Worker had already deployed with `env.LIVE
+(LiveConnections)` in wrangler's own binding table, and the acceptance still recorded "no LIVE
+Durable Object binding". The probe now runs **inside** the poll, alongside the health probe, and
+a `501` is only conclusive once the whole window has elapsed; anything else (`426`, `101`, any
+non-`501`) proves the binding arrives. `tests/acceptance-identity.test.js` pins the retry with a
+live route that answers `501` twice before `426`, the migration/Worker column agreement, and the
+schema-scoped database name.
+
 ### PRODUCTION RUNTIME ACCEPTANCE — nothing is delivered that was not run
 
 Everything above proves the code is a working app. None of it proved the app **ran**. The

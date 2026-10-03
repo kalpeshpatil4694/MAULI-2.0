@@ -19,12 +19,12 @@
 //   node scripts/deploy-executor.mjs --once <file.json> # deploy one payload and print JSON
 
 import { createServer } from 'node:http';
-import { mkdtemp, writeFile, mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, mkdir, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve, relative, isAbsolute } from 'node:path';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 // Secrets must never appear in a deployment record, a log line or an API response.
 const WRANGLER_BIN = join(process.cwd(), 'node_modules', '.bin', 'wrangler');
@@ -129,6 +129,27 @@ async function provisionDatabase(root, databaseName) {
 }
 
 /**
+ * The database a generated project is bound to.
+ *
+ * The name carries a digest of the generated migrations, so a SCHEMA CHANGE deploys alongside a
+ * database whose schema actually matches it. This is not decoration: D1's runtime `ALTER TABLE`
+ * is a silent no-op through the Worker binding (a known D1 issue), a migration is applied only
+ * once, and `CREATE TABLE IF NOT EXISTS` never alters an existing table — so a database
+ * provisioned before a column was added cannot be repaired from inside the Worker. Versioning
+ * the name by the schema guarantees the deployed Worker's statements match the deployed table.
+ * Redeploying the SAME schema reuses the same database, so a repair keeps the founder's data.
+ */
+export async function schemaHashSuffix(root) {
+  const dir = join(root, 'migrations');
+  if (!existsSync(dir)) return '';
+  const names = (await readdir(dir)).filter((name) => name.endsWith('.sql')).sort();
+  if (!names.length) return '';
+  const parts = [];
+  for (const name of names) parts.push(await readFile(join(dir, name), 'utf8'));
+  return `-${createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 10)}`;
+}
+
+/**
  * Wait until the URL wrangler just created actually SERVES this project.
  *
  * `wrangler deploy` returning success means the version was uploaded, not that the edge is
@@ -175,10 +196,30 @@ export async function waitForDeployment(url, { requiresRealtime = false, attempt
       };
     } finally { clearTimeout(timer); }
   };
+  // The live route is checked INSIDE the same wait, not once after it. A Worker that has just
+  // been deployed can still be serving the PREVIOUS version's /api/health for a moment, so a
+  // one-shot /api/live probe read 501 from the old Worker and recorded a perfectly healthy
+  // deployment as a defect. A 501 here is only conclusive once the whole window has elapsed.
+  const probeLive = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const live = await fetch(`${String(url).replace(/\/+$/, '')}/api/live`, { signal: controller.signal });
+      return live.status;
+    } finally { clearTimeout(timer); }
+  };
   let last = null;
+  let liveStatus = null;
   for (let i = 0; i < attempts; i += 1) {
     last = await probe().catch((error) => ({ reached: false, status: 0, body: redact(error?.message ?? error) }));
-    if (last.reached) break;
+    if (last.reached) {
+      if (!requiresRealtime) break;
+      // Anything other than 501 proves the LIVE binding is present: 426 "expected a WebSocket
+      // upgrade" and 101 both come FROM the Durable Object. A `null` (socket error / timeout)
+      // is not treated as proof either way, so the wait keeps polling.
+      liveStatus = await probeLive().catch(() => null);
+      if (liveStatus !== null && liveStatus !== 501) break;
+    }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   if (!last?.reached) {
@@ -188,20 +229,13 @@ export async function waitForDeployment(url, { requiresRealtime = false, attempt
     };
   }
   if (!requiresRealtime) return { ready: true, status: last.status, service: last.service };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
-  try {
-    const live = await fetch(`${String(url).replace(/\/+$/, '')}/api/live`, { signal: controller.signal });
-    if (live.status === 501) {
-      return {
-        ready: false,
-        reason: 'the deployed Worker has no LIVE Durable Object binding, so a product whose specification requires live updates cannot work. This is a deployment defect (errorCategory "deployment"), not a product failure.'
-      };
-    }
-    return { ready: true, status: last.status, service: last.service, liveStatus: live.status };
-  } catch (error) {
-    return { ready: true, status: last.status, service: last.service, liveStatus: 0, liveWarning: redact(error?.message ?? error) };
-  } finally { clearTimeout(timer); }
+  if (liveStatus === 501) {
+    return {
+      ready: false,
+      reason: 'the deployed Worker has no LIVE Durable Object binding, so a product whose specification requires live updates cannot work. This is a deployment defect (errorCategory "deployment"), not a product failure.'
+    };
+  }
+  return { ready: true, status: last.status, service: last.service, liveStatus: liveStatus ?? 0 };
 }
 
 /**
@@ -245,7 +279,9 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
         // Founder commands see each other's rows. The name is deterministic so redeploys
         // of the same project reuse the same database and preserve its data.
         const workerName = `generated-${safe}`.slice(0, 63);
-        const databaseName = `generated-${safe}`.slice(0, 63);
+        // Schema-versioned: a changed migration means a fresh database whose table matches the
+        // new Worker, and an unchanged one reuses the existing database. See schemaHashSuffix().
+        const databaseName = `generated-${safe}${await schemaHashSuffix(root)}`.slice(0, 63);
         // Kept in scope for the deploy log below.
         const rewritten = config
           .replace(/("name"\s*:\s*)"[^"]*"/i, `$1"${workerName}"`)
@@ -261,6 +297,7 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
       if (!db.ok) {
         return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(db.message, ''), errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}` } };
       }
+      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: database ${dbName} ${db.reused ? 'reused' : 'created'}`);
     }
     // A newly provisioned remote D1 is empty. Generated Workers also create their schema
     // defensively on first request, but production acceptance must not depend on request-time
