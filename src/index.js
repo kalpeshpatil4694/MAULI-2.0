@@ -27,6 +27,7 @@ import { generateProjectDocs } from './docs-generator.js';
 import { searchAPIs, recommendAPIs, getAPICatalog, getAPICategories } from './public-apis.js';
 import { getMCPForAgent, getMCPByCapability, getAllMCPServers, getMCPCategories, suggestMCPForProject } from './mcp-integration.js';
 import { checkOllama, ollamaGenerate, ollamaChat, ollamaCode, getRecommendedModels, getModelForTask } from './ollama-ai.js';
+import { groqConfigured, groqModel } from './groq-ai.js';
 import { registerWebhook, updateWebhook, deleteWebhook, listWebhooks, triggerWebhooks, getWebhookDeliveries, retryDelivery } from './webhooks.js';
 import { createNotification, getNotifications, getUnreadCount, markRead, markAllRead, deleteNotification, clearAll, NOTIFICATION_TYPES } from './notifications.js';
 import { createVersion, getVersionHistory, getVersion, compareVersions, restoreVersion, getVersionStats } from './version-history.js';
@@ -417,9 +418,15 @@ export default { async fetch(request, env, ctx) { try {
     // stalled project is explained instead of mysterious.
     const aiStatus=store.get('ai_status','workers-ai')??(await d1Get(env,'ai_status','workers-ai').catch(()=>null));
     const aiAvailable=Boolean(env?.AI)&&aiStatus?.available!==false;
+    // Groq sits behind Workers AI, so with the daily allowance spent it is the provider that
+    // will actually answer next. A founder who has just set GROQ_API_KEY on the Worker needs
+    // to see that the secret arrived, and the model in use; only presence and a non-secret
+    // default are reported — the key itself never leaves the Worker.
+    const groqReady=groqConfigured(env);
+    const generationPath=(env?.AI&&aiAvailable)?'workers-ai':(groqReady?'groq':'deterministic-templates');
     return ok({service:'mauli2.0',// An account-level D1 write ceiling is not "healthy": every write is being rejected,
     // so nothing can progress and the founder needs to see that rather than a stall.
-    status:blocked?'degraded':(env?.AI&&!aiAvailable?'degraded':'healthy'),degraded:Boolean(blocked)||Boolean(env?.AI&&!aiAvailable),degradedReason:blocked?'d1-write-limit':(env?.AI&&!aiAvailable?(aiStatus?.exhausted?'workers-ai-allowance-exhausted':'workers-ai-unavailable'):null),persistence:hasD1(env),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),aiAvailable,aiReason:aiStatus?.reason??null,aiSince:aiStatus?.at??null,recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,stateReads:stateDiagnostics(),time:now()});}
+    status:blocked?'degraded':(env?.AI&&!aiAvailable?'degraded':'healthy'),degraded:Boolean(blocked)||Boolean(env?.AI&&!aiAvailable),degradedReason:blocked?'d1-write-limit':(env?.AI&&!aiAvailable?(aiStatus?.exhausted?'workers-ai-allowance-exhausted':'workers-ai-unavailable'):null),persistence:hasD1(env),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),aiAvailable,aiReason:aiStatus?.reason??null,aiSince:aiStatus?.at??null,groqConfigured:groqReady,groqModel:groqReady?groqModel(env):null,generationPath,recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,stateReads:stateDiagnostics(),time:now()});}
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   // The Integrations page used to render six hardcoded cards that always said "Configured" /
   // "Connected" / "Bound" / "Deployed" and never asked the Worker anything — so an unset
@@ -433,6 +440,7 @@ export default { async fetch(request, env, ctx) { try {
     const founder=founderAuthStatus(env);
     // Both catalogs are objects keyed by id / category, not arrays — calling .length on them
     // read "undefined" and the page printed "undefined in catalog".
+    const groqReady=groqConfigured(env);
     const mcpServers=Object.values(getAllMCPServers());
     const mcpCategories=Object.keys(getMCPCategories());
     const apiCatalog=Object.values(getAPICatalog()).flat();
@@ -448,6 +456,10 @@ export default { async fetch(request, env, ctx) { try {
         ok:Boolean(env?.AI)&&aiStatus?.available!==false,status:!env?.AI?'missing':aiStatus?.available===false?'warning':'connected',
         statusLabel:!env?.AI?'Not bound':aiStatus?.available===false?'Unavailable':'Bound',
         detail:!env?.AI?'No AI binding on this Worker':aiStatus?.available===false?String(aiStatus?.reason??'generation is failing'):'Generation requests accepted'},
+      {id:'groq',name:'Groq',icon:'⚡',category:'LLM',hint:'Fallback LLM that keeps generation working when Workers AI is out of allowance. Set GROQ_API_KEY in Cloudflare → Workers → Settings → Variables.',
+        ok:groqReady,status:groqReady?'connected':'missing',
+        statusLabel:groqReady?'Configured':'No key',
+        detail:groqReady?'A key is set, so '+groqModel(env)+' serves the workers-ai → groq → templates chain':'GROQ_API_KEY and MAULI_GROQ_KEY are both unset, so a spent Workers AI allowance falls straight to templates'},
       {id:'do',name:'Durable Objects',icon:'🧱',category:'Runtime',hint:'Used for project execution and live channels.',
         ok:Boolean(env?.MAULI_PROJECT_EXECUTOR),status:env?.MAULI_PROJECT_EXECUTOR?'connected':'missing',
         statusLabel:env?.MAULI_PROJECT_EXECUTOR?'Bound':'Not bound',
