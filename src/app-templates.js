@@ -560,7 +560,9 @@ var TEMPLATE_DOMAINS = {
   'calendar-app': ['calendar', 'schedule', 'booking', 'appointment', 'agenda'],
   'game-app': ['game', 'games', 'puzzle', 'arcade', 'chess', 'tic', 'sudoku'],
   'web-app': ['app', 'application', 'web', 'tool', 'utility'],
-  portfolio: ['portfolio', 'resume', 'cv', 'landing']
+  portfolio: ['portfolio', 'resume', 'cv', 'landing'],
+  'event-passes': ['garba', 'navratri', 'dandiya', 'pass', 'passes', 'ticket', 'tickets', 'barcode', 'scanner', 'scan', 'entry', 'exit', 'attendee', 'attendees', 'gate'],
+  'quote-generator': ['quote', 'quotes', 'quotation', 'quotations', 'estimate', 'estimates', 'proposal', 'proposals']
 };
 
 // Generic words appear in almost every request. They may choose a template when nothing
@@ -570,8 +572,8 @@ var WEAK_DOMAIN_WORDS = new Set(['app', 'application', 'web', 'tool', 'utility',
   'track', 'board', 'column', 'event', 'events', 'personal', 'site', 'mobile', 'desktop', 'online']);
 
 var ROUTING_PRIORITY = ['wifi-security', 'medicine-tracker', 'habit-tracker', 'book-logger', 'notes-app', 'ecommerce', 'video-recorder', 'weather-app', 'calculator', 'todo-app',
-  'chat-app', 'music-player', 'invoice-generator', 'fitness-tracker', 'recipe-app', 'survey-builder',
-  'timer-app', 'bookmark-manager', 'expense-tracker', 'password-manager', 'kanban-board', 'calendar-app',
+  'chat-app', 'music-player', 'quote-generator', 'invoice-generator', 'fitness-tracker', 'recipe-app', 'survey-builder',
+  'timer-app', 'bookmark-manager', 'expense-tracker', 'password-manager', 'kanban-board', 'event-passes', 'calendar-app',
   'game-app', 'portfolio', 'web-app'];
 
 function scoreTemplates(objective) {
@@ -630,7 +632,9 @@ var GENERATORS = {
   'expense-tracker': function(o) { return { summary: 'Expense tracker with categories, charts, and budget alerts.', files: listAppFiles(o, 'Expense Tracker', 'mauli-expense-tracker'), tests: ['Add expense', 'Category filter', 'Budget alerts'], notes: ['Pie charts', 'Monthly summary'] }; },
   'password-manager': function(o) { return { summary: 'Password manager with generation, categories, and master password.', files: listAppFiles(o, 'Password Vault', 'mauli-password-manager'), tests: ['Add password', 'Generate password', 'Search entries'], notes: ['Client-side only', 'No server needed'] }; },
   'kanban-board': function(o) { return { summary: 'Kanban board with drag-and-drop columns and card management.', files: listAppFiles(o, 'Kanban Board', 'mauli-kanban-board'), tests: ['Move cards', 'Add card', 'Column management'], notes: ['Drag-and-drop', 'LocalStorage'] }; },
-  'calendar-app': function(o) { return { summary: 'Calendar app with events, reminders, and month/week views.', files: listAppFiles(o, 'Calendar', 'mauli-calendar-app'), tests: ['Add event', 'Navigate months', 'View toggle'], notes: ['Responsive', 'LocalStorage'] }; }
+  'calendar-app': function(o) { return { summary: 'Calendar app with events, reminders, and month/week views.', files: listAppFiles(o, 'Calendar', 'mauli-calendar-app'), tests: ['Add event', 'Navigate months', 'View toggle'], notes: ['Responsive', 'LocalStorage'] }; },
+  'event-passes': function(o) { return { summary: 'Event pass management with issued passes, entry/exit scanning and a live inside count.', files: eventPassesFiles(o), tests: ['Issue a pass', 'Scan records an entry', 'Scan again records an exit', 'Inside count updates', 'LocalStorage saves'], notes: ['Gate scanning of your own passes', 'Entry and exit from one scan field', 'LocalStorage persistence'] }; },
+  'quote-generator': function(o) { return { summary: 'Quote generator with line items, a tax rate and a computed total that persists.', files: quoteGeneratorFiles(o), tests: ['Add a line item', 'Subtotal and tax compute', 'Save a quote', 'LocalStorage saves'], notes: ['Line items with quantity and price', 'Configurable tax rate', 'LocalStorage persistence'] }; }
 };
 
 // ── Functional fallbacks (2026-09-29) ──────────────────────────────────────────────
@@ -744,6 +748,138 @@ function portfolioFiles(objective) {
     "show();"
   ].join('');
   return [{ path: 'www/index.html', content: h(name, body, css, js) }];
+}
+
+// ── Event passes (entry/exit gate scanning) ───────────────────────────────────────
+// The founder who asked for "an event management app for garba passes with entry and exit
+// barcode scanner functionality" got the generic list fallback: routing matched no domain,
+// so the preview was a renamed to-do list with no pass, no gate and no scan. A pass at a
+// gate is its own product — issue it, scan it in, scan it out, and always know who is
+// currently inside — so it has a real template now instead of the placeholder.
+function eventPassesFiles(objective) {
+  var title = String(objective || 'Event Passes').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="mauli-pass-summary" class="cnt"></p></header>';
+  body += '<div class="ir"><input id="mauli-pass-name" class="inp" placeholder="Attendee name..." onkeydown="if(event.key===&#39;Enter&#39;)addPass()">';
+  body += '<select id="mauli-pass-type" class="inp sel"><option value="Full Night">Full Night</option><option value="Single Entry">Single Entry</option><option value="VIP">VIP</option></select>';
+  body += '<button class="btn" onclick="addPass()">Issue pass</button></div>';
+  body += '<div class="ir"><input id="mauli-pass-scan" class="inp wide" placeholder="Scan or type a pass code (PASS-...)" onkeydown="if(event.key===&#39;Enter&#39;)scanPass()">';
+  body += '<button class="btn" onclick="scanPass()">Scan entry / exit</button></div>';
+  body += '<p class="hint">A scan records entry when the holder is outside and exit when the holder is inside. Both the inside count and the scan log read the same passes.</p>';
+  body += '<div class="stats"><div class="stat"><span class="k">Passes</span><span class="v" id="mauli-pass-total">0</span></div>';
+  body += '<div class="stat"><span class="k">Inside now</span><span class="v" id="mauli-pass-inside">0</span></div>';
+  body += '<div class="stat"><span class="k">Entries</span><span class="v" id="mauli-pass-entries">0</span></div></div>';
+  body += '<div id="mauli-pass-list" class="li"></div>';
+  body += '<h2 class="sh">Scan log</h2><div id="mauli-scan-log" class="log"></div>';
+  body += '<div class="bar"><button class="btn bo" onclick="clearPasses()">Clear all</button></div></div>';
+  var css = '.app{max-width:620px;margin:0 auto;padding:16px}.hd{text-align:center;padding:10px 0}'
+    + '.hd h1{font-size:22px;color:var(--accent)}.cnt{font-size:12px;color:var(--text-muted);margin-top:6px}'
+    + '.ir{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}'
+    + '.inp{flex:1;min-width:130px;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px}'
+    + '.wide{flex:2 1 200px}.sel{flex:0 1 150px}'
+    + '.btn{padding:11px 16px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}'
+    + '.bo{background:transparent;border:1px solid var(--border);color:var(--text)}'
+    + '.hint{font-size:11px;color:var(--text-muted);margin:0 0 12px}'
+    + '.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}'
+    + '.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center}'
+    + '.k{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}'
+    + '.v{font-size:20px;font-weight:700;color:var(--accent)}'
+    + '.sh{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:16px 0 8px}'
+    + '.li{display:flex;flex-direction:column;gap:8px}'
+    + '.pass{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px}'
+    + '.pass-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}'
+    + '.nm{font-weight:600;font-size:14px;flex:1;min-width:120px}'
+    + '.kind{font-size:11px;color:var(--accent);border:1px solid var(--border);border-radius:999px;padding:2px 8px}'
+    + '.code{font-family:monospace;font-size:12px;color:var(--text-muted)}'
+    + '.state{font-size:11px;font-weight:700;color:var(--text-muted)}.state.in{color:var(--green)}'
+    + '.dl{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px}'
+    + '.em{text-align:center;padding:22px;color:var(--text-muted);font-size:13px}'
+    + '.log{display:flex;flex-direction:column;gap:6px}'
+    + '.sd{font-size:12px;color:var(--text-muted);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px}'
+    + '.sa{font-weight:700;color:var(--accent)}'
+    + '.bar{display:flex;justify-content:center;margin-top:14px}';
+  var js = [
+    `var PASS_KEY='mauli-event-passes',PASSES=[],SCANS=[],LAST_ID=0;`,
+    `try{var saved=JSON.parse(localStorage.getItem(PASS_KEY)||'null');if(saved){PASSES=saved.passes||[];SCANS=saved.scans||[]}}catch(e){PASSES=[];SCANS=[]}`,
+    `function savePasses(){try{localStorage.setItem(PASS_KEY,JSON.stringify({passes:PASSES,scans:SCANS}))}catch(e){}}`,
+    `function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}`,
+    `function nextId(){var n=Date.now();if(n<=LAST_ID)n=LAST_ID+1;LAST_ID=n;return n}`,
+    `function nextCode(){return 'PASS-'+String(1000+PASSES.length+1)}`,
+    `function addPass(){var name=document.getElementById('mauli-pass-name');var v=name.value.trim();if(!v)return;PASSES.push({id:nextId(),attendee:v,passType:document.getElementById('mauli-pass-type').value||'General',code:nextCode(),inside:false});name.value='';savePasses();renderPasses()}`,
+    `function findPass(code){for(var i=0;i<PASSES.length;i++){if(String(PASSES[i].code).toLowerCase()===String(code).toLowerCase())return PASSES[i]}return null}`,
+    `function scanPass(){var el=document.getElementById('mauli-pass-scan');var code=el.value.trim();if(!code)return;var p=findPass(code);if(!p){document.getElementById('mauli-pass-summary').textContent='No pass found for '+code;return}p.inside=!p.inside;SCANS.unshift({code:p.code,attendee:p.attendee,action:p.inside?'entry':'exit',at:new Date().toISOString()});if(SCANS.length>50)SCANS.length=50;el.value='';savePasses();renderPasses()}`,
+    `function deletePass(id){PASSES=PASSES.filter(function(p){return p.id!==id});savePasses();renderPasses()}`,
+    `function clearPasses(){PASSES=[];SCANS=[];savePasses();renderPasses()}`,
+    `function renderPasses(){var list=document.getElementById('mauli-pass-list'),html='';`,
+    `for(var i=0;i<PASSES.length;i++){var p=PASSES[i];html+='<div class=pass><div class=pass-top><span class=nm>'+esc(p.attendee)+'</span><span class=kind>'+esc(p.passType)+'</span><span class=code>'+esc(p.code)+'</span><span class="state'+(p.inside?' in':'')+'">'+(p.inside?'INSIDE':'OUTSIDE')+'</span><button class=dl onclick="deletePass('+p.id+')">&times;</button></div></div>'}`,
+    `list.innerHTML=html||'<div class=em>No passes issued yet - issue your first one.</div>';`,
+    `var inside=PASSES.filter(function(p){return p.inside}).length;`,
+    `var entries=SCANS.filter(function(s){return s.action==='entry'}).length;`,
+    `document.getElementById('mauli-pass-total').textContent=String(PASSES.length);`,
+    `document.getElementById('mauli-pass-inside').textContent=String(inside);`,
+    `document.getElementById('mauli-pass-entries').textContent=String(entries);`,
+    `document.getElementById('mauli-scan-log').innerHTML=SCANS.map(function(s){return '<div class=sd><span class=sa>'+esc(s.action).toUpperCase()+'</span> '+esc(s.attendee)+' &middot; '+esc(s.code)+' &middot; '+esc(String(s.at).slice(11,19))+'</div>'}).join('')||'<div class=sd>No scans yet</div>';`,
+    `document.getElementById('mauli-pass-summary').innerHTML=PASSES.length?(PASSES.length+' passes issued &middot; '+inside+' inside now &middot; '+entries+' entries'):'No passes yet'}`,
+    `renderPasses()`
+  ].join('\n');
+  return [{ path: 'www/index.html', content: h(title, body, css, js) }];
+}
+
+// ── Quote generator (line items, tax, total) ──────────────────────────────────────
+// "Design and develop a quote generator software" matched no domain and fell through to
+// the generic list fallback, so the preview was a to-do list. A quote is a set of line
+// items, a tax rate and a total a customer can be handed — so it gets its own template.
+function quoteGeneratorFiles(objective) {
+  var title = String(objective || 'Quote Generator').slice(0, 60);
+  var body = '<div class="app"><header class="hd"><h1>' + title + '</h1><p id="mauli-quote-summary" class="cnt"></p></header>';
+  body += '<div class="ir"><input id="mauli-customer" class="inp wide" placeholder="Customer name...">';
+  body += '<label class="taxlabel">Tax %<input id="mauli-tax" class="inp tax" type="number" min="0" max="100" step="1" value="18" oninput="renderQuote()"></label></div>';
+  body += '<div class="ir"><input id="mauli-line-desc" class="inp wide" placeholder="Item or service..." onkeydown="if(event.key===&#39;Enter&#39;)addLine()">';
+  body += '<input id="mauli-line-qty" class="inp num" type="number" min="1" step="1" value="1">';
+  body += '<input id="mauli-line-price" class="inp num" type="number" min="0" step="0.01" value="0">';
+  body += '<button class="btn" onclick="addLine()">Add line</button></div>';
+  body += '<div id="mauli-line-list" class="li"></div>';
+  body += '<div class="totals"><div class="tr"><span>Subtotal</span><span id="mauli-subtotal">0.00</span></div>';
+  body += '<div class="tr"><span>Tax</span><span id="mauli-tax-total">0.00</span></div>';
+  body += '<div class="tr big"><span>Total</span><span id="mauli-grand-total">0.00</span></div></div>';
+  body += '<div class="bar"><button class="btn" onclick="saveQuote()">Save quote</button><button class="btn bo" onclick="clearQuotes()">Clear all</button></div>';
+  body += '<h2 class="sh">Saved quotes</h2><div id="mauli-saved-list" class="li"></div></div>';
+  var css = '.app{max-width:620px;margin:0 auto;padding:16px}.hd{text-align:center;padding:10px 0}'
+    + '.hd h1{font-size:22px;color:var(--accent)}.cnt{font-size:12px;color:var(--text-muted);margin-top:6px}'
+    + '.ir{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center}'
+    + '.inp{flex:1;min-width:120px;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px}'
+    + '.wide{flex:2 1 190px}.num{flex:0 1 90px;min-width:80px}.tax{flex:0 1 90px;min-width:70px}'
+    + '.taxlabel{display:flex;align-items:center;gap:6px;font-size:11px;text-transform:uppercase;color:var(--text-muted)}'
+    + '.btn{padding:11px 16px;border:none;border-radius:8px;background:var(--accent);color:#000;font-weight:600;cursor:pointer;font-size:13px}'
+    + '.bo{background:transparent;border:1px solid var(--border);color:var(--text)}'
+    + '.sh{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:18px 0 8px}'
+    + '.li{display:flex;flex-direction:column;gap:8px}'
+    + '.line,.quote{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:8px}'
+    + '.ld,.qc{flex:1;font-size:14px;font-weight:600}.lq,.qa{font-size:12px;color:var(--text-muted)}.lt,.qt{font-size:13px;color:var(--accent);font-weight:600}'
+    + '.dl{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px}'
+    + '.em{text-align:center;padding:22px;color:var(--text-muted);font-size:13px}'
+    + '.totals{margin-top:12px;border:1px solid var(--border);border-radius:10px;padding:12px}'
+    + '.tr{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--text-muted)}'
+    + '.tr.big{font-size:16px;font-weight:700;color:var(--text);border-top:1px solid var(--border);margin-top:6px;padding-top:8px}'
+    + '.bar{display:flex;gap:8px;justify-content:center;margin-top:14px}';
+  var js = [
+    `var QUOTE_KEY='mauli-quotes',QUOTES=[],LINES=[];`,
+    `try{QUOTES=JSON.parse(localStorage.getItem(QUOTE_KEY)||'[]')}catch(e){QUOTES=[]}`,
+    `function saveQuotes(){try{localStorage.setItem(QUOTE_KEY,JSON.stringify(QUOTES))}catch(e){}}`,
+    `function esc(s){return String(s).replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;'})}`,
+    `function money(n){return Number(n||0).toFixed(2)}`,
+    `function addLine(){var d=document.getElementById('mauli-line-desc'),q=document.getElementById('mauli-line-qty'),p=document.getElementById('mauli-line-price');var v=d.value.trim();if(!v)return;var qty=Math.max(1,Math.round(Number(q.value)||1));var price=Math.max(0,Number(p.value)||0);LINES.push({desc:v,qty:qty,price:price});d.value='';q.value='1';p.value='0';renderQuote()}`,
+    `function removeLine(i){LINES.splice(i,1);renderQuote()}`,
+    `function totals(){var sub=0;for(var i=0;i<LINES.length;i++)sub+=LINES[i].qty*LINES[i].price;var rate=Math.max(0,Math.min(100,Number(document.getElementById('mauli-tax').value)||0));var tax=sub*rate/100;return {sub:sub,tax:tax,total:sub+tax}}`,
+    `function renderQuote(){var t=totals();document.getElementById('mauli-subtotal').textContent=money(t.sub);document.getElementById('mauli-tax-total').textContent=money(t.tax);document.getElementById('mauli-grand-total').textContent=money(t.total);`,
+    `document.getElementById('mauli-line-list').innerHTML=LINES.map(function(l,i){return '<div class=line><span class=ld>'+esc(l.desc)+'</span><span class=lq>'+l.qty+' x '+money(l.price)+'</span><span class=lt>'+money(l.qty*l.price)+'</span><button class=dl onclick="removeLine('+i+')">&times;</button></div>'}).join('')||'<div class=em>No line items yet - add the first one.</div>';`,
+    `document.getElementById('mauli-quote-summary').textContent=LINES.length?(LINES.length+' line items, total '+money(t.total)):'New quote'}`,
+    `function saveQuote(){var t=totals();if(!LINES.length)return;var cust=document.getElementById('mauli-customer').value.trim()||'Unnamed customer';QUOTES.unshift({id:Date.now(),customer:cust,total:t.total,at:new Date().toISOString()});LINES=[];saveQuotes();renderQuote();renderSaved()}`,
+    `function deleteQuote(id){QUOTES=QUOTES.filter(function(q){return q.id!==id});saveQuotes();renderSaved()}`,
+    `function clearQuotes(){QUOTES=[];LINES=[];saveQuotes();renderQuote();renderSaved()}`,
+    `function renderSaved(){document.getElementById('mauli-saved-list').innerHTML=QUOTES.map(function(q){return '<div class=quote><span class=qc>'+esc(q.customer)+'</span><span class=qa>'+esc(String(q.at).slice(0,10))+'</span><span class=qt>'+money(q.total)+'</span><button class=dl onclick="deleteQuote('+q.id+')">&times;</button></div>'}).join('')||'<div class=em>No saved quotes yet</div>'}`,
+    `renderQuote();renderSaved()`
+  ].join('\n');
+  return [{ path: 'www/index.html', content: h(title, body, css, js) }];
 }
 
 // Rebind the two fake generators and add the website case. The type-specific placeholder
