@@ -1,6 +1,7 @@
 import './functional-code-executor.js';
 import { withDeadline } from './core.js';
 import { store } from './store.js';
+import { groqGenerate, groqConfigured } from './groq-ai.js';
 
 const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 // Neuron cost is why apps arrived "built but not right". The chat model above bills
@@ -96,7 +97,50 @@ export function noteAiFailure(env, error) {
     store.addEvent('ai.unavailable', { exhausted, reason });
   } catch (_) { /* never let diagnostics mask the real error */ }
 }
-export async function generateAI(env, messages, options = {}) { switch (getProvider(env, options)) { case 'cloudflare': return cloudflareGenerate(env, messages, options); default: throw new Error(`Unsupported AI provider: ${getProvider(env, options)}`); } }
+
+// The fallback provider can fail for its own reasons (bad key, rate limit, network). Recording
+// it as its own row keeps the Workers AI verdict intact while making the second failure
+// visible, instead of the founder only ever seeing the first provider's error.
+export function noteGroqFailure(env, error) {
+  const message = String(error?.message ?? error ?? '');
+  const reason = message.slice(0, 200);
+  try {
+    store.put('ai_status', {
+      id: 'groq',
+      available: false,
+      exhausted: /rate limit|429/i.test(message),
+      reason,
+      at: new Date().toISOString()
+    });
+    store.addEvent('ai.unavailable', { provider: 'groq', reason });
+  } catch (_) { /* never let diagnostics mask the real error */ }
+}
+
+// Groq is the fallback provider behind Workers AI. The chain the product promises is
+// Workers AI → Groq → deterministic templates: the templates live in the code executor, so
+// this function's job is to try Cloudflare, then Groq, and only then let the failure through
+// for the executor's template fallback to catch. An explicit `options.provider` still wins —
+// a caller who names groq gets groq, and a caller who names an unknown provider is refused.
+export async function generateAI(env, messages, options = {}) {
+  const provider = getProvider(env, options);
+  if (provider === 'groq') return groqGenerate(env, messages, options);
+  if (provider !== 'cloudflare') throw new Error(`Unsupported AI provider: ${provider}`);
+  try {
+    return await cloudflareGenerate(env, messages, options);
+  } catch (error) {
+    // A missing key is a configuration state, not an outage: stay silent and let the
+    // original Workers AI error (quota / binding) reach the template fallback.
+    if (!groqConfigured(env)) throw error;
+    try {
+      return await groqGenerate(env, messages, options);
+    } catch (groqError) {
+      noteGroqFailure(env, groqError);
+      // Report the provider the caller actually selected first — Workers AI — since that is
+      // the allowance the founder will act on. The Groq failure is recorded as an event.
+      throw error;
+    }
+  }
+}
 export async function generate(env, messages, options = {}) { return generateAI(env, messages, options); }
 export async function reason(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 900 }); }
 export async function code(env, messages, options = {}) { return generateAI(env, messages, { ...options, model: resolveCodeModel(env, options), fallbackModel: env?.MAULI_MODEL ?? DEFAULT_MODEL, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 1200 }); }
@@ -126,5 +170,5 @@ export async function interpretWithAI(env, command, options = {}) {
   const raw=await reason(env,[{role:'system',content:system},{role:'user',content:String(command)}],options); const parsed=extractJson(raw);
   if(!parsed)return {objective:String(command),requirements:[],capabilities:[],risks:['AI planning response was not valid JSON'],acceptanceCriteria:[],raw}; return normalizePlan(parsed,command);
 }
-export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), codeModel:resolveCodeModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'deterministic-free-planner', quota:aiQuotaSnapshot(env) }; }
+export function getAIConfig(env) { return { provider:getProvider(env), model:resolveModel(env), codeModel:resolveCodeModel(env), architecture:'MAULI Intelligence Bus', upgradeable:true, fallback:'workers-ai -> groq -> deterministic-free-planner', groqConfigured:groqConfigured(env), quota:aiQuotaSnapshot(env) }; }
 export { AI_DAILY_REQUEST_LIMIT, AI_SAFE_REQUEST_LIMIT };
