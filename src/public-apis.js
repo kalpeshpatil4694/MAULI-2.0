@@ -26,7 +26,9 @@ const API_CATALOG = {
     { name: 'Mapbox', url: 'https://api.mapbox.com', auth: 'Access Token', free: true, category: 'Maps' }
   ],
   ai: [
-    { name: 'Hugging Face', url: 'https://api-inference.huggingface.co/models', auth: 'API Key', free: true, category: 'AI' },
+    // The legacy host api-inference.huggingface.co was retired: it no longer resolves in DNS,
+    // so the entry's link was dead. Inference now goes through the OpenAI-compatible router.
+    { name: 'Hugging Face', url: 'https://router.huggingface.co/v1', auth: 'API Key', free: true, category: 'AI' },
     { name: 'Cohere', url: 'https://api.cohere.ai/v1', auth: 'API Key', free: true, category: 'AI' },
     { name: 'Groq', url: 'https://api.groq.com/openai/v1', auth: 'API Key', free: true, category: 'AI' }
   ],
@@ -43,7 +45,10 @@ const API_CATALOG = {
     { name: 'iLovePDF', url: 'https://api.ilovepdf.com/v1', auth: 'API Key', free: true, category: 'PDF' }
   ],
   chat: [
-    { name: 'Chatbot Arena', url: 'https://chat.lmsys.org/api', auth: 'None', free: true, category: 'Chat' }
+    // chat.lmsys.org no longer resolves (the project moved to lmarena.ai and publishes no
+    // simple public API), so this listed an endpoint that could never answer. A real free
+    // chat/LLM API replaces it.
+    { name: 'Google Gemini', url: 'https://generativelanguage.googleapis.com/v1beta', auth: 'API Key', free: true, category: 'Chat' }
   ],
   database: [
     { name: 'Supabase', url: 'https://api.supabase.com', auth: 'Service Key', free: true, category: 'Database' },
@@ -61,7 +66,9 @@ const API_CATALOG = {
   ],
   auth: [
     { name: 'Clerk', url: 'https://api.clerk.com/v1', auth: 'API Key', free: true, category: 'Auth' },
-    { name: 'Auth0', url: 'https://YOUR_DOMAIN.auth0.com/api/v2', auth: 'Token', free: true, category: 'Auth' }
+    // Auth0's Management API base is per-tenant, so a literal "YOUR_DOMAIN" placeholder was
+    // never a real endpoint. The catalog links to the real API reference instead.
+    { name: 'Auth0', url: 'https://auth0.com/docs/api/management/v2', auth: 'Token', free: true, category: 'Auth' }
   ],
   monitoring: [
     { name: 'Sentry', url: 'https://sentry.io/api/0', auth: 'Auth Token', free: true, category: 'Monitoring' },

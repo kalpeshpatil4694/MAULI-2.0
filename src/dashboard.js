@@ -378,7 +378,7 @@ select.inp{cursor:pointer}
           <div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="apiQ" placeholder="Search weather, maps, email..." style="flex:1" onkeydown="if(event.key==='Enter')searchApiCatalog()"><button class="btn btn-p" onclick="searchApiCatalog()">🔍 Search</button></div>
           <div id="apiRes" style="max-height:420px;overflow-y:auto"><div style="color:var(--text2);padding:10px">Loading API catalog...</div></div>
         </div>
-        <div class="card"><div class="card-h"><div class="card-t">🔌 MCP Servers</div></div><div id="mcpOut" style="max-height:300px;overflow-y:auto"></div></div>
+        <div class="card"><div class="card-h"><div class="card-t">🔌 MCP Servers</div></div><div style="font-size:10px;color:var(--text2);padding:2px 0 8px">MCP = Model Context Protocol — agents ला callable tools (files, databases, browser) देण्याचा standard मार्ग. खाली MAULI जे MCP servers वापरू शकते ते आहेत.</div><div id="mcpOut" style="max-height:300px;overflow-y:auto"></div></div>
       </div>
       <!-- USAGE / LIMITS -->
       <div class="page" id="pg-usage">
@@ -1099,8 +1099,14 @@ async function bcastMsg(){const b=$('msgBody').value.trim();if(!b){toast('Enter 
 // ─── API EXPLORER ───
 async function searchApi(){const q=$('apiQ').value.trim();if(!q){toast('Enter query','err');return}try{const r=await api('/api/apis/search?q='+encodeURIComponent(q));const apis=r.apis||r.results||r||[];let h='';for(const a of(Array.isArray(apis)?apis:[]))h+='<div style="padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">'+esc(a.name||a.title||'—')+'</b><span class="badge badge-g">'+esc(a.category||'API')+'</span></div><div style="font-size:10px;color:var(--text2)">'+esc(a.description||'')+'</div>'+(a.url?'<a href="'+esc(a.url)+'" target="_blank" style="font-size:10px">🔗 Docs</a>':'')+'</div>';
   $('apiRes').innerHTML=h||'<div style="color:var(--text2)">No results</div>'}catch(e){$('apiRes').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
-async function loadMcp(){try{const r=await api('/api/mcp/servers');const srv=r.servers||r||[];let h='';for(const s of(Array.isArray(srv)?srv:[]))h+='<div style="padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">🔌 '+esc(s.name||s.id||'—')+'</b><span class="badge badge-a">'+esc(s.category||'MCP')+'</span></div><div style="font-size:10px;color:var(--text2)">'+esc(s.description||'')+'</div></div>';
-  $('mcpOut').innerHTML=h||'<div style="color:var(--text2)">No servers</div>'}catch(e){$('mcpOut').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
+async function loadMcp(){try{const r=await api('/api/mcp/servers');
+  // The endpoint ships the servers as an object keyed by slug, NOT an array — /api/integrations
+  // already wraps it in Object.values for exactly this reason. Reading it as an array iterated
+  // nothing and the MCP card stayed permanently empty. Accept either shape.
+  const raw=r.servers||r;const srv=Array.isArray(raw)?raw:Object.values(raw||{}).filter(s=>s&&typeof s==='object');
+  let h=srv.length?('<div style="font-size:10px;color:var(--text3);padding:2px 0 8px">'+srv.length+' MCP server'+(srv.length===1?'':'s')+'</div>'):'<div style="color:var(--text2);padding:2px 0">No MCP servers</div>';
+  for(const s of srv)h+='<div style="padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">🔌 '+esc(s.name||s.id||'—')+'</b><span class="badge badge-a">'+esc(s.category||'MCP')+'</span></div><div style="font-size:10px;color:var(--text2)">'+esc(s.description||'')+'</div></div>';
+  $('mcpOut').innerHTML=h}catch(e){$('mcpOut').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
 
 // ─── DOWNLOADS ───
 function loadDl(){let h='';for(const p of S.projects){const hasCode=S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');
