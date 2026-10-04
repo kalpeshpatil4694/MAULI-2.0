@@ -1,4 +1,5 @@
 import { code } from './ai.js';
+import { groqConfigured } from './groq-ai.js';
 import { registerArtifact } from './artifacts.js';
 import { registerExecutor, grantExecutor } from './executor-registry.js';
 import { generateFromTemplate } from './app-templates.js';
@@ -331,8 +332,10 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   const acceptance = Array.isArray(task.acceptance) ? task.acceptance : [];
   const webTask = isWebTask(task);
 
-  // If no AI binding, use templates directly
-  if (!runtimeEnv?.AI?.run) {
+  // With neither a Workers AI binding nor a Groq key there is no model to call, so use the
+  // deterministic architecture/templates directly. A Groq-only environment is different: it
+  // still has a live model provider, so it must reach the generation path below.
+  if (!runtimeEnv?.AI?.run && !groqConfigured(runtimeEnv)) {
     const architectural = generateFromArchitecture({ task, agentId, objective, acceptance });
     if (architectural?.error) throw new Error(architectural.error);
     if (architectural?.artifactId) return architectural;
