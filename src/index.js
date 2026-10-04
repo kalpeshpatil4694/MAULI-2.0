@@ -431,8 +431,12 @@ export default { async fetch(request, env, ctx) { try {
     const d1Blocked=d1WriteBlockedSnapshot(env);
     const aiStatus=store.get('ai_status','workers-ai')??(await d1Get(env,'ai_status','workers-ai').catch(()=>null));
     const founder=founderAuthStatus(env);
-    const mcpServers=getAllMCPServers();
-    const apiCatalog=getAPICatalog();
+    // Both catalogs are objects keyed by id / category, not arrays — calling .length on them
+    // read "undefined" and the page printed "undefined in catalog".
+    const mcpServers=Object.values(getAllMCPServers());
+    const mcpCategories=Object.keys(getMCPCategories());
+    const apiCatalog=Object.values(getAPICatalog()).flat();
+    const apiCategories=getAPICategories();
     const rows=[
       {id:'workers',name:'Cloudflare Workers',icon:'☁️',category:'Hosting',hint:'This dashboard is being served by it.',
         ok:true,status:'connected',statusLabel:'Live',detail:'Serving this dashboard over '+String(env?.ENVIRONMENT??'production')},
@@ -463,11 +467,11 @@ export default { async fetch(request, env, ctx) { try {
       {id:'mcp',name:'MCP Servers',icon:'🔌',category:'Agent tools',hint:'Tool servers MAULI can hand to an agent.',
         ok:mcpServers.length>0,status:mcpServers.length>0?'connected':'warning',
         statusLabel:mcpServers.length+' in catalog',
-        detail:mcpServers.length?getMCPCategories().length+' categor'+(getMCPCategories().length===1?'y':'ies')+' available to agents':'No MCP servers are registered'},
+        detail:mcpServers.length?mcpCategories.length+' categor'+(mcpCategories.length===1?'y':'ies')+' available to agents':'No MCP servers are registered'},
       {id:'apis',name:'Public APIs',icon:'🧾',category:'Agent tools',hint:'MAULI can call these when a project needs them.',
         ok:apiCatalog.length>0,status:apiCatalog.length>0?'connected':'warning',
         statusLabel:apiCatalog.length+' in catalog',
-        detail:apiCatalog.length?getAPICategories().length+' categor'+(getAPICategories().length===1?'y':'ies')+' available':'No public APIs are registered'},
+        detail:apiCatalog.length?apiCategories.length+' categor'+(apiCategories.length===1?'y':'ies')+' available':'No public APIs are registered'},
       {id:'founder',name:'Founder Key',icon:'🔑',category:'Access',hint:'Set MAULI_FOUNDER_KEY so chat and protected routes need it.',
         ok:founder.enforced,status:founder.keyless?'warning':founder.keyConfigured?'connected':'missing',
         statusLabel:founder.keyless?'Keyless mode':founder.keyConfigured?'Enforced':'Not configured',
