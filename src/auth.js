@@ -23,13 +23,20 @@ function cleanupBuckets() {
   }
 }
 
-function clientKey(request) {
-  return request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for') ?? 'unknown';
+// A bucket is keyed by client AND scope. It used to be keyed by client alone, so the whole
+// dashboard and the whole chat shared one counter: /api/state's generous 20/min allowance
+// incremented the same `bucket.count` that /api/chat then compared against its limit of 5.
+// Navigating a few pages and then typing a message therefore answered `Rate limit exceeded`
+// to someone who had sent one. Separate scopes keep both limits exactly as strict as before
+// while stopping unrelated traffic from spending an expensive route's budget.
+function clientKey(request, scope) {
+  const client = request.headers.get('cf-connecting-ip') ?? request.headers.get('x-forwarded-for') ?? 'unknown';
+  return `${scope}\u0000${client}`;
 }
 
 export function checkRateLimit(request, options = {}) {
   cleanupBuckets();
-  const key = clientKey(request);
+  const key = clientKey(request, options.scope ?? 'default');
   const current = Date.now();
   const limit = options.limit ?? LIMIT;
   const bucket = rateBuckets.get(key);
@@ -47,8 +54,11 @@ export function checkRateLimit(request, options = {}) {
   return { ok: true, remaining: limit - bucket.count, limit, resetMs: WINDOW_MS - (current - bucket.started) };
 }
 
-export function checkCommandRateLimit(request) {
-  return checkRateLimit(request, { limit: COMMAND_LIMIT });
+// `scope` separates independent budgets that happen to share the same number: chat and
+// command are both COMMAND_LIMIT, but they are different operations, and burning the
+// command budget should not lock the founder out of the conversation box.
+export function checkCommandRateLimit(request, scope = 'command') {
+  return checkRateLimit(request, { limit: COMMAND_LIMIT, scope });
 }
 
 export function rateLimitHeaders(result) {
@@ -58,6 +68,18 @@ export function rateLimitHeaders(result) {
     'X-RateLimit-Remaining': String(result.remaining ?? 0),
     'X-RateLimit-Reset': String(Math.ceil((result.resetMs ?? WINDOW_MS) / 1000)),
   };
+}
+
+/** Counts per scope — used by the dashboard's Limits & Usage page. */
+export function getRateLimitScopes() {
+  const now = Date.now();
+  const scopes = {};
+  for (const [key, bucket] of rateBuckets) {
+    if (now - bucket.started >= WINDOW_MS) { rateBuckets.delete(key); continue; }
+    const scope = key.split('\u0000')[0];
+    scopes[scope] = (scopes[scope] ?? 0) + 1;
+  }
+  return scopes;
 }
 
 export function getRateLimitStats() {

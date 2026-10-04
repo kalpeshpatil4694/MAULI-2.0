@@ -13,7 +13,7 @@ import { collectProjectFiles, createZip } from './zip.js';
 import { ensureSchema, hasD1, d1List, d1Get, d1Events, claimBuildVersion, getBuildVersion, getUsageReport, cleanupD1 } from './db.js';
 import { recoverStuckProjects } from './maintenance.js';
 import { recoverRunningExecutions } from './execution.js';
-import { requireFounder, checkRateLimit, checkCommandRateLimit, getRateLimitStats } from './auth.js';
+import { requireFounder, checkRateLimit, checkCommandRateLimit, getRateLimitStats, founderAuthStatus } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
 import { diagnoseResultPersistence, saveCommandResult, listCommandResults, getCommandResult } from './result-recorder.js';
 import { dashboardHTML } from './dashboard.js';
@@ -421,6 +421,62 @@ export default { async fetch(request, env, ctx) { try {
     // so nothing can progress and the founder needs to see that rather than a stall.
     status:blocked?'degraded':(env?.AI&&!aiAvailable?'degraded':'healthy'),degraded:Boolean(blocked)||Boolean(env?.AI&&!aiAvailable),degradedReason:blocked?'d1-write-limit':(env?.AI&&!aiAvailable?(aiStatus?.exhausted?'workers-ai-allowance-exhausted':'workers-ai-unavailable'):null),persistence:hasD1(env),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),aiAvailable,aiReason:aiStatus?.reason??null,aiSince:aiStatus?.at??null,recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,stateReads:stateDiagnostics(),time:now()});}
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
+  // The Integrations page used to render six hardcoded cards that always said "Configured" /
+  // "Connected" / "Bound" / "Deployed" and never asked the Worker anything — so an unset
+  // GITHUB_TOKEN and a missing D1 binding looked exactly like a healthy deployment. Every row
+  // here is derived from the environment and live store state, and it reports `missing` when
+  // the thing is genuinely absent instead of a reassuring label. Only presence is reported;
+  // no credential value ever leaves the Worker.
+  if(request.method==='GET'&&url.pathname==='/api/integrations'){
+    const d1Blocked=d1WriteBlockedSnapshot(env);
+    const aiStatus=store.get('ai_status','workers-ai')??(await d1Get(env,'ai_status','workers-ai').catch(()=>null));
+    const founder=founderAuthStatus(env);
+    const mcpServers=getAllMCPServers();
+    const apiCatalog=getAPICatalog();
+    const rows=[
+      {id:'workers',name:'Cloudflare Workers',icon:'☁️',category:'Hosting',hint:'This dashboard is being served by it.',
+        ok:true,status:'connected',statusLabel:'Live',detail:'Serving this dashboard over '+String(env?.ENVIRONMENT??'production')},
+      {id:'d1',name:'D1 Database',icon:'💾',category:'Persistence',hint:'Bind a D1 database so projects survive a cold isolate.',
+        ok:hasD1(env)&&!d1Blocked,status:!hasD1(env)?'missing':d1Blocked?'warning':'connected',
+        statusLabel:!hasD1(env)?'Not bound':d1Blocked?'Writes blocked':'Connected',
+        detail:!hasD1(env)?'No D1 binding on this Worker':d1Blocked?'Every D1 write is being refused ('+String(d1Blocked.reason??d1Blocked)+')':'Rows readable and writable'},
+      {id:'ai',name:'Cloudflare AI',icon:'🧠',category:'LLM',hint:'Bind AI so product code can be generated.',
+        ok:Boolean(env?.AI)&&aiStatus?.available!==false,status:!env?.AI?'missing':aiStatus?.available===false?'warning':'connected',
+        statusLabel:!env?.AI?'Not bound':aiStatus?.available===false?'Unavailable':'Bound',
+        detail:!env?.AI?'No AI binding on this Worker':aiStatus?.available===false?String(aiStatus?.reason??'generation is failing'):'Generation requests accepted'},
+      {id:'do',name:'Durable Objects',icon:'🧱',category:'Runtime',hint:'Used for project execution and live channels.',
+        ok:Boolean(env?.MAULI_PROJECT_EXECUTOR),status:env?.MAULI_PROJECT_EXECUTOR?'connected':'missing',
+        statusLabel:env?.MAULI_PROJECT_EXECUTOR?'Bound':'Not bound',
+        detail:env?.MAULI_PROJECT_EXECUTOR?'Project executor is bound':'MAULI_PROJECT_EXECUTOR binding is absent'},
+      {id:'github',name:'GitHub',icon:'🐙',category:'Source control',hint:'Add GITHUB_TOKEN in Settings → Environment to push builds.',
+        ok:Boolean(env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT),status:(env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT)?'connected':'missing',
+        statusLabel:(env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT)?'Configured':'No token',
+        detail:(env?.GITHUB_TOKEN||env?.MAULI_GITHUB_TOKEN||env?.GITHUB_PAT)?'A token is set':'GITHUB_TOKEN, MAULI_GITHUB_TOKEN and GITHUB_PAT are all unset'},
+      {id:'deploy',name:'Deploy Executor',icon:'🚀',category:'Deployment',hint:'Needed for MAULI to deploy a generated project itself.',
+        ok:Boolean(env?.MAULI_DEPLOY_EXECUTOR),status:env?.MAULI_DEPLOY_EXECUTOR?'connected':'missing',
+        statusLabel:env?.MAULI_DEPLOY_EXECUTOR?'Configured':'Not configured',
+        detail:env?.MAULI_DEPLOY_EXECUTOR?'Projects can be deployed automatically':'MAULI_DEPLOY_EXECUTOR is unset, so deploys report NOT_DEPLOYED'},
+      {id:'runtime',name:'Runtime Executor',icon:'🧪',category:'Acceptance',hint:'Runs the acceptance suite against a real deployment.',
+        ok:Boolean(env?.MAULI_RUNTIME_EXECUTOR),status:env?.MAULI_RUNTIME_EXECUTOR?'connected':'missing',
+        statusLabel:env?.MAULI_RUNTIME_EXECUTOR?'Configured':'Not configured',
+        detail:env?.MAULI_RUNTIME_EXECUTOR?'Acceptance runs can be produced':'MAULI_RUNTIME_EXECUTOR is unset, so runtime acceptance is BLOCKED'},
+      {id:'mcp',name:'MCP Servers',icon:'🔌',category:'Agent tools',hint:'Tool servers MAULI can hand to an agent.',
+        ok:mcpServers.length>0,status:mcpServers.length>0?'connected':'warning',
+        statusLabel:mcpServers.length+' in catalog',
+        detail:mcpServers.length?getMCPCategories().length+' categor'+(getMCPCategories().length===1?'y':'ies')+' available to agents':'No MCP servers are registered'},
+      {id:'apis',name:'Public APIs',icon:'🧾',category:'Agent tools',hint:'MAULI can call these when a project needs them.',
+        ok:apiCatalog.length>0,status:apiCatalog.length>0?'connected':'warning',
+        statusLabel:apiCatalog.length+' in catalog',
+        detail:apiCatalog.length?getAPICategories().length+' categor'+(getAPICategories().length===1?'y':'ies')+' available':'No public APIs are registered'},
+      {id:'founder',name:'Founder Key',icon:'🔑',category:'Access',hint:'Set MAULI_FOUNDER_KEY so chat and protected routes need it.',
+        ok:founder.enforced,status:founder.keyless?'warning':founder.keyConfigured?'connected':'missing',
+        statusLabel:founder.keyless?'Keyless mode':founder.keyConfigured?'Enforced':'Not configured',
+        detail:founder.keyless?'Protected routes are open to anyone who can reach this URL':founder.keyConfigured?'Protected routes require the founder key':'MAULI_FOUNDER_KEY is unset, so this deployment answers 503 on protected routes'},
+    ];
+    const counts={connected:0,warning:0,missing:0};
+    for(const row of rows)counts[row.status]=(counts[row.status]??0)+1;
+    return ok({integrations:rows,counts,checkedAt:now()});
+  }
   if(request.method==='POST'&&url.pathname==='/api/ai/code-probe'){
     const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);
     const body=await json(request).catch(()=>({}));
@@ -481,7 +537,7 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='POST'&&url.pathname.includes('/compare')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(!body.version1||!body.version2)return fail('version1 and version2 required',400);const comparison=compareVersions(body.version1,body.version2);if(!comparison)return fail('Versions not found',404);return ok({comparison})}
   if(request.method==='POST'&&url.pathname.includes('/restore')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request);if(!body.versionId)return fail('versionId required',400);const restored=restoreVersion(body.versionId);if(!restored)return fail('Version not found',404);return ok({project:restored})}
   // Chat API
-  if(request.method==='POST'&&url.pathname==='/api/chat'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const limit=checkCommandRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});try{const body=await request.json();const msgValidation=validateString(body.message,'message',{minLength:1,maxLength:5000});if(!msgValidation.ok)return fail(msgValidation.error,400);const result=await processChatMessage({message:msgValidation.value,userId:'founder',env});return ok({result});}catch(e){return ok({result:{reply:'I had trouble processing that. Try again!',error:e.message}})}}
+  if(request.method==='POST'&&url.pathname==='/api/chat'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const limit=checkCommandRateLimit(request,'chat');if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});try{const body=await request.json();const msgValidation=validateString(body.message,'message',{minLength:1,maxLength:5000});if(!msgValidation.ok)return fail(msgValidation.error,400);const result=await processChatMessage({message:msgValidation.value,userId:'founder',env});return ok({result});}catch(e){return ok({result:{reply:'I had trouble processing that. Try again!',error:e.message}})}}
   if(request.method==='GET'&&url.pathname==='/api/chat/history'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const limit=parseInt(url.searchParams.get('limit')||'50');return ok({messages:getChatHistory({limit})});}
   if(request.method==='GET'&&url.pathname==='/api/chat/active'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({conversations:getActiveConversations()});}
   // File Edit API — reads and writes the generated project workspace, while retaining
