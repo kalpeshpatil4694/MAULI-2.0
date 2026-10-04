@@ -19,6 +19,21 @@ test('integrations status is read from the Worker, not painted into the page', a
     assert.ok(['connected', 'warning', 'missing'].includes(row.status), `${row.id} has status ${row.status}`);
     assert.ok(row.name && row.icon && row.category, `${row.id} is missing presentation fields`);
     assert.ok(row.detail, `${row.id} has no detail`);
+    // A template hole must never reach the page. The catalogs are objects keyed by
+    // id/category, so reading `.length` off them once shipped "undefined in catalog".
+    for (const field of ['statusLabel', 'detail', 'hint']) {
+      assert.ok(!/undefined|NaN|\[object/.test(String(row[field] ?? '')), `${row.id}.${field} renders "${row[field]}"`);
+    }
+  }
+});
+
+test('the catalog rows count real entries', async () => {
+  const data = await integrations();
+  const mcp = data.integrations.find(r => r.id === 'mcp');
+  const apis = data.integrations.find(r => r.id === 'apis');
+  for (const row of [mcp, apis]) {
+    assert.match(row.statusLabel, /^\d+ in catalog$/);
+    assert.notEqual(row.status, 'missing', 'a catalog that ships with entries is not a missing dependency');
   }
 });
 
