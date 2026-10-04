@@ -334,7 +334,7 @@ select.inp{cursor:pointer}
       <div class="page" id="pg-memory"><div class="card"><div class="card-h"><div class="card-t">🧠 Memory</div></div><div id="memList" style="max-height:500px;overflow-y:auto"></div></div></div>
       <!-- INTEGRATIONS -->
       <div class="page" id="pg-integrations">
-        <div class="card"><div class="card-h"><div class="card-t">🔗 Integrations</div><button class="btn btn-a btn-s" onclick="renderIntegrations()">↻ Refresh</button></div><div id="intSummary" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div><div class="g g3" id="intList"></div></div>
+        <div class="card"><div class="card-h"><div class="card-t">🔗 Integrations</div><button class="btn btn-a btn-s" onclick="refreshPage()">↻ Refresh</button></div><div id="intSummary" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div><div class="g g3" id="intList"></div></div>
       </div>
       <!-- EDITOR -->
       <div class="page" id="pg-editor">
@@ -374,7 +374,7 @@ select.inp{cursor:pointer}
       </div>
       <!-- API EXPLORER -->
       <div class="page" id="pg-apiexp">
-        <div class="card"><div class="card-h"><div class="card-t">🌐 API Explorer</div><button class="btn btn-a btn-s" onclick="loadApiExplorer()">↻</button></div>
+        <div class="card"><div class="card-h"><div class="card-t">🌐 API Explorer</div><button class="btn btn-a btn-s" onclick="refreshPage()">↻</button></div>
           <div style="display:flex;gap:6px;margin-bottom:10px"><input class="inp" id="apiQ" placeholder="Search weather, maps, email..." style="flex:1" onkeydown="if(event.key==='Enter')searchApiCatalog()"><button class="btn btn-p" onclick="searchApiCatalog()">🔍 Search</button></div>
           <div id="apiRes" style="max-height:420px;overflow-y:auto"><div style="color:var(--text2);padding:10px">Loading API catalog...</div></div>
         </div>
@@ -490,25 +490,33 @@ function fmt(d){if(!d)return '—';try{return new Date(d).toLocaleString()}catch
 function toast(m,t='info'){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;$('toastC').appendChild(e);setTimeout(()=>e.remove(),3500)}
 function md(s){if(!s)return'';let t=esc(s);t=t.replace(/\\*\\*(.+?)\\*\\*/g,'<strong>$1</strong>');t=t.replace(/\\*(.+?)\\*/g,'<em>$1</em>');t=t.replace(/^### (.+)$/gm,'<b style="color:var(--accent)">$1</b>');t=t.replace(/^## (.+)$/gm,'<b>$1</b>');t=t.replace(/^# (.+)$/gm,'<b style="font-size:14px">$1</b>');t=t.replace(/^• (.+)$/gm,'<div style="padding-left:10px">• $1</div>');t=t.replace(/\\n/g,'<br>');return t}
 function actColor(ev){return ev.type?.includes('error')?'var(--red)':ev.type?.includes('task_result')?'var(--green)':ev.type?.includes('command')?'var(--accent)':'var(--blue)'}
+// A background poll re-renders the current page every few seconds. Rewriting a container's
+// innerHTML with IDENTICAL markup still tears the DOM down and rebuilds it, which is what makes
+// the view blink and an inner scroller jump even when nothing changed. Write only when the markup
+// really changed, and show a "Loading…" placeholder only before the first paint.
+function setHtml(el,html){if(!el)return;const s=String(html);if(el.__mauliHtml===s)return;el.__mauliHtml=s;el.innerHTML=s}
+function showPlaceholderOnce(el,html){if(!el||el.__mauliHtml!=null)return;const s=String(html);el.__mauliHtml=s;el.innerHTML=s}
 function renderApiRows(apis){
   const list=Array.isArray(apis)?apis:[];
-  if(!list.length){$('apiRes').innerHTML='<div style="color:var(--text2);padding:10px">No matching APIs</div>';return;}
+  if(!list.length){setHtml($('apiRes'),'<div style="color:var(--text2);padding:10px">No matching APIs</div>');return;}
   let h='<div style="font-size:10px;color:var(--text3);padding:4px 0 8px">'+list.length+' API'+(list.length===1?'':'s')+' available</div>';
   for(const a of list){const category=a.category||'API';const auth=a.auth||a.authentication||'Not specified';const free=a.free===false?'Paid':'Free tier';
     h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:12px">'+esc(a.name||a.title||'—')+'</b><span class="badge badge-g">'+esc(category)+'</span></div><div style="display:flex;gap:6px;align-items:center;margin-top:5px"><span class="badge badge-a">'+esc(free)+'</span><span style="font-size:10px;color:var(--text2)">Auth: '+esc(auth)+'</span>'+(a.url?'<a href="'+esc(a.url)+'" target="_blank" rel="noopener" style="font-size:10px;margin-left:auto">Open API ↗</a>':'')+'</div></div>';
   }
-  $('apiRes').innerHTML=h;
+  setHtml($('apiRes'),h);
 }
 async function loadApiExplorer(){
   if(!$('apiRes'))return;
-  $('apiRes').innerHTML='<div style="color:var(--text2);padding:10px">Loading API catalog...</div>';
+  showPlaceholderOnce($('apiRes'),'<div style="color:var(--text2);padding:10px">Loading API catalog...</div>');
   try{const r=await api('/api/apis/catalog');const catalog=r.catalog||{};const apis=[];
     for(const[group,items]of Object.entries(catalog))for(const item of(Array.isArray(items)?items:[]))apis.push({...item,category:item.category||group});
     renderApiRows(apis);
-  }catch(e){$('apiRes').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}
-  loadMcp();
+  }catch(e){setHtml($('apiRes'),'<div style="color:var(--red)">'+esc(e.message)+'</div>')}
+  // Awaited so the page's render promise covers the MCP list too — otherwise a refresh would
+  // restore the scroll before MCP had re-rendered and the card would still jump to the top.
+  await loadMcp();
 }
-async function searchApiCatalog(){const q=$('apiQ').value.trim();if(!q){await loadApiExplorer();return}$('apiRes').innerHTML='<div style="color:var(--text2);padding:10px">Searching...</div>';try{const r=await api('/api/apis/search?q='+encodeURIComponent(q));renderApiRows(r.apis||r.results||[])}catch(e){$('apiRes').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
+async function searchApiCatalog(){const q=$('apiQ').value.trim();if(!q){await loadApiExplorer();return}showPlaceholderOnce($('apiRes'),'<div style="color:var(--text2);padding:10px">Searching...</div>');try{const r=await api('/api/apis/search?q='+encodeURIComponent(q));renderApiRows(r.apis||r.results||[])}catch(e){setHtml($('apiRes'),'<div style="color:var(--red)">'+esc(e.message)+'</div>')}}
 
 // ─── API ───
 // ─── FOUNDER KEY ───
@@ -641,7 +649,34 @@ async function api(path,opts={},retried=false){
 // ─── NAVIGATION ───
 const titles={command:'Command Center',chat:'Chat',overview:'Overview',agents:'Agents',monitor:'Monitor',projects:'Projects',tasks:'Tasks',docs:'Docs',approvals:'Approvals',activity:'Activity',health:'Health',memory:'Memory',integrations:'Integrations',editor:'File Editor',learning:'Learning',builds:'Builds',messaging:'Messaging',apiexp:'API Explorer',downloads:'Downloads',usage:'Limits & Usage'};
 function go(p){curPage=p;closeSb();document.querySelectorAll('.page').forEach(e=>e.classList.remove('on'));const pg=$('pg-'+p);if(pg)pg.classList.add('on');document.querySelectorAll('.nav-i').forEach(e=>e.classList.remove('on'));const nav=document.querySelector('.nav-i[data-p="'+p+'"]');if(nav)nav.classList.add('on');$('pageTitle').textContent=titles[p]||p;renderPage(p)}
-function renderPage(p){const r={overview:renderOverview,agents:renderAgents,projects:renderProjects,tasks:renderTasks,activity:renderActivity,health:renderHealth,memory:renderMemory,monitor:renderMonitor,integrations:renderIntegrations,learning:renderLearning,editor:loadEdits,builds:loadBuilds,messaging:loadMsgs,apiexp:loadApiExplorer,downloads:loadDl,usage:()=>{loadUsage();loadCFData();},chat:loadChat,docs:()=>{},approvals:renderApprovals};if(r[p])r[p]()}
+// A background refresh re-renders the current page every few seconds. Each renderer first swaps
+// its container to a short "Loading…" placeholder, which collapses the document; the browser then
+// clamps every scroll position it held, so a founder reading Integrations or the API Explorer was
+// snapped back to the top on every poll. Snapshot the scrolled positions, then put them back once
+// the re-render has landed.
+function scrollSnapshot(){
+  const seen=new Set(),out=[];
+  const add=el=>{if(!el||seen.has(el))return;seen.add(el);try{if(el.scrollTop>0||el.scrollLeft>0)out.push({el,top:el.scrollTop,left:el.scrollLeft})}catch(_){}};
+  add(document.scrollingElement);add(document.documentElement);add(document.body);
+  const scope=document.querySelector('.page.on')||document;
+  try{for(const el of scope.querySelectorAll('*'))add(el)}catch(_){}
+  return out;
+}
+function restoreScrollSnapshot(snap){for(const s of snap){try{s.el.scrollTop=s.top;s.el.scrollLeft=s.left}catch(_){}}}
+function renderPage(p,keepScroll){
+  const r={overview:renderOverview,agents:renderAgents,projects:renderProjects,tasks:renderTasks,activity:renderActivity,health:renderHealth,memory:renderMemory,monitor:renderMonitor,integrations:renderIntegrations,learning:renderLearning,editor:loadEdits,builds:loadBuilds,messaging:loadMsgs,apiexp:loadApiExplorer,downloads:loadDl,usage:()=>{loadUsage();loadCFData();},chat:loadChat,docs:()=>{},approvals:renderApprovals};
+  if(!r[p])return;
+  const snap=keepScroll?scrollSnapshot():null;
+  const done=()=>{if(snap)restoreScrollSnapshot(snap)};
+  let out;
+  try{out=r[p]()}catch(e){done();throw e}
+  if(out&&typeof out.then==='function')return Promise.resolve(out).finally(done);
+  done();
+  return out;
+}
+// Every refresh path (the state poll, the ↻ buttons) goes through here so the view stays where the
+// founder scrolled to. Navigation (go) deliberately does not, or a new page would open mid-scroll.
+function refreshPage(){return renderPage(curPage,true)}
 document.querySelectorAll('.nav-i[data-p]').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();go(el.dataset.p)}));
 function toggleSb(){$('sidebar').classList.toggle('open');$('sbOverlay').classList.toggle('show');document.body.classList.toggle('sb-open')}
 function closeSb(){$('sidebar').classList.remove('open');$('sbOverlay').classList.remove('show');document.body.classList.remove('sb-open')}
@@ -650,7 +685,7 @@ function closeSb(){$('sidebar').classList.remove('open');$('sbOverlay').classLis
 async function loadState(){
   try{const r=await api('/api/state');const d=r.data||r;
     applyDashboardState(d);
-    updateStats();renderPage(curPage);
+    updateStats();refreshPage();
     if($('hText')){$('hDot').classList.remove('off');$('hText').textContent='System Online';}
   }catch(e){console.warn('State:',e.message)}
 }
@@ -955,11 +990,11 @@ const INT_TONE={connected:'badge-g',warning:'badge-y',missing:'badge-r'};
 async function renderIntegrations(){
   const list=$('intList');
   if(!list)return;
-  list.innerHTML='<div class="card" style="margin-bottom:0"><div style="font-size:11px;color:var(--text2)">Checking what this Worker actually has…</div></div>';
+  showPlaceholderOnce(list,'<div class="card" style="margin-bottom:0"><div style="font-size:11px;color:var(--text2)">Checking what this Worker actually has…</div></div>');
   let data;
   try{data=await api('/api/integrations');}
   catch(e){
-    list.innerHTML='<div class="card" style="margin-bottom:0"><div style="font-size:11px;color:var(--red)">Could not read integration status: '+esc(e.message)+'</div></div>';
+    setHtml(list,'<div class="card" style="margin-bottom:0"><div style="font-size:11px;color:var(--red)">Could not read integration status: '+esc(e.message)+'</div></div>');
     const s=$('intSummary');if(s)s.textContent='';
     return;
   }
@@ -967,7 +1002,7 @@ async function renderIntegrations(){
   const c=data.counts??{};
   const s=$('intSummary');
   if(s)s.textContent=rows.length+' checked · '+c.connected+' connected · '+(c.warning??0)+' warning · '+(c.missing??0)+' missing';
-  list.innerHTML=rows.map(i=>{
+  setHtml(list,rows.map(i=>{
     const tone=INT_TONE[i.status]||'badge-a';
     return '<div class="card" style="margin-bottom:0"><div style="display:flex;align-items:center;gap:10px">'+
       '<span style="font-size:24px">'+esc(i.icon)+'</span>'+
@@ -976,7 +1011,7 @@ async function renderIntegrations(){
       '<div style="font-size:10px;color:var(--text2);margin-top:3px;overflow-wrap:anywhere">'+esc(i.detail)+'</div>'+
       (i.status==='missing'?'<div style="font-size:10px;color:var(--red);margin-top:3px">'+esc(i.hint)+'</div>':'')+
       '</div><span class="badge '+tone+'" style="margin-left:auto;white-space:nowrap">'+esc(i.statusLabel)+'</span></div></div>';
-  }).join('');
+  }).join(''));
 }
 function renderApprovals(){
   let h='';for(const a of S.approvals)h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(a.action||a.id)+'</b><div style="font-size:10px;color:var(--text2)">Risk: '+esc(a.risk||'unknown')+'</div></div><div style="display:flex;gap:4px"><button class="btn btn-g btn-s" onclick="decideAppr(\\''+a.id+'\\',true)">✅</button><button class="btn btn-r btn-s" onclick="decideAppr(\\''+a.id+'\\',false)">❌</button></div></div>';
@@ -1106,7 +1141,7 @@ async function loadMcp(){try{const r=await api('/api/mcp/servers');
   const raw=r.servers||r;const srv=Array.isArray(raw)?raw:Object.values(raw||{}).filter(s=>s&&typeof s==='object');
   let h=srv.length?('<div style="font-size:10px;color:var(--text3);padding:2px 0 8px">'+srv.length+' MCP server'+(srv.length===1?'':'s')+'</div>'):'<div style="color:var(--text2);padding:2px 0">No MCP servers</div>';
   for(const s of srv)h+='<div style="padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">🔌 '+esc(s.name||s.id||'—')+'</b><span class="badge badge-a">'+esc(s.category||'MCP')+'</span></div><div style="font-size:10px;color:var(--text2)">'+esc(s.description||'')+'</div></div>';
-  $('mcpOut').innerHTML=h}catch(e){$('mcpOut').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}}
+  setHtml($('mcpOut'),h)}catch(e){setHtml($('mcpOut'),'<div style="color:var(--red)">'+esc(e.message)+'</div>')}}
 
 // ─── DOWNLOADS ───
 function loadDl(){let h='';for(const p of S.projects){const hasCode=S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');

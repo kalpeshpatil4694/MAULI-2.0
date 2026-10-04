@@ -32,6 +32,23 @@ test('API Explorer loads the catalog and supports search instead of opening empt
   assert.match(html, /Open API/);
 });
 
+test('a background refresh keeps the scroll position instead of jumping to the top', () => {
+  const html = dashboardHTML();
+  assert.match(html, /function scrollSnapshot\(\)/);
+  assert.match(html, /function restoreScrollSnapshot\(snap\)/);
+  assert.match(html, /function refreshPage\(\)\{return renderPage\(curPage,true\)\}/);
+  // The restore has to run after an async renderer settles, not before it writes.
+  assert.match(html, /Promise\.resolve\(out\)\.finally\(done\)/);
+  assert.match(html, /updateStats\(\);refreshPage\(\)/);
+  assert.match(html, /onclick="refreshPage\(\)"/);
+  // Navigation must NOT preserve scroll, or a new page opens wherever the old one was scrolled.
+  assert.match(html, /renderPage\(p\)\}/);
+  assert.doesNotMatch(html, /renderPage\(p,true\)/);
+  // The live poll is the refresh that actually fires every few seconds.
+  assert.match(DASHBOARD_LIVE_SCRIPT, /updateStats\(\);refreshPage\(\)/);
+  assert.doesNotMatch(DASHBOARD_LIVE_SCRIPT, /renderPage\(curPage\)/);
+});
+
 test('agent API records are unique by name and retain the richest copy', () => {
   const agents = dedupeAgentList([
     { id: 'agent-empty', name: 'Planning Agent', metadata: {} },

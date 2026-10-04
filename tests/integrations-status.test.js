@@ -102,5 +102,10 @@ test('the dashboard Integrations page fetches the endpoint and has no hardcoded 
 
 test('the Integrations card offers a refresh', () => {
   const source = readFileSync(new URL('../src/dashboard.js', import.meta.url), 'utf8');
-  assert.match(source, /id="pg-integrations"[\s\S]{0,400}renderIntegrations\(\)/);
+  // The card's ↻ now goes through the shared refresh path: it still re-renders Integrations (via
+  // renderPage for the current page) but keeps the founder's scroll position. The old handler
+  // called renderIntegrations() directly, which collapsed the list and snapped the view to the top.
+  assert.match(source, /id="pg-integrations"[\s\S]{0,400}onclick="refreshPage\(\)"/);
+  assert.match(source, /integrations:renderIntegrations/);
+  assert.match(source, /function refreshPage\(\)\{return renderPage\(curPage,true\)\}/);
 });
