@@ -334,7 +334,7 @@ select.inp{cursor:pointer}
       <div class="page" id="pg-memory"><div class="card"><div class="card-h"><div class="card-t">🧠 Memory</div></div><div id="memList" style="max-height:500px;overflow-y:auto"></div></div></div>
       <!-- INTEGRATIONS -->
       <div class="page" id="pg-integrations">
-        <div class="card"><div class="card-h"><div class="card-t">🔗 Integrations</div></div><div class="g g3" id="intList"></div></div>
+        <div class="card"><div class="card-h"><div class="card-t">🔗 Integrations</div><button class="btn btn-a btn-s" onclick="renderIntegrations()">↻ Refresh</button></div><div id="intSummary" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div><div class="g g3" id="intList"></div></div>
       </div>
       <!-- EDITOR -->
       <div class="page" id="pg-editor">
@@ -947,9 +947,36 @@ async function loadCFData(){
   }catch(e){console.warn('CF API:',e.message);if($('cfStatus'))$('cfStatus').innerHTML='<span class="badge badge-r">❌ '+esc(e.message)+'</span>'}
 }
 
-function renderIntegrations(){
-  const ints=[{n:'GitHub',i:'🐙',s:'Configured',d:'Source control'},{n:'Cloudflare Workers',i:'☁️',s:'Deployed',d:'Hosting'},{n:'Cloudflare AI',i:'🧠',s:'Bound',d:'LLM'},{n:'D1 Database',i:'💾',s:'Connected',d:'SQL'},{n:'MCP Servers',i:'🔌',s:'Catalog',d:'Agent tools'},{n:'Ollama',i:'🤖',s:'Optional',d:'Local LLMs'}];
-  $('intList').innerHTML=ints.map(i=>'<div class="card" style="margin-bottom:0"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px">'+i.i+'</span><div><b style="font-size:13px">'+esc(i.n)+'</b><div style="font-size:10px;color:var(--text2)">'+esc(i.d)+'</div></div><span class="badge badge-a" style="margin-left:auto">'+i.s+'</span></div></div>').join('');
+// Every row below came from the Worker: the previous version painted six fixed cards that
+// always read "Configured" / "Connected" / "Bound" / "Deployed" and never asked anything, so
+// an unset GITHUB_TOKEN looked identical to a healthy deployment. The status is now the
+// server's own verdict and a missing dependency says so.
+const INT_TONE={connected:'badge-g',warning:'badge-y',missing:'badge-r'};
+async function renderIntegrations(){
+  const list=$('intList');
+  if(!list)return;
+  list.innerHTML='<div class="card" style="margin-bottom:0"><div style="font-size:11px;color:var(--text2)">Checking what this Worker actually has…</div></div>';
+  let data;
+  try{data=await api('/api/integrations');}
+  catch(e){
+    list.innerHTML='<div class="card" style="margin-bottom:0"><div style="font-size:11px;color:var(--red)">Could not read integration status: '+esc(e.message)+'</div></div>';
+    const s=$('intSummary');if(s)s.textContent='';
+    return;
+  }
+  const rows=data.integrations??[];
+  const c=data.counts??{};
+  const s=$('intSummary');
+  if(s)s.textContent=rows.length+' checked · '+c.connected+' connected · '+(c.warning??0)+' warning · '+(c.missing??0)+' missing';
+  list.innerHTML=rows.map(i=>{
+    const tone=INT_TONE[i.status]||'badge-a';
+    return '<div class="card" style="margin-bottom:0"><div style="display:flex;align-items:center;gap:10px">'+
+      '<span style="font-size:24px">'+esc(i.icon)+'</span>'+
+      '<div style="min-width:0"><b style="font-size:13px">'+esc(i.name)+'</b>'+
+      '<div style="font-size:10px;color:var(--text2)">'+esc(i.category)+'</div>'+
+      '<div style="font-size:10px;color:var(--text2);margin-top:3px;overflow-wrap:anywhere">'+esc(i.detail)+'</div>'+
+      (i.status==='missing'?'<div style="font-size:10px;color:var(--red);margin-top:3px">'+esc(i.hint)+'</div>':'')+
+      '</div><span class="badge '+tone+'" style="margin-left:auto;white-space:nowrap">'+esc(i.statusLabel)+'</span></div></div>';
+  }).join('');
 }
 function renderApprovals(){
   let h='';for(const a of S.approvals)h+='<div style="padding:8px 0;border-bottom:1px solid rgba(30,45,74,.3);display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:12px">'+esc(a.action||a.id)+'</b><div style="font-size:10px;color:var(--text2)">Risk: '+esc(a.risk||'unknown')+'</div></div><div style="display:flex;gap:4px"><button class="btn btn-g btn-s" onclick="decideAppr(\\''+a.id+'\\',true)">✅</button><button class="btn btn-r btn-s" onclick="decideAppr(\\''+a.id+'\\',false)">❌</button></div></div>';
