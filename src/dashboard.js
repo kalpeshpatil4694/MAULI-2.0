@@ -212,6 +212,7 @@ select.inp{cursor:pointer}
         <button class="hamburger" onclick="toggleSb()">☰</button>
         <span class="status-dot" id="hDot"></span>
         <span style="font-size:11px;color:var(--text2)" id="hText">Connecting...</span>
+        <span style="font-size:11px;color:var(--text3)" id="groqChip" title="Groq fallback provider status, read from /api/health">Groq: —</span>
         <span style="font-size:13px;font-weight:600;margin-left:8px" id="pageTitle">Command Center</span>
       </div>
       <div class="topbar-r">
@@ -702,6 +703,29 @@ function updateStats(){
   if($('projCnt'))$('projCnt').textContent=(totals.projects??S.projects.length)+' projects';if($('taskCnt'))$('taskCnt').textContent=(totals.tasks??S.tasks.length)+' tasks';
 }
 
+// ─── GROQ STATUS ───
+// The topbar is the one place painted on every page, so this status needs no navigation and
+// no click: it answers "did the GROQ_API_KEY secret reach this Worker?" from the moment the
+// dashboard loads. It reads /api/health — only the config verdict travels, never the key.
+function paintGroqChip(d){
+  const el=$('groqChip');if(!el)return;
+  if(!d||typeof d.groqConfigured==='undefined'){
+    el.style.color='var(--text3)';el.textContent='Groq: —';
+    el.title='/api/health did not report a Groq verdict.';return;
+  }
+  if(!d.groqConfigured){
+    el.style.color='var(--yellow)';el.textContent='⚡ Groq: Not Configured';
+    el.title='GROQ_API_KEY and MAULI_GROQ_KEY are unset on this Worker, so a spent Workers AI allowance falls straight to templates.';return;
+  }
+  el.style.color='var(--green)';
+  el.textContent='⚡ Groq: Configured'+(d.groqModel?' · '+esc(d.groqModel):'')+(d.generationPath?' · path: '+esc(d.generationPath):'');
+  el.title='Groq is configured — generation path: '+String(d.generationPath||'—')+'. Read from /api/health; the key itself is never shown.';
+}
+async function loadGroqChip(){
+  try{const r=await api('/api/health');paintGroqChip(r.data||r);}
+  catch(_){const el=$('groqChip');if(el){el.style.color='var(--text3)';el.textContent='Groq: ?';}}
+}
+
 // ─── RENDERERS ───
 function renderOverview(){
   const evts=S.events.slice(-15).reverse();let h='';
@@ -801,13 +825,16 @@ async function renderDiagnostics(){
   }catch(e){$('diagOut').innerHTML='<div style="color:var(--red)">'+esc(e.message)+'</div>'}
 }
 function renderHealth(){
-  api('/api/health').then(r=>{const d=r.data||r;const row=(l,v)=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px;color:var(--text2)">'+l+'</span><span style="font-size:11px">'+v+'</span></div>';
+  api('/api/health').then(r=>{const d=r.data||r;paintGroqChip(d);const row=(l,v)=>'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><span style="font-size:11px;color:var(--text2)">'+l+'</span><span style="font-size:11px">'+v+'</span></div>';
     const q=d.d1Quota||{};
     const used=Number(q.used||0), limit=Number(q.limit||100000), remaining=Math.max(0,Number(q.remaining ?? (limit-used)));
     const pct=Math.min(100,Number(q.percent||0));
     const status=String(q.status||'unknown');
     const statusLabel=status==='limit_reached'?'Protection':status==='critical'?'Critical':status==='high'?'High':status==='watch'?'Watch':'Healthy';
-    let h=row('Service',d.service||'—')+row('Status','<span style="color:var(--green)">'+esc(d.status||'?')+'</span>')+row('D1',d.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory</span>')+row('AI',d.ai?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--yellow)">No</span>')+row('Time',fmt(d.time));
+    let h=row('Service',d.service||'—')+row('Status','<span style="color:var(--green)">'+esc(d.status||'?')+'</span>')+row('D1',d.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory</span>')+row('AI',d.ai?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--yellow)">No</span>')
+      +row('Groq',d.groqConfigured?'<span style="color:var(--green)">Configured</span>':'<span style="color:var(--yellow)">Not Configured</span>')
+      +(d.groqConfigured?row('Groq model',esc(d.groqModel||'—'))+row('Generation path',esc(d.generationPath||'—')):'')
+      +row('Time',fmt(d.time));
     h += '<div style="margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">D1 Daily Usage</div>'+row('Used',used.toLocaleString()+' / '+limit.toLocaleString())+row('Remaining',remaining.toLocaleString())+row('Usage',pct.toFixed(2)+'%')+row('Status','<span>'+esc(statusLabel)+'</span>')+row('UTC Day',esc(q.date||'—'))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">MAULI tracked writes; Cloudflare account meter may differ.</div></div>';
     // State reads used to fail silently, which is how the counters could blank to zero with
     // no explanation. Report the real cause here whenever a read did fail on this isolate.
@@ -1187,6 +1214,10 @@ async function heartbeat(){
 // Immediately set status to Online — heartbeat confirms it
 if($('hText'))$('hText').textContent='System Online';
 if($('hDot'))$('hDot').classList.remove('off');
+
+// Groq status is painted on load — the founder should not have to open a page to learn
+// whether the fallback provider's key arrived.
+loadGroqChip();
 
 // Paint the platform selector immediately, then reconcile it with the server's list so
 // the founder can pick a target before typing anything.
