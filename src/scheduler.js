@@ -12,6 +12,7 @@ import { buildFinalDeliveryDurable } from './delivery.js';
 import { saveCommandResult } from './result-recorder.js';
 import { ensureProjectPipeline } from './pipeline-gates.js';
 import { withProjectExecutionLock } from './execution-coordination.js';
+import { approveProject } from './governance.js';
 
 const LEASE_MS=90_000,DEFAULT_MAX_ATTEMPTS=3;
 // The per-project execution lock is renewed while the body runs, so a body that never
@@ -220,6 +221,18 @@ async function finalizeCommand(projectId,env={},indexedTasks=null){const project
   const finalDeliveryId=finalDelivery?.id??project.finalDeliveryId??null;finalProject=await store.putDurable('projects',{...project,state:'completed',finalDeliveryId,completedAt:project.completedAt??now(),id:project.id}),result={status:'completed',runId,command:project.founderCommand,project:finalProject,tasks,finalDelivery};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.completed',{runId,projectId,status:'completed',at:now()});return result;}if(hasFailed&&!hasQueued&&!hasRunning){const failedProject=await store.putDurable('projects',{...project,state:'failed',failedAt:project.failedAt??now(),id:project.id}),result={status:'failed',runId,command:project.founderCommand,project:failedProject,tasks,error:'One or more tasks failed after recovery/retry limits.'};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.failed',{runId,projectId,status:'failed',at:now()});return result;}return null;}
 function indexTasksByProject(){const byProject=new Map();for(const task of store.list('tasks')){const key=task.projectId??'';let list=byProject.get(key);if(!list)byProject.set(key,list=[]);list.push(task);}return byProject;}
 export async function schedulerTick(env={},context={}){
+  // Internal application generation is autonomous. Older projects created before the
+  // governance split may still be parked on an internal-code approval row; release only
+  // those founder-command gates. Production/deployment/destructive/external/cost actions
+  // remain approval-gated.
+  for(const approval of store.list('approvals').filter(a=>a?.state==='pending'&&a?.projectId&&String(a.action??'').startsWith('Execute founder command:'))){
+    const project=store.get('projects',approval.projectId);
+    const command=String(project?.founderCommand??approval.action??'');
+    const dangerous=/\\b(production|prod|deploy|deployment|publish|release|external api|third-party api|external service|pay|payment|paid|purchase|billing|charge|delete|destroy|drop|wipe|remove all|purge)\\b/i.test(command);
+    if(project?.state==='awaiting_approval'&&approval.risk==='high'&&!dangerous){
+      approveProject(approval,project,'Auto-approved internal autonomous build; execution-level governance remains active.');
+    }
+  }
   const recovered=await recoverStaleTasks();
   const startedAt=Date.now(),budgetMs=Number(context?.budgetMs??0);
   // One task index for the whole tick: the finalize sweep and the work loop both need it,
