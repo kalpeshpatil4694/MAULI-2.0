@@ -212,6 +212,22 @@ export function deployExecutorConfigured(env) {
   return Boolean(env?.MAULI_DEPLOY_EXECUTOR && String(env.MAULI_DEPLOY_EXECUTOR).trim());
 }
 
+export function githubDeployExecutorConfigured(env) {
+  return Boolean((env?.GITHUB_TOKEN || env?.MAULI_GITHUB_TOKEN || env?.GITHUB_PAT) && (env?.MAULI_CONTROL_PLANE_URL || env?.PUBLIC_BASE_URL));
+}
+async function dispatchGithubDeploy(env, project, artifactId) {
+  const token = env?.GITHUB_TOKEN || env?.MAULI_GITHUB_TOKEN || env?.GITHUB_PAT;
+  const repo = env?.MAULI_GITHUB_REPO || 'kalpeshpatil4694/MAULI-2.0';
+  const controlPlane = String(env?.MAULI_CONTROL_PLANE_URL || env?.PUBLIC_BASE_URL || '').replace(/\\/+$/, '');
+  if (!token || !controlPlane) return null;
+  const response = await fetch('https://api.github.com/repos/' + repo + '/dispatches', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10', 'Content-Type': 'application/json', 'User-Agent': 'MAULI-2.0-deployment-executor' },
+    body: JSON.stringify({ event_type: 'mauli_generated_deploy', client_payload: { projectId: project?.id ?? null, artifactId: artifactId ?? null, controlPlane } })
+  });
+  if (!response.ok) { const body = await response.text().catch(() => ''); const x = categorizeDeploymentError(body || ('GitHub dispatch HTTP ' + response.status)); return { ok:false, errorCategory:x.errorCategory, errorMessage:x.errorMessage }; }
+  return { ok:true };
+}
+
 /**
  * Ask the configured deploy runner to build and deploy a generated project.
  * No runner → `{ deployed: false, reason }`; the caller records that as a FAILED/NOT_DEPLOYED
@@ -220,12 +236,12 @@ export function deployExecutorConfigured(env) {
 export async function dispatchGeneratedDeployment(env, { project = null, files = [], architecture = null, artifactId = null } = {}) {
   const url = env?.MAULI_DEPLOY_EXECUTOR;
   if (!deployExecutorConfigured(env)) {
-    return {
-      deployed: false,
-      reason: 'MAULI_DEPLOY_EXECUTOR is not configured, so MAULI cannot build and deploy a generated project itself',
-      category: 'executor-unavailable',
-      deployment: normalizeDeployment({ status: DEPLOYMENT_STATUS.NOT_DEPLOYED, projectId: project?.id ?? null, artifactId })
-    };
+    if (githubDeployExecutorConfigured(env)) {
+      const dispatched = await dispatchGithubDeploy(env, project, artifactId);
+      if (dispatched?.ok) return { deployed:false, pending:true, reason:'GitHub Actions deployment executor dispatched; waiting for callback', category:'deployment-pending', deployment:normalizeDeployment({status:DEPLOYMENT_STATUS.DEPLOYING,projectId:project?.id??null,artifactId,environment:'production',attemptedAt:new Date().toISOString()}) };
+      return { deployed:false, reason:dispatched?.errorMessage??'GitHub Actions dispatch failed', category:dispatched?.errorCategory??'deployment', deployment:normalizeDeployment({status:DEPLOYMENT_STATUS.FAILED,projectId:project?.id??null,artifactId,errorCategory:dispatched?.errorCategory??'deployment',errorMessage:dispatched?.errorMessage??'GitHub Actions dispatch failed'}) };
+    }
+    return { deployed:false, reason:'No deployment executor is configured', category:'executor-unavailable', deployment:normalizeDeployment({status:DEPLOYMENT_STATUS.NOT_DEPLOYED,projectId:project?.id??null,artifactId}) };
   }
   const payload = {
     projectId: project?.id ?? null,
