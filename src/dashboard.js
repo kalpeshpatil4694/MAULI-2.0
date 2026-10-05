@@ -485,7 +485,7 @@ function applyDashboardState(d){
 }
 window.__mauliDedupeAgents=dedupeDashboardAgents;
 window.__applyDashboardState=applyDashboardState;
-function badge(s){return s==='completed'?'g':s==='active'?'b':s==='planning'?'a':s==='escalated'?'r':'y'}
+function badge(s){return s==='completed'?'g':s==='active'?'b':s==='failed'||s==='escalated'?'r':s==='blocked'?'r':s==='planning'?'a':s==='awaiting_approval'?'y':'y'}
 function tBadge(s){return s==='completed'?'g':s==='working'?'a':s==='failed'||s==='blocked'?'r':s==='verifying'?'b':'y'}
 function pct(s){return s==='completed'?'100':s==='working'?'60':s==='failed'?'100':'20'}
 function fmt(d){if(!d)return '—';try{return new Date(d).toLocaleString()}catch(e){return String(d)}}
@@ -747,10 +747,10 @@ function renderAgents(){
   }
   $('agList').innerHTML=h||'<div style="text-align:center;padding:40px;color:var(--text2)">No agents</div>';
 }
-function projRealState(p){const t=S.tasks.filter(t=>t.projectId===p.id);if(!t.length)return p.state||'queued';if(t.some(t=>t.state==='failed')&&!t.some(t=>['working','assigned','queued'].includes(t.state)))return 'failed';if(t.some(t=>['working','assigned'].includes(t.state)))return 'active';if(t.every(t=>t.state==='completed'))return 'completed';if(t.some(t=>t.state==='completed'))return 'active';return p.state||'queued';}
+function projRealState(p){const t=S.tasks.filter(t=>t.projectId===p.id);if(p.state==='awaiting_approval')return 'awaiting_approval';if(['failed','escalated','cancelled'].includes(p.state))return p.state==='escalated'?'failed':p.state;if(!t.length)return p.state||'queued';const running=t.some(x=>['working','assigned','verifying','running'].includes(x.state));const pending=t.some(x=>['queued','assigned','working','verifying','running'].includes(x.state));const failed=t.some(x=>x.state==='failed');const blocked=t.some(x=>x.state==='blocked');const allCompleted=t.every(x=>x.state==='completed'||(x.state==='cancelled'&&x.collapsedDuplicate===true));if(allCompleted)return p.finalDeliveryId?'completed':'blocked';if(failed&&!pending)return 'failed';if(blocked&&!pending)return 'blocked';if(running||pending)return 'active';return p.state||'queued';}
 function renderProjects(){
   const search=($('projSearch')?.value||'').toLowerCase();const filter=$('projFilter')?.value||'';
-  let list=[...S.projects].sort((a,b)=>Date.parse(b?.updatedAt??b?.createdAt??b?.queuedAt??0)-Date.parse(a?.updatedAt??a?.createdAt??a?.queuedAt??0));if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>projRealState(p)===filter);
+  let list=[...S.projects].sort((a,b)=>{const ac=Date.parse(a?.createdAt??a?.commandReceivedAt??a?.queuedAt??0);const bc=Date.parse(b?.createdAt??b?.commandReceivedAt??b?.queuedAt??0);if(Number.isFinite(bc)&&Number.isFinite(ac)&&bc!==ac)return bc-ac;if(Number.isFinite(bc)!==Number.isFinite(ac))return Number.isFinite(bc)?-1:1;return String(b?.id??'').localeCompare(String(a?.id??''));});if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>projRealState(p)===filter);
   let h='<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Deployment</th><th>Production Runtime</th><th>Runtime URL</th><th>Final Delivery</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
   // hasCode comes from the server (it can see every artifact); the capped local sample
   // is only a fallback, which is why the download/preview/build buttons used to vanish
