@@ -305,7 +305,7 @@ async function stateSnapshot(env) {
       artifacts === null ? 'artifacts' : null,
       !Array.isArray(tasks) ? 'tasks' : null,
     ].filter(Boolean).join(',') || null,
-    summary: { projects: projectList.length, tasks: taskList.length, running: taskList.filter(t => ['working','assigned'].includes(t.state)).length, failed: taskList.filter(t => t.state === 'failed').length, artifacts: artifactList.length, ...(totals ? { totals } : {}) }
+    summary: { projects: projectList.length, tasks: taskList.length, running: totals?.running ?? taskList.filter(t => ['working','assigned','verifying'].includes(t.state)).length, failed: taskList.filter(t => t.state === 'failed').length, artifacts: artifactList.length, ...(totals ? { totals } : {}) }
   };
   // Only promote a snapshot that actually read something into the "last good" slot.
   if (!snapshot.degraded || agentList.length) _lastGoodSnapshot = snapshot;
@@ -334,7 +334,7 @@ async function statePayload(env, recoveredRuns) {
     // counters are identical whichever isolate answers a refresh (the capped in-memory
     // lists below them differ by isolate, the numbers must not).
     const totals = await safeTypeCounts(env) ?? { projects: listProjects().length, tasks: listTasks().length, artifacts: store.list('artifacts').length };
-    return { agents, projects, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: totals.projects, tasks: totals.tasks, running: tasks.filter(t => ['working','assigned'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: totals.artifacts, totals } };
+    return { agents, projects, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: totals.projects, tasks: totals.tasks, running: totals.running ?? tasks.filter(t => ['working','assigned','verifying'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: totals.artifacts, totals } };
   };
   if (store.hydrated) return memoryState();
   if (hasD1(env)) {
