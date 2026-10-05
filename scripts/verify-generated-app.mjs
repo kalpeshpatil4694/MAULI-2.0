@@ -345,6 +345,31 @@ export function verifyGeneratedApp(files, { objective = '', requirements = [], t
         invoked.push({ name: call.name, args: call.args, status: 'threw', message: String(error?.message ?? error).slice(0, 200) });
       }
     }
+    // Controls bound with addEventListener. The markup-referenced journey above can only see
+    // `onclick="fn()"` attributes, so an app that wires its controls the modern way —
+    // form.addEventListener('submit', …), select.addEventListener('change', …) — exposes
+    // nothing to it. Every control stayed unpressed, nothing was invoked, and a delivered
+    // expense tracker that adds, filters, deletes and persists was reported as
+    // "no working controls: ACCEPTANCE FAIL" while its fidelity gate scored it 100. The
+    // listeners the app itself registered are replayed here, with a real event object.
+    for (const [id, el] of elements) {
+      for (const type of Object.keys(el._listeners || {})) {
+        for (const fn of el._listeners[type]) {
+          if (typeof fn !== 'function') continue;
+          const name = `${id}:${type}`;
+          try {
+            el.dispatchEvent({ type, target: el, preventDefault() {}, stopPropagation() {}, key: 'Enter' });
+            const after = snapshot(elements, storage);
+            const mutations = diffCount(before, after);
+            mutatedElements += mutations;
+            for (const [id2, v] of after) before.set(id2, v);
+            invoked.push({ name, status: mutations > 0 ? 'mutated' : 'no-op', mutations });
+          } catch (error) {
+            invoked.push({ name, status: 'threw', message: String(error?.message ?? error).slice(0, 200) });
+          }
+        }
+      }
+    }
   }
 
   const storageChanged = storageStore.size > 0;
@@ -474,6 +499,26 @@ export async function runSelfTest() {
   ];
   const keypadResult = verifyGeneratedApp(keypad, { objective: 'Build a calculator', requirements: ['Press digits'] });
   check(keypadResult.verdict === 'functional', 'a quoted-argument control is actually pressed', `verdict=${keypadResult.verdict}, mutations=${keypadResult.mutatedElements}`);
+
+  // An app that wires its controls with addEventListener instead of inline `onclick`
+  // attributes — the modern default, and what the model writes most often. The journey only
+  // read markup attributes, so nothing was ever pressed and a delivered app was reported as
+  // "no working controls".
+  const listenerBound = [
+    { path: 'www/index.html', content: '<!DOCTYPE html><html><body><form id="f"><input id="t"><button type="submit">Add</button></form><ul id="l"></ul><script src="app.js"></script></body></html>' },
+    { path: 'www/app.js', content: 'document.getElementById("f").addEventListener("submit",function(e){e.preventDefault();var v=document.getElementById("t").value.trim();if(!v)return;localStorage.setItem("t",v);document.getElementById("l").innerHTML+="<li>"+v+"</li>";});' },
+  ];
+  const listenerResult = verifyGeneratedApp(listenerBound, { objective: 'Build a list app that saves items' });
+  check(listenerResult.verdict === 'functional', 'an addEventListener-bound app is actually driven', `verdict=${listenerResult.verdict}, mutations=${listenerResult.mutatedElements}`);
+  check(listenerResult.storageChanged, 'the listener really persisted the entry');
+
+  // Negative control for the check above: a listener that does nothing is still a dead page.
+  const deadListener = [
+    { path: 'www/index.html', content: '<!DOCTYPE html><html><body><button id="go">Go</button><script src="app.js"></script></body></html>' },
+    { path: 'www/app.js', content: 'document.getElementById("go").addEventListener("click",function(){});' },
+  ];
+  const deadResult = verifyGeneratedApp(deadListener, { objective: 'Build a clickable app' });
+  check(deadResult.verdict !== 'functional', 'a listener that does nothing is still refused', `verdict=${deadResult.verdict}`);
 
   // A truly broken app: the markup calls a handler that was never defined.
   const broken = [{ path: 'www/index.html', content: '<!DOCTYPE html><html><body><button onclick="saveItem()">Save</button></body></html>' }];

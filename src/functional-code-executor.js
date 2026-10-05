@@ -158,7 +158,8 @@ function repairInstruction(violationCodes) {
     'mock-disclaimer': 'Remove the mock/simulation disclaimer and implement the real behavior.',
     'fake-async': 'Timers are used as a substitute for real state changes. Make every timer-driven update change real state.',
     'realtime-not-implemented': 'Real-time was requested. Implement it for real (WebSocket, SSE, or a bounded polling loop against a real endpoint).',
-    'broken-navigation': 'The app links to pages/assets it does not contain, so clicks open nothing. Either emit every linked .html file under www/ or remove the link — every href/src must resolve to a file that is in your output.'
+    'broken-navigation': 'The app links to pages/assets it does not contain, so clicks open nothing. Either emit every linked .html file under www/ or remove the link — every href/src must resolve to a file that is in your output.',
+    'missing-element': 'The code reads elements that are not declared anywhere, so it throws on the founder\'s first click. Give every element the app reads with getElementById/querySelector a matching id attribute in the HTML (or in markup the app renders itself) — and remove reads for ids nothing declares.'
   };
   return violationCodes
     .map((code) => lines[code] ?? ('Fix the '+code+' problem.'))
@@ -244,7 +245,13 @@ function perFileSystemPrompt(systemPrompt) {
     // This is a single-page app: keep every screen in index.html and switch views in JS.
     'This is a SINGLE-PAGE app: every screen lives in www/index.html and is switched in ' +
     'JavaScript. Never link to another .html file, and reference only www/app.js and ' +
-    'www/styles.css by name — every href/src must resolve to a file that is being generated.';
+    'www/styles.css by name — every href/src must resolve to a file that is being generated. ' +
+    // The two files are written without seeing each other, and a delivered app scored 100/100
+    // while its submit handler read `#date` and the form declared no such input, so the
+    // founder's first click threw. Both sides of the id contract are stated in one prompt.
+    'Because index.html and app.js are written one at a time, they can disagree about ids: ' +
+    'every id you read with getElementById in app.js MUST be declared as id="…" in ' +
+    'index.html, and never read an id that only app.js could have invented.';
 }
 
 // The files that carry the product's working logic, and therefore the only ones a fidelity
