@@ -4,13 +4,13 @@ import { executeTool } from '../src/tools.js';
 import { verifyResult } from '../src/verification.js';
 
 test('deployment tool never reports an unexecuted deployment as ready', async () => {
-  const result = await executeTool('deploy.execute', {}, { agentId: 'agent-qa' });
+  const result = await executeTool('deploy.execute', {}, { agentId: 'agent-qa', approved: true });
   assert.equal(result.status, 'blocked');
   assert.equal(result.reason, 'deployment_requires_external_runner');
 });
 
 test('API tester refuses to fake localhost execution when no deployment URL exists', async () => {
-  const result = await executeTool('api.test', {}, { agentId: 'agent-qa' });
+  const result = await executeTool('api.test', {}, { agentId: 'agent-qa', approved: true });
   assert.equal(result.status, 'blocked');
   assert.equal(result.reason, 'baseUrl_required');
 });
