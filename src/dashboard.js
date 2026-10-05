@@ -710,20 +710,20 @@ function updateStats(){
 function paintGroqChip(d){
   const el=$('groqChip');if(!el)return;
   if(!d||typeof d.groqConfigured==='undefined'){
-    el.style.color='var(--text3)';el.textContent='Groq: —';
+    el.style.color='var(--text3)';el.textContent='➖ Groq: —';
     el.title='/api/health did not report a Groq verdict.';return;
   }
   if(!d.groqConfigured){
-    el.style.color='var(--yellow)';el.textContent='⚡ Groq: Not Configured';
+    el.style.color='var(--yellow)';el.textContent='❌ Groq: Not Configured';
     el.title='GROQ_API_KEY and MAULI_GROQ_KEY are unset on this Worker, so a spent Workers AI allowance falls straight to templates.';return;
   }
   el.style.color='var(--green)';
-  el.textContent='⚡ Groq: Configured'+(d.groqModel?' · '+esc(d.groqModel):'')+(d.generationPath?' · path: '+esc(d.generationPath):'');
+  el.textContent='✅ Groq: Configured'+(d.groqModel?' · '+esc(d.groqModel):'')+(d.generationPath?' · path: '+esc(d.generationPath):'');
   el.title='Groq is configured — generation path: '+String(d.generationPath||'—')+'. Read from /api/health; the key itself is never shown.';
 }
 async function loadGroqChip(){
   try{const r=await api('/api/health');paintGroqChip(r.data||r);}
-  catch(_){const el=$('groqChip');if(el){el.style.color='var(--text3)';el.textContent='Groq: ?';}}
+  catch(_){const el=$('groqChip');if(el){el.style.color='var(--text3)';el.textContent='➖ Groq: —';}}
 }
 
 // ─── RENDERERS ───
@@ -832,7 +832,7 @@ function renderHealth(){
     const status=String(q.status||'unknown');
     const statusLabel=status==='limit_reached'?'Protection':status==='critical'?'Critical':status==='high'?'High':status==='watch'?'Watch':'Healthy';
     let h=row('Service',d.service||'—')+row('Status','<span style="color:var(--green)">'+esc(d.status||'?')+'</span>')+row('D1',d.persistence?'<span style="color:var(--green)">Connected</span>':'<span style="color:var(--yellow)">Memory</span>')+row('AI',d.ai?'<span style="color:var(--green)">Yes</span>':'<span style="color:var(--yellow)">No</span>')
-      +row('Groq',d.groqConfigured?'<span style="color:var(--green)">Configured</span>':'<span style="color:var(--yellow)">Not Configured</span>')
+      +row('Groq',d.groqConfigured?'<span style="color:var(--green)">✅ Configured</span>':'<span style="color:var(--yellow)">❌ Not Configured</span>')
       +(d.groqConfigured?row('Groq model',esc(d.groqModel||'—'))+row('Generation path',esc(d.generationPath||'—')):'')
       +row('Time',fmt(d.time));
     h += '<div style="margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:var(--rs)"><div style="font-size:12px;font-weight:700;margin-bottom:6px">D1 Daily Usage</div>'+row('Used',used.toLocaleString()+' / '+limit.toLocaleString())+row('Remaining',remaining.toLocaleString())+row('Usage',pct.toFixed(2)+'%')+row('Status','<span>'+esc(statusLabel)+'</span>')+row('UTC Day',esc(q.date||'—'))+'<div style="font-size:9px;color:var(--text3);margin-top:6px">MAULI tracked writes; Cloudflare account meter may differ.</div></div>';
@@ -853,6 +853,11 @@ function renderHealth(){
     $('hlthDet').innerHTML=h}).catch(e=>{$('hlthDet').innerHTML='<div style="color:var(--red);padding:10px">Health unavailable</div>'});
   // The Tools card had no renderer at all (toolsOut stayed empty) and the Diagnostics card
   // only appeared after a manual click, so both are now filled on page render.
+  // Clear a stale emoji when Health had no verdict before the first poll answered.
+  if($('hlthDet')&&$('hlthDet').textContent==='Loading…'){
+    const sp=$('hlthDet').querySelector('span.groq-emoji');
+    if(sp)sp.textContent='➖';
+  }
   renderHealthTools();
   if(!renderHealth._diagStarted){renderHealth._diagStarted=true;renderDiagnostics();}
 }

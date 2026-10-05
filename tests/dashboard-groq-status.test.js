@@ -99,7 +99,7 @@ test('a payload without Groq fields never reads as Configured (control)', async 
   const dom = domWith(legacy);
   const chip = dom.elements.get('groqChip');
   await until(() => chip.textContent);
-  assert.match(chip.textContent, /^Groq: —$/, 'an unreported verdict stays unreported');
+  assert.match(chip.textContent, /^➖ Groq: —$/, 'an unreported verdict stays unreported as Configured');
   assert.doesNotMatch(chip.textContent, /Configured/);
   assert.doesNotMatch(chip.textContent, UNSET);
 });
