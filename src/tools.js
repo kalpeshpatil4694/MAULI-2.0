@@ -101,7 +101,7 @@ function registerBuiltinTools(){
     const issues=[];const patterns=[{pattern:/eval\(/i,severity:'high',issue:'eval() usage detected'},{pattern:/innerHTML/i,severity:'medium',issue:'innerHTML usage (XSS risk)'},{pattern:/document\.write/i,severity:'medium',issue:'document.write (XSS risk)'},{pattern:/localStorage/i,severity:'low',issue:'localStorage usage (data exposure)'},{pattern:/http:\/\//i,severity:'medium',issue:'HTTP instead of HTTPS'},{pattern:/password|secret|token/i,severity:'high',issue:'Potential hardcoded secrets'}];
     for(const art of artifacts){const files=art.content?.files||[];for(const f of files){for(const p of patterns){if(p.pattern.test(f.content)){issues.push({file:f.path,severity:p.severity,issue:p.issue});}}}}
     const high=issues.filter(i=>i.severity==='high').length;const med=issues.filter(i=>i.severity==='medium').length;const low=issues.filter(i=>i.severity==='low').length;
-    return{tool:'security.scan',scanned:artifacts.length,issues:issues.length,high,medium:low,summary:issues.length?'Found '+issues.length+' issues ('+high+' high, '+med+' medium, '+low+' low)':'No issues found',details:issues.slice(0,10),at:now()};
+    return{tool:'security.scan',scanned:artifacts.length,issues:issues.length,high,medium:med,summary:issues.length?'Found '+issues.length+' issues ('+high+' high, '+med+' medium, '+low+' low)':'No issues found',details:issues.slice(0,10),at:now()};
   }});
 
   registerTool({name:'security.audit',description:'Comprehensive security audit of project',risk:'read',capabilities:['security','audit','compliance'],handler:(input={})=>{
@@ -124,11 +124,11 @@ function registerBuiltinTools(){
 
   // ═══ DEPLOYMENT TOOLS ═══
   registerTool({name:'deploy.execute',description:'Deploy to Cloudflare Workers',risk:'destructive',capabilities:['deployment','ci-cd','infrastructure','devops','cloud'],handler:(input={})=>{
-    const target=input.target||'cloudflare-workers';return{tool:'deploy.execute',target,status:'ready',command:'wrangler deploy',summary:'Deployment prepared for '+target,at:now()};
+    const target=input.target||'cloudflare-workers';return{tool:'deploy.execute',target,status:'blocked',reason:'deployment_requires_external_runner',summary:'Worker cannot truthfully claim a deployment occurred. Use the configured CI/deployment executor and record its deployment evidence.',at:now()};
   }});
 
   registerTool({name:'deploy.preview',description:'Create deployment preview',risk:'read',capabilities:['deployment','preview','staging'],handler:(input={})=>{
-    return{tool:'deploy.preview',status:'available',summary:'Preview environment ready',url:'https://preview.mauli.dev',at:now()};
+    return{tool:'deploy.preview',status:'blocked',reason:'preview_requires_external_runner',summary:'No preview was created. A real preview URL must come from the deployment executor.',at:now()};
   }});
 
   // ═══ DATA TOOLS (FUNCTIONAL) ═══
@@ -162,7 +162,7 @@ function registerBuiltinTools(){
 
   // ═══ API TOOLS (FUNCTIONAL) ═══
   registerTool({name:'api.test',description:'Test internal API endpoints',risk:'read',capabilities:['api','testing','rest','graphql'],handler:async(input={})=>{
-    const endpoint=input.endpoint||'/api/health';try{const r=await fetch('http://localhost'+endpoint,{signal:AbortSignal.timeout(5000)});return{tool:'api.test',endpoint,status:r.ok?'ok':'error',statusCode:r.status,at:now()};}catch(e){return{tool:'api.test',endpoint,status:'unreachable',error:e.message,at:now()};}
+    const endpoint=input.endpoint||'/api/health';const base=String(input.baseUrl||context.env?.MAULI_PUBLIC_URL||'').replace(/\/$/,'');const target=/^https?:\/\//i.test(endpoint)?endpoint:(base?base+('/'+String(endpoint).replace(/^\//,'')):null);if(!target)return{tool:'api.test',endpoint,status:'blocked',reason:'baseUrl_required',error:'Provide input.baseUrl or configure MAULI_PUBLIC_URL for a real HTTP API test',at:now()};try{const r=await fetch(target,{signal:AbortSignal.timeout(5000)});return{tool:'api.test',endpoint:target,status:r.ok?'ok':'error',statusCode:r.status,at:now()};}catch(e){return{tool:'api.test',endpoint,status:'unreachable',error:e.message,at:now()};}
   }});
 
   registerTool({name:'api.document',description:'Generate API documentation',risk:'read',capabilities:['api','documentation','openapi','swagger'],handler:(input={})=>{
@@ -173,11 +173,11 @@ function registerBuiltinTools(){
 
   // ═══ MOBILE TOOLS ═══
   registerTool({name:'mobile.build',description:'Build mobile app from artifacts',risk:'write',capabilities:['mobile','android','ios','flutter','react-native'],handler:(input={})=>{
-    const platform=input.platform||'android';return{tool:'mobile.build',platform,status:'ready',command:'cap sync && gradlew assembleRelease',summary:'Build prepared for '+platform,at:now()};
+    const platform=input.platform||'android';return{tool:'mobile.build',platform,status:'blocked',reason:'mobile_build_requires_external_runner',command:'cap sync && gradlew assembleRelease',summary:'No mobile build was executed. A real build requires the configured external CI/build runner.',at:now()};
   }});
 
   registerTool({name:'mobile.preview',description:'Preview mobile app',risk:'read',capabilities:['mobile','preview','emulator'],handler:(input={})=>{
-    return{tool:'mobile.preview',status:'available',summary:'Mobile preview available via Capacitor',at:now()};
+    return{tool:'mobile.preview',status:'blocked',reason:'mobile_preview_requires_external_runner',summary:'No mobile preview was created.',at:now()};
   }});
 
   // ═══ AI/ML TOOLS ═══
@@ -186,7 +186,7 @@ function registerBuiltinTools(){
   }});
 
   registerTool({name:'ai.infer',description:'Run AI inference',risk:'read',capabilities:['machine-learning','ai','inference','prediction'],handler:(input={})=>{
-    return{tool:'ai.infer',model:input.model||'llama-3.3-70b',prompt:input.prompt?.slice(0,100),status:'available',summary:'AI inference available via Cloudflare Workers AI',at:now()};
+    const model=input.model||'@cf/meta/llama-3.3-70b-instruct-fp8-fast';const prompt=String(input.prompt??'').slice(0,8000);if(!prompt)return{tool:'ai.infer',model,status:'error',error:'prompt required',at:now()};if(!context.env?.AI?.run)return{tool:'ai.infer',model,status:'blocked',reason:'workers_ai_binding_missing',summary:'Workers AI binding is not available in this execution context.',at:now()};try{const result=await context.env.AI.run(model,{prompt});return{tool:'ai.infer',model,status:'completed',result,at:now()};}catch(e){return{tool:'ai.infer',model,status:'error',error:e.message,at:now()};}
   }});
 
   // ═══ MEDIA TOOLS ═══
