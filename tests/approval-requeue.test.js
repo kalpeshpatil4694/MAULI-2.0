@@ -62,45 +62,32 @@ async function driveToCompletion(projectId, maxTicks = 80) {
   return store.get('projects', projectId);
 }
 
-test('approving a high-risk command moves the project to queued, not awaiting_approval', async () => {
+test('an internal build command queues without a founder approval gate', async () => {
   resetStore();
   const queued = await queueCommand('Build a simple to-do list web app', {});
-  assert.equal(queued.status, 'awaiting_approval', 'a high-risk command must open the approval gate');
+  assert.equal(queued.status, 'queued', 'internal autonomous builds must not stop at founder approval');
   const projectId = queued.project.id;
-  const approvalId = queued.approval.id;
 
   const before = store.get('projects', projectId);
-  assert.equal(before.state, 'awaiting_approval');
+  assert.equal(before.state, 'queued');
   assert.ok(store.list('tasks').filter(t => t.projectId === projectId).length > 0);
-
-  const { response, payload } = await postJson(`/api/approvals/${approvalId}`, { approved: true, note: 'ship it' });
-  assert.equal(response.status, 200);
-  assert.equal(payload.data?.status ?? payload.status, 'approved');
-
-  const after = store.get('projects', projectId);
-  assert.equal(store.get('approvals', approvalId).state, 'approved');
-  assert.equal(after.state, 'queued',
-    'approving must re-queue the project so the scheduler will pick it up');
-  assert.equal(payload.data?.project?.state ?? payload.project?.state, 'queued',
-    'the response reports the new state so the dashboard can update without a refetch');
 });
 
-test('an approved command runs its whole task chain to a final delivery', async () => {
+test('an internal autonomous command runs its whole task chain to a final delivery', async () => {
   resetStore();
   const queued = await queueCommand('Build a notes web app', {});
+  assert.equal(queued.status, 'queued');
   const projectId = queued.project.id;
-
-  await postJson(`/api/approvals/${queued.approval.id}`, { approved: true });
 
   const live = store.list('tasks').filter(t => t.projectId === projectId);
   assert.ok(live.length >= 5, `expected a real task chain, got ${live.length}`);
   assert.ok(live.every(t => ['queued', 'blocked', 'assigned'].includes(t.state)),
-    'approval must not leave tasks in a non-runnable state forever');
+    'the initial internal-build plan must remain scheduler-runnable');
 
   const finalProject = await driveToCompletion(projectId);
   const finalTasks = store.list('tasks').filter(t => t.projectId === projectId);
   assert.equal(finalProject.state, 'completed',
-    `the approved command must complete; task states: ${finalTasks.map(t => t.state).join(', ')}`);
+    `the autonomous command must complete; task states: ${finalTasks.map(t => t.state).join(', ')}`);
   assert.ok(finalProject.finalDeliveryId, 'a completed command must produce a final delivery artifact');
 });
 
