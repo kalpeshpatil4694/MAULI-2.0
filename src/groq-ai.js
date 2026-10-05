@@ -10,7 +10,12 @@
 import { withDeadline } from './core.js';
 
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
-const GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile';
+// Provider catalogues change and models get decommissioned, so a hard-coded model id is a
+// single point of failure: when it is retired, every generation fails and MAULI silently
+// drops to templates. The strongest model first, the proven one behind it, and the next one
+// down is used automatically when the preferred one is unavailable.
+const GROQ_MODEL_CHAIN = ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile'];
+const GROQ_DEFAULT_MODEL = GROQ_MODEL_CHAIN[0];
 const GROQ_TIMEOUT_MS = 60_000;
 // A whole-app prompt asks for five complete files (HTML + JS + CSS + manifest + README).
 // Capped at 3000 tokens the completion was cut mid-file for anything but the smallest app,
@@ -53,6 +58,23 @@ export function groqModel(env, options = {}) {
   return options.groqModel ?? env?.MAULI_GROQ_MODEL ?? GROQ_DEFAULT_MODEL;
 }
 
+/**
+ * The models to try, in order. An operator's choice is honoured first and the rest of the
+ * chain stays behind it as the safety net, so pinning a model can never take generation
+ * down when that model is retired.
+ */
+export function groqModelChain(env, options = {}) {
+  const preferred = options.groqModel ?? env?.MAULI_GROQ_MODEL;
+  return [...new Set([preferred, ...GROQ_MODEL_CHAIN].filter(Boolean))];
+}
+
+// A 404, or a 400 whose body names the model, is the catalogue rejecting an id — not a
+// generation failure. Only that error moves on to the next model; a bad key, a rate limit
+// or an empty answer is the same on every model and must surface immediately.
+function modelUnavailable(error) {
+  return Boolean(error?.modelUnavailable);
+}
+
 function groqTimeoutMs(env, options = {}) {
   return Number(options.timeoutMs ?? env?.MAULI_AI_TIMEOUT_MS ?? GROQ_TIMEOUT_MS);
 }
@@ -66,7 +88,21 @@ function groqTimeoutMs(env, options = {}) {
 export async function groqGenerate(env, messages, options = {}) {
   const key = groqApiKey(env);
   if (!key) throw new GroqConfigError();
-  const model = groqModel(env, options);
+  // Try the chain so a retired model id degrades to the next one instead of taking
+  // generation down with it.
+  let lastError = null;
+  for (const model of groqModelChain(env, options)) {
+    try {
+      return await groqComplete(env, key, model, messages, options);
+    } catch (error) {
+      lastError = error;
+      if (!modelUnavailable(error)) throw error;
+    }
+  }
+  throw lastError ?? new Error('Groq has no usable model configured');
+}
+
+async function groqComplete(env, key, model, messages, options = {}) {
   const body = {
     model,
     messages: (Array.isArray(messages) ? messages : [])
@@ -86,6 +122,13 @@ export async function groqGenerate(env, messages, options = {}) {
   }), groqTimeoutMs(env, options), `Groq (${model})`);
 
   if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    // The catalogue rejecting an id: move on to the next model in the chain.
+    if (response.status === 404 || (response.status === 400 && /model/i.test(detail))) {
+      const error = new Error(`Groq model unavailable (HTTP ${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+      error.modelUnavailable = true;
+      throw error;
+    }
     // 401/403 is a bad key, and 429 is the free-tier rate limit — name both so the founder
     // sees a fixable cause instead of an opaque HTTP number.
     if (response.status === 401 || response.status === 403) {
@@ -94,7 +137,6 @@ export async function groqGenerate(env, messages, options = {}) {
     if (response.status === 429) {
       throw new Error('Groq rate limit reached (HTTP 429); falling back to deterministic templates');
     }
-    const detail = await response.text().catch(() => '');
     throw new Error(`Groq request failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
   }
 
@@ -106,4 +148,4 @@ export async function groqGenerate(env, messages, options = {}) {
   return content;
 }
 
-export { GROQ_BASE, GROQ_DEFAULT_MODEL };
+export { GROQ_BASE, GROQ_DEFAULT_MODEL, GROQ_MODEL_CHAIN };

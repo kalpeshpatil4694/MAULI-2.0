@@ -22,7 +22,7 @@ const TAIL = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 // A real working app: a list the user can add to, persisted across refresh.
 const WORKING_HTML = '<!DOCTYPE html><html><head><title>Tracker</title></head><body><h1>Expenses</h1><input id="item" placeholder="Add"><button onclick="add()">Add</button><ul id="list"></ul><script src="app.js"></script></body></html>';
-const WORKING_JS = 'let items=JSON.parse(localStorage.getItem("items")||"[]");function render(){document.getElementById("list").innerHTML=items.map(function(t){return "<li>"+t+"</li>"}).join("");localStorage.setItem("items",JSON.stringify(items));}function add(){var v=document.getElementById("item").value.trim();if(!v)return;items.push(v);render();}render();';
+const WORKING_JS = 'let items=[];try{items=JSON.parse(localStorage.getItem("items"))||[]}catch(e){items=[]}function render(){document.getElementById("list").innerHTML=items.map(function(t){return "<li>"+t+"</li>"}).join("");localStorage.setItem("items",JSON.stringify(items));}function add(){var v=document.getElementById("item").value.trim();if(!v)return;items.push(v);render();}render();';
 const WORKING_APP = [
   { path: 'www/index.html', content: WORKING_HTML },
   { path: 'www/app.js', content: WORKING_JS },

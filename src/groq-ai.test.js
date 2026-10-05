@@ -44,6 +44,59 @@ const okResponse = (content) => new Response(
   { status: 200, headers: { 'Content-Type': 'application/json' } }
 );
 
+// A model id the catalogue does not serve. Without a fallback chain this is the single
+// event that silently takes every generation down and drops MAULI to templates.
+const retiredModelResponse = (model) => new Response(
+  JSON.stringify({ error: { message: `The model \`${model}\` does not exist` } }),
+  { status: 404, headers: { 'Content-Type': 'application/json' } }
+);
+
+await withFetchStub(
+  (url, init) => {
+    const model = JSON.parse(init.body).model;
+    return model === GROQ_DEFAULT_MODEL ? retiredModelResponse(model) : okResponse('recovered');
+  },
+  async (calls) => {
+    const out = await groqGenerate({ GROQ_API_KEY: 'gsk_test_key' }, messages);
+    assert.equal(out, 'recovered', 'a retired preferred model must not stop generation');
+    assert.equal(calls.length, 2, 'the next model in the chain is tried');
+    assert.equal(calls[0].body.model, GROQ_DEFAULT_MODEL);
+    assert.notEqual(calls[1].body.model, GROQ_DEFAULT_MODEL, 'the fallback is a different model');
+  }
+);
+
+// An operator who pins a model must not lose the safety net behind it, and a failure that is
+// NOT about the model (a bad key) must surface immediately instead of retrying every model.
+await withFetchStub(
+  () => new Response('unauthorized', { status: 401 }),
+  async (calls) => {
+    await assert.rejects(() => groqGenerate({ GROQ_API_KEY: 'gsk_bad' }, messages), /API key/);
+    assert.equal(calls.length, 1, 'a bad key is not a model problem — do not retry the chain');
+  }
+);
+
+await withFetchStub(
+  () => new Response(JSON.stringify({ error: { message: 'rate limited' } }), { status: 429 }),
+  async (calls) => {
+    await assert.rejects(() => groqGenerate({ GROQ_API_KEY: 'gsk_test_key' }, messages), /rate limit/);
+    assert.equal(calls.length, 1, 'a rate limit is not a model problem either');
+  }
+);
+
+// An operator's pinned model is tried first, and the chain still stands behind it.
+await withFetchStub(
+  (url, init) => {
+    const model = JSON.parse(init.body).model;
+    return model === 'pinned/model' ? retiredModelResponse(model) : okResponse('chain survived');
+  },
+  async (calls) => {
+    const out = await groqGenerate({ GROQ_API_KEY: 'gsk_test_key', MAULI_GROQ_MODEL: 'pinned/model' }, messages);
+    assert.equal(out, 'chain survived');
+    assert.equal(calls[0].body.model, 'pinned/model', 'the operator choice is tried first');
+    assert.ok(calls.length > 1, 'the chain remains as the safety net');
+  }
+);
+
 // The promised chain: Cloudflare Workers AI fails (here: the exhausted 4006 allowance) and
 // the request is served by Groq before any deterministic template is reached.
 await withFetchStub(

@@ -128,7 +128,7 @@ test('ensureProjectPipeline chains still advance end-to-end through runTask with
     content: {
       files: [
         { path: 'www/index.html', content: '<!DOCTYPE html><html><head><title>Call Recorder</title></head><body><ul id="list"></ul><button onclick="start()">Record</button><script src="app.js"></script></body></html>' },
-        { path: 'www/app.js', content: 'var calls=JSON.parse(localStorage.getItem("calls")||"[]");function render(){document.getElementById("list").innerHTML=calls.map(function(c){return "<li>"+c+"</li>"}).join("");localStorage.setItem("calls",JSON.stringify(calls));}function start(){calls.push("call-"+calls.length);render();}render();' },
+        { path: 'www/app.js', content: 'var calls=[];try{calls=JSON.parse(localStorage.getItem("calls"))||[]}catch(e){calls=[]}function render(){document.getElementById("list").innerHTML=calls.map(function(c){return "<li>"+c+"</li>"}).join("");localStorage.setItem("calls",JSON.stringify(calls));}function start(){calls.push("call-"+calls.length);render();}render();' },
         { path: 'package.json', content: '{"name":"call-recorder","version":"1.0.0"}' },
       ]
     },
