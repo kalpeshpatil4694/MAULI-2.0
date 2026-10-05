@@ -36,6 +36,31 @@ const PROJECTS_PER_TICK=40;
 // Cron (no drain target) advances up to 6 runnable tasks per project per tick so the
 // */5 schedule still delivers a full chain in a couple of ticks.
 const CRON_TASKS_PER_PROJECT=6;
+// Multi-agent parallelism. The task loop claimed and executed ONE task at a time, so a
+// project with six independent tasks advanced no faster than a single lane however many free
+// agents it had. The runnable set is already dependency-filtered, and each task is dominated
+// by I/O (an AI generation call, a subrequest), so overlapping a small, bounded number of
+// them uses roughly the same free-tier CPU while cutting wall-clock time. The bound is
+// deliberately modest and OVERRIDABLE: Workers free-tier CPU (10ms) and the ~40-subrequest
+// budget are per-invocation, so unbounded fan-out would exhaust them and fail every task at
+// once — the opposite of a speedup.
+const DEFAULT_AGENT_CONCURRENCY=3,MAX_AGENT_CONCURRENCY=8;
+function agentConcurrency(env={},context={}){
+  const candidates=[context.concurrency,env?.MAULI_AGENT_CONCURRENCY,env?.MAULI_EXECUTION_CONCURRENCY,DEFAULT_AGENT_CONCURRENCY];
+  for(const candidate of candidates){const n=Number(candidate);if(Number.isFinite(n)&&n>=1)return Math.min(MAX_AGENT_CONCURRENCY,Math.floor(n));}
+  return DEFAULT_AGENT_CONCURRENCY;
+}
+async function mapWithConcurrency(items,limit,worker){
+  const list=Array.isArray(items)?items:[];
+  if(!list.length)return;
+  const width=Math.max(1,Math.min(Number(limit)||1,list.length));
+  let next=0;
+  const runners=Array.from({length:width},async()=>{
+    for(;;){const index=next++;if(index>=list.length)return;try{await worker(list[index],index)}catch(_){}}
+  });
+  await Promise.all(runners);
+}
+
 function dependenciesReady(task){return(task?.dependsOn??[]).every(id=>store.get('tasks',id)?.state==='completed');}
 function activeRun(taskId){return store.list('runs').find(r=>r.taskId===taskId&&r.state==='running')??null;}
 // A future-dated stamp (clock skew, or a recovered estimate written into a timestamp
@@ -249,10 +274,25 @@ export async function schedulerTick(env={},context={}){
       const fullChain=drainProject===projectId;
       const taskLimit=fullChain?8:CRON_TASKS_PER_PROJECT;
       let ran=0;
-      for(const task of tasks){
+      // A bounded batch instead of a single lane: independent tasks whose agents differ now
+      // run together. `overBudget()` is still checked per task, so the project budget caps the
+      // whole batch exactly as it capped the serial loop.
+      const batch=tasks.slice(0,taskLimit);
+      const skipped=[];
+      await mapWithConcurrency(batch,agentConcurrency(env,context),async(task)=>{
+        if(overBudget()){skipped.push(task);return;}
+        const outcome=await runTask(task.id,env,context);
+        results.push(outcome);ran++;
+        if(outcome?.status==='not-runnable')skipped.push(task);
+      });
+      // A task skipped only because a sibling in the same batch held its agent for a moment is
+      // not a failure — retry it sequentially now that the batch has released its agents, so
+      // parallelism can never cost a task its turn.
+      for(const task of skipped){
         if(overBudget())break;
-        results.push(await runTask(task.id,env,context));ran++;
-        if(ran>=taskLimit)break;
+        const outcome=await runTask(task.id,env,context);
+        results.push(outcome);
+        if(outcome?.status!=='not-runnable')ran++;
       }
       const final=await finalizeCommand(projectId,env,projectTasks).catch(()=>null);
       if(final)results.push({status:final.status,runId:final.runId,projectId});

@@ -370,6 +370,36 @@ test('a project that has never been run reports BLOCKED with the exact reason', 
   const local = describeStoredRuntimeAcceptance({ id: 'p', architecture: { id: 'browser-only', backend: false } });
   assert.equal(local.label, 'LOCAL');
   assert.match(local.reason, /no server to deploy/i);
+  // The project's OWN projection must agree with the list projection. runtimeAcceptanceSummary
+  // judged a browser-only project with no run as BLOCKED while /api/state called the same
+  // project LOCAL, so the live command card printed "Production Runtime: BLOCKED" for an app
+  // that needs no server at all.
+  const browserOnly = createProject({
+    name: 'Local app', objective: 'Build a single-user note pad', founderCommand: 'Build a single-user note pad',
+    requirements: ['notes'], architecture: { id: 'local-data', backend: false, database: 'local' }
+  });
+  registerArtifact({
+    projectId: browserOnly.id, taskId: null, type: 'code-workspace',
+    content: {
+      files: [
+        { path: 'www/index.html', content: '<!DOCTYPE html><html><body><h1>Notes</h1><input id="note"><button id="add" onclick="save()">Add</button><ul id="list"></ul><script src="app.js"></script></body></html>' },
+        { path: 'www/app.js', content: 'function save(){var i=document.getElementById("note"),l=document.getElementById("list");if(!i.value.trim())return;var li=document.createElement("li");li.textContent=i.value;l.appendChild(li);localStorage.setItem("notes",l.innerHTML);i.value="";}' },
+        { path: 'www/styles.css', content: 'body { font-family: sans-serif; padding: 24px; }' }
+      ]
+    }
+  });
+  const browserSummary = runtimeAcceptanceSummary(browserOnly.id);
+  assert.equal(browserSummary.label, 'LOCAL');
+  assert.equal(browserSummary.status, 'not-run');
+  assert.equal(browserSummary.finalDelivery, 'BLOCKED', 'a local app that has not completed is not READY');
+  assert.match(browserSummary.reason, /no server to deploy/i);
+  // Once the project actually completed, Final Delivery is READY: the scheduler only marks a
+  // project completed after the gates passed, and a browser-only project passes on its own
+  // local bar (UI interaction + device persistence), with no server to deploy.
+  store.put('projects', { ...store.get('projects', browserOnly.id), state: 'completed', finalDeliveryId: 'artifact_local', id: browserOnly.id });
+  const completedSummary = runtimeAcceptanceSummary(browserOnly.id);
+  assert.equal(completedSummary.label, 'LOCAL');
+  assert.equal(completedSummary.finalDelivery, 'READY', 'a completed local app must read READY, not BLOCKED');
   assert.equal(describeRuntimeAcceptance(null).label, 'BLOCKED');
 });
 

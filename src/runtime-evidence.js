@@ -20,8 +20,8 @@ import { listProjectArtifacts } from './artifacts.js';
 import { analyzeGeneratedApp } from './generated-app-quality.js';
 import {
   evaluateRuntimeAcceptance, isRuntimeAcceptanceReport, toRuntimeEvidenceProjection,
-  describeRuntimeAcceptance, hasBackendEntryPoint, runtimeExecutorConfigured,
-  dispatchRuntimeAcceptance
+  describeRuntimeAcceptance, describeStoredRuntimeAcceptance, hasBackendEntryPoint,
+  runtimeExecutorConfigured, dispatchRuntimeAcceptance, RUNTIME_BLOCKING
 } from './production-runtime.js';
 import {
   DEPLOYMENT_STATUS, normalizeDeployment, assertRuntimeIdentity, deployExecutorConfigured,
@@ -243,6 +243,19 @@ export function runtimeAcceptanceSummary(projectOrId, { env = null } = {}) {
   // exactly the stale-evidence bug point 18 forbids. The stored report stays as a fallback.
   let report = null;
   try { report = judgeRuntimeAcceptance(project, null, { env }); } catch (_) { report = null; }
+  // A browser-only (local-runnable) project owes no server and therefore no acceptance RUN.
+  // Its verdict is the LOCAL one the production-runtime gate already derives from the
+  // delivered source, and /api/state's list projection already printed it. Judging it here
+  // produced BLOCKED for the SAME project the list called LOCAL, so the live command card
+  // read "Production Runtime: BLOCKED" for an app that needs no server at all. Only the
+  // no-run-yet case is redirected; a static no-false-PASS failure still shows as FAILED.
+  if (
+    !currentRuntimeAcceptance(project) &&
+    runtimeDeploymentKind({ architecture: project.architecture ?? null, platform: project.platform ?? null }) === 'browser' &&
+    (!report || report.blockingCode === RUNTIME_BLOCKING.EVIDENCE_MISSING)
+  ) {
+    return describeStoredRuntimeAcceptance(project);
+  }
   return describeRuntimeAcceptance(report ?? stored);
 }
 

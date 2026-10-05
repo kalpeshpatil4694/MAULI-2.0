@@ -9,17 +9,30 @@ import { remember, recall } from './memory.js';
 
 /**
  * Send a message from one agent to another
+ *
+ * Two field vocabularies exist. The internal API addresses agents as {fromAgentId,toAgentId}
+ * with a {subject,body}; the dashboard's Messaging panel posts the shorter {from,to,content}.
+ * Reading only the long names threw on every panel-sent message before anything was stored,
+ * so the feed the founder was looking at stayed empty after they pressed Send. Both
+ * vocabularies are accepted here — the stored record always uses the canonical field names.
  */
-export function sendMessage({ fromAgentId, toAgentId, type = 'info', subject, body, taskId = null, projectId = null }) {
-  if (!fromAgentId || !toAgentId) throw new Error('fromAgentId and toAgentId are required');
-  
-  const message = {
+export function sendMessage({
+  fromAgentId = null, toAgentId = null, type = 'info', subject = null, body = null,
+  taskId = null, projectId = null,
+  from = null, to = null, content = null, message = null
+} = {}) {
+  const sender = fromAgentId ?? from ?? null;
+  const recipient = toAgentId ?? to ?? null;
+  if (!sender || !recipient) throw new Error('fromAgentId and toAgentId are required');
+  const text = body ?? content ?? message ?? '';
+
+  const record = {
     id: id('msg'),
-    fromAgentId,
-    toAgentId,
+    fromAgentId: sender,
+    toAgentId: recipient,
     type, // info, request, review, handoff, alert, collaboration
     subject: subject || 'Untitled',
-    body: body || '',
+    body: text,
     taskId,
     projectId,
     status: 'unread', // unread, read, acknowledged, responded
@@ -29,26 +42,26 @@ export function sendMessage({ fromAgentId, toAgentId, type = 'info', subject, bo
     response: null
   };
   
-  store.put('messages', message);
+  store.put('messages', record);
   store.addEvent('agent.message_sent', {
-    messageId: message.id,
-    from: fromAgentId,
-    to: toAgentId,
+    messageId: record.id,
+    from: sender,
+    to: recipient,
     type,
-    subject: message.subject
+    subject: record.subject
   });
   
   // Also remember in agent memory for learning
   remember({
     type: 'agent_communication',
-    content: { from: fromAgentId, to: toAgentId, subject, type },
+    content: { from: sender, to: recipient, subject, type },
     scope: 'agent',
-    scopeId: fromAgentId,
+    scopeId: sender,
     importance: type === 'alert' ? 'high' : 'normal',
     source: 'agent-communication'
   });
   
-  return message;
+  return record;
 }
 
 /**
@@ -141,17 +154,26 @@ export function handoffTask({ fromAgentId, toAgentId, taskId, projectId, subject
 /**
  * Broadcast alert to all agents
  */
-export function broadcastAlert({ fromAgentId, subject, body, projectId = null }) {
+export function broadcastAlert({
+  fromAgentId = null, subject = null, body = null, projectId = null,
+  from = null, content = null, message = null
+} = {}) {
+  // A founder broadcast has no agent sender, and the dashboard's Broadcast button posts only
+  // {content,type} — both left `fromAgentId` undefined and every sendMessage() threw, so the
+  // broadcast silently produced nothing. Default the sender to the founder and accept the
+  // same alternative body/content/message spellings as sendMessage.
+  const sender = fromAgentId ?? from ?? 'founder';
+  const text = body ?? content ?? message ?? '';
   const agents = store.list('agents');
   const messages = [];
   for (const agent of agents) {
-    if (agent.id !== fromAgentId) {
+    if (agent.id !== sender) {
       messages.push(sendMessage({
-        fromAgentId,
+        fromAgentId: sender,
         toAgentId: agent.id,
         type: 'alert',
         subject,
-        body,
+        body: text,
         projectId
       }));
     }

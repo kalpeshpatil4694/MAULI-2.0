@@ -52,23 +52,26 @@ async function until(read, ms = 4000) {
 
 const UNSET = /undefined|NaN|\[object|\bnull\b/i;
 
-test('the Groq status is in the always-visible topbar, not behind a page or a button', () => {
+test('the Groq status is a single symbol in the always-visible topbar, not a sentence', () => {
   const source = dashboardHTML();
   const topbar = source.match(/<header class="topbar">[\s\S]*?<\/header>/)?.[0];
   assert.ok(topbar, 'the dashboard must have a topbar');
   assert.ok(topbar.includes('id="groqChip"'), 'the Groq status must live in the topbar');
+  // The status was painted twice — once as the chip sentence and once as a full-width status
+  // line — so the bar read as two overlapping labels. Only the symbol may remain.
+  assert.doesNotMatch(topbar, /id="groqState"/, 'the duplicated status line must be gone');
   assert.match(source, /loadGroqChip\(\);/, 'the status must be painted when the script loads');
 });
 
-test('on load the chip reports a configured key with its model and generation path', async () => {
+test('on load the chip shows one symbol and keeps the detail in its tooltip', async () => {
   const dom = domWith(HEALTH());
   const chip = dom.elements.get('groqChip');
   assert.ok(chip, 'the topbar must carry the Groq status element');
   await until(() => chip.textContent);
 
-  assert.match(chip.textContent, /Groq: Configured/);
-  assert.match(chip.textContent, /llama-3\.3-70b-versatile/, 'the model must be shown');
-  assert.match(chip.textContent, /groq/, 'the generation path must be shown');
+  assert.equal(chip.textContent, '✅', 'a configured key is one green check, not a sentence');
+  assert.match(chip.title, /llama-3\.3-70b-versatile/, 'the model must be available as detail');
+  assert.match(chip.title, /groq/, 'the generation path must be available as detail');
   assert.doesNotMatch(chip.textContent, UNSET);
   assert.match(chip.style.color, /green/, 'a configured key is a healthy state');
   assert.ok(
@@ -77,11 +80,12 @@ test('on load the chip reports a configured key with its model and generation pa
   );
 });
 
-test('an absent key reports Not Configured instead of a reassuring blank', async () => {
+test('an absent key shows the Not Configured symbol instead of a reassuring blank', async () => {
   const dom = domWith(HEALTH({ groqConfigured: false, groqModel: null, generationPath: 'deterministic-templates' }));
   const chip = dom.elements.get('groqChip');
   await until(() => chip.textContent);
-  assert.match(chip.textContent, /Groq: Not Configured/);
+  assert.equal(chip.textContent, '❌');
+  assert.match(chip.title, /Not Configured/, 'the reason stays available on hover');
   assert.doesNotMatch(chip.textContent, UNSET);
   assert.match(chip.style.color, /yellow/);
 });
@@ -99,8 +103,8 @@ test('a payload without Groq fields never reads as Configured (control)', async 
   const dom = domWith(legacy);
   const chip = dom.elements.get('groqChip');
   await until(() => chip.textContent);
-  assert.match(chip.textContent, /^➖ Groq: —$/, 'an unreported verdict stays unreported as Configured');
-  assert.doesNotMatch(chip.textContent, /Configured/);
+  assert.equal(chip.textContent, '➖', 'an unreported verdict stays unreported as Configured');
+  assert.doesNotMatch(chip.title, /Configured/);
   assert.doesNotMatch(chip.textContent, UNSET);
 });
 
