@@ -242,3 +242,40 @@ test('a delivery whose artifact never persisted is reported, not silently claime
     store.configure(null);
   }
 });
+
+// The in-memory list caps used `slice(-N)` on store.list(), whose insertion order after
+// hydration (D1 `ORDER BY updated_at DESC`) is NEWEST-first — so the trailing slice kept the
+// OLDEST N rows and dropped the newest. A project that had just been worked never showed its
+// tasks, and a just-generated artifact never appeared, even though the totals counted them.
+test('the api/state lists ship the NEWEST rows, matching the hydrated (newest-first) store order', async () => {
+  const loadCounter = Date.now();
+  const [{ default: app }] = await Promise.all([import(`../src/index.js?t=${loadCounter}`)]);
+  store.configure(null);
+  store.data = new Map();
+  store.hydrated = true;
+  const suffix = TAIL();
+  const base = Date.parse('2030-01-01T00:00:00.000Z');
+  const tasks = new Map();
+  // Insert NEWEST-first, exactly as hydrate() does after a D1 `ORDER BY updated_at DESC`.
+  for (let i = 309; i >= 0; i--) {
+    const id = `rec-${suffix}-${i}`;
+    tasks.set(id, { id, projectId: `p-${suffix}`, title: `T${i}`, state: 'completed', updatedAt: new Date(base + i * 1000).toISOString(), createdAt: new Date(base + i * 1000).toISOString() });
+  }
+  store.data.set('tasks', tasks);
+  const artifacts = new Map();
+  for (let i = 109; i >= 0; i--) {
+    const id = `rec-art-${suffix}-${i}`;
+    artifacts.set(id, { id, projectId: `p-${suffix}`, type: 'code-workspace', metadata: {}, updatedAt: new Date(base + i * 1000).toISOString(), createdAt: new Date(base + i * 1000).toISOString() });
+  }
+  store.data.set('artifacts', artifacts);
+
+  const res = await app.fetch(new Request('https://mauli.test/api/state'), {}, { waitUntil() {} });
+  const body = await res.json();
+  const data = body.data ?? body;
+
+  assert.ok(data.tasks.length <= 300, 'the task list stays capped');
+  assert.ok(data.tasks.some(t => t.id === `rec-${suffix}-309`), 'the NEWEST task must be shipped, not dropped by slice(-300)');
+  assert.ok(!data.tasks.some(t => t.id === `rec-${suffix}-0`), 'an older task beyond the cap must be dropped');
+  assert.ok(data.artifacts.length <= 100, 'the artifact list stays capped');
+  assert.ok(data.artifacts.some(a => a.id === `rec-art-${suffix}-109`), 'the NEWEST artifact must be shipped, not dropped by slice(-100)');
+});
