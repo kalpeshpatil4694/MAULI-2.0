@@ -699,8 +699,9 @@ function updateStats(){
   if($('navA'))$('navA').textContent=S.agents.length;if($('navP'))$('navP').textContent=S.projects.length;
   if($('navT'))$('navT').textContent=Number(S.summary?.running??S.tasks.filter(t=>['working','assigned','verifying'].includes(t.state)).length)||0;
   if($('navAp'))$('navAp').textContent=S.approvals.length;
-  if($('ovP'))$('ovP').textContent=S.projects.length;if($('ovC'))$('ovC').textContent=S.projects.filter(p=>p.state==='completed').length;
-  if($('ovA'))$('ovA').textContent=S.projects.filter(p=>p.state==='active').length;if($('ovAg'))$('ovAg').textContent=S.agents.length;if($('ovArt'))$('ovArt').textContent=totals.artifacts??S.artifacts.length;
+  const projectStates=S.projects.reduce((m,p)=>{const s=projRealState(p);m[s]=(m[s]||0)+1;return m},{});
+  if($('ovP'))$('ovP').textContent=S.projects.length;if($('ovC'))$('ovC').textContent=projectStates.completed||0;
+  if($('ovA'))$('ovA').textContent=projectStates.active||0;if($('ovAg'))$('ovAg').textContent=S.agents.length;if($('ovArt'))$('ovArt').textContent=totals.artifacts??S.artifacts.length;
   if($('projCnt'))$('projCnt').textContent=(totals.projects??S.projects.length)+' projects';if($('taskCnt'))$('taskCnt').textContent=(totals.tasks??S.tasks.length)+' tasks';
 }
 
