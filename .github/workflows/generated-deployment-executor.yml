@@ -1,0 +1,95 @@
+name: MAULI Generated Deployment Executor
+
+on:
+  repository_dispatch:
+    types: [mauli_generated_deploy]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mauli-generated-deploy-${{ github.event.client_payload.projectId }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROJECT_ID: ${{ github.event.client_payload.projectId }}
+      ARTIFACT_ID: ${{ github.event.client_payload.artifactId }}
+      CONTROL_PLANE: ${{ github.event.client_payload.controlPlane }}
+      MAULI_FOUNDER_KEY: ${{ secrets.MAULI_FOUNDER_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Deploy generated project and run real acceptance
+        env:
+          MAULI_CONTROL_PLANE: ${{ env.CONTROL_PLANE }}
+        run: |
+          cat > /tmp/mauli-generated-executor.mjs <<'NODE'
+          import { deployGeneratedProject } from './scripts/deploy-executor.mjs';
+          import { runProductionRuntimeAcceptance } from './scripts/production-runtime.mjs';
+
+          const base = String(process.env.MAULI_CONTROL_PLANE || '').replace(/\/+$/, '');
+          const projectId = process.env.PROJECT_ID;
+          const founderKey = process.env.MAULI_FOUNDER_KEY;
+          if (!base || !projectId || !founderKey) throw new Error('deployment executor configuration is incomplete');
+
+          async function api(method, path, body) {
+            const res = await fetch(base + path, {
+              method,
+              headers: { 'x-mauli-founder': founderKey, 'content-type': 'application/json' },
+              body: body === undefined ? undefined : JSON.stringify(body)
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error('MAULI API HTTP ' + res.status + ': ' + String(payload?.error?.message || payload?.error || 'request failed').slice(0, 300));
+            return payload?.data ?? payload;
+          }
+
+          const detail = await api('GET', '/api/projects/' + encodeURIComponent(projectId) + '/detail');
+          const project = detail.detail?.project || {};
+          const artifacts = await api('GET', '/api/artifacts?projectId=' + encodeURIComponent(projectId));
+          const files = [];
+          const seen = new Set();
+          for (const artifact of (artifacts.artifacts || []).filter(a => a?.type === 'code-workspace')) {
+            for (const file of (artifact.content?.files || [])) {
+              if (!file?.path || typeof file.content !== 'string' || seen.has(file.path)) continue;
+              seen.add(file.path);
+              files.push({ path: file.path, content: file.content });
+            }
+          }
+          if (!files.length) throw new Error('generated project has no code-workspace files');
+
+          const artifactId = process.env.ARTIFACT_ID || project.artifactId || null;
+          const out = await deployGeneratedProject({
+            projectId,
+            files,
+            artifactId,
+            architecture: project.architecture || null,
+            requiresRealtime: Boolean(project.architecture?.realtime)
+          });
+          await api('POST', '/api/projects/' + encodeURIComponent(projectId) + '/deployment', out.deployment);
+
+          if (out.deployed && out.deployment?.url) {
+            const report = await runProductionRuntimeAcceptance(files, {
+              spec: project.requirementSpec || {},
+              architecture: project.architecture || null,
+              objective: project.objective || '',
+              requirements: Array.isArray(project.requirements) ? project.requirements : [],
+              baseUrl: out.deployment.url,
+              projectId,
+              artifactId,
+              deployment: out.deployment,
+              platform: project.platform || null
+            });
+            await api('POST', '/api/projects/' + encodeURIComponent(projectId) + '/runtime-acceptance', { runtimeAcceptance: report });
+          }
+          if (!out.deployed) process.exit(1);
+          NODE
+          node /tmp/mauli-generated-executor.mjs
