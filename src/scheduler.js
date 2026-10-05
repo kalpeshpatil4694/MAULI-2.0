@@ -197,7 +197,11 @@ function repairMissingVerificationIds(tasks){
 async function finalizeCommand(projectId,env={},indexedTasks=null){const project=store.get('projects',projectId),runId=project?.commandRunId||project?.id;if(!project||project.state==='awaiting_approval')return null;let tasks=(Array.isArray(indexedTasks)?indexedTasks:store.list('tasks').filter(t=>t.projectId===projectId));if(!tasks.length)return null;
   // The repair writes the store, but the caller's array still holds the pre-repair row
   // objects — re-read so this same tick can already see the repaired verificationId.
-  if(repairMissingVerificationIds(tasks))tasks=store.list('tasks').filter(t=>t.projectId===projectId);const hasRunning=tasks.some(t=>['working','assigned'].includes(t.state)),hasQueued=tasks.some(t=>RUNNABLE.has(t.state)&&dependenciesReady(t)),hasFailed=tasks.some(t=>t.state==='failed'),qaTasks=tasks.filter(t=>t.finalProjectVerification),integrity=tasks.find(t=>t.pipelineGate&&t.gateType==='integrity'),qaPassed=qaTasks.length>0&&qaTasks.every(t=>t.state==='completed'&&t.verificationId),integrityPassed=Boolean(integrity&&integrity.state==='completed'&&integrity.verificationId),allCompleted=tasks.every(t=>t.state==='completed'||t.state==='cancelled');if(hasRunning||hasQueued)return null;if(allCompleted&&qaPassed&&integrityPassed){
+  if(repairMissingVerificationIds(tasks))tasks=store.list('tasks').filter(t=>t.projectId===projectId);const hasRunning=tasks.some(t=>['working','assigned','verifying','running'].includes(t.state)),hasQueued=tasks.some(t=>RUNNABLE.has(t.state)&&dependenciesReady(t)),hasPending=tasks.some(t=>['queued','assigned','working','verifying','running'].includes(t.state)),hasFailed=tasks.some(t=>t.state==='failed'),hasBlocked=tasks.some(t=>t.state==='blocked'),qaTasks=tasks.filter(t=>t.finalProjectVerification),integrity=tasks.find(t=>t.pipelineGate&&t.gateType==='integrity'),qaPassed=qaTasks.length>0&&qaTasks.every(t=>t.state==='completed'&&t.verificationId),integrityPassed=Boolean(integrity&&integrity.state==='completed'&&integrity.verificationId),allCompleted=tasks.every(t=>t.state==='completed'||t.state==='cancelled');
+  // A blocked pipeline with no pending/running work is terminal. Leaving it as active made
+  // the dashboard claim that MAULI was still working when nothing could advance it.
+  if(!hasPending&&hasBlocked&&!hasFailed&&!allCompleted){const blockedProject=await store.putDurable('projects',{...store.get('projects',projectId),state:'blocked',blockedAt:now(),blockedReason:'One or more tasks are blocked and no executable work remains.',id:projectId});store.addEvent('command.blocked',{projectId,runId,reason:blockedProject.blockedReason,at:now()});return{status:'blocked',runId,command:project.founderCommand,project:blockedProject,tasks,blockedReason:blockedProject.blockedReason};}
+  if(hasRunning||hasQueued)return null;if(allCompleted&&qaPassed&&integrityPassed){
   // A delivery that refuses to build must never be swallowed into a silent success: the
   // project would read as 'completed' with nothing to download — the exact 'looks done,
   // delivers nothing' failure this gate exists to prevent. Record why and stay unfinished.
@@ -248,7 +252,7 @@ export async function schedulerTick(env={},context={}){
     if(project.state==='completed'&&project.finalDeliveryId)continue;
     const projectTasks=byProject.get(project.id)??[];
     if(!projectTasks.length)continue;
-    if(projectTasks.some(t=>['queued','assigned','working','verifying','blocked'].includes(t.state)))continue;
+    if(projectTasks.some(t=>['queued','assigned','working','verifying'].includes(t.state)) && !projectTasks.some(t=>t.state==='blocked'))continue;
     const final=await finalizeCommand(project.id,env,projectTasks).catch(()=>null);
     if(final)recovered.push(project.id);
   }
