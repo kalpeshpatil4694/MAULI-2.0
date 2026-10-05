@@ -21,7 +21,7 @@ export async function executeTool(name,input={},context={}){const tool=listTools
 
 function registerBuiltinTools(){
   // ═══ CORE TOOLS (FUNCTIONAL) ═══
-  registerTool({name:'health.check',description:'Returns runtime health with system status',risk:'read',capabilities:['diagnostics'],handler:()=>({healthy:true,uptime:Date.now(),memory:typeof process!=='undefined'?process.memoryUsage?.()?.heapUsed:0,storeEntities:store.list('tools').length,at:now()})});
+  registerTool({name:'health.check',description:'Returns runtime health with system status',risk:'read',capabilities:['diagnostics'],handler:()=>{const integrity=store.integrity();return{healthy:Boolean(integrity.healthy),uptime:Date.now(),memory:typeof process!=='undefined'?process.memoryUsage?.()?.heapUsed:0,storeEntities:store.list('tools').length,storeIntegrity:integrity,at:now()};}});
 
   registerTool({name:'planning.execute',description:'Generates execution plan with task breakdown',risk:'read',capabilities:['planning','product-planning'],handler:(input={})=>{
     const objective=input.objective||input.description||input.taskId||'General task';
@@ -171,8 +171,20 @@ function registerBuiltinTools(){
   }});
 
   registerTool({name:'documentation.review',description:'Review documentation quality',risk:'read',capabilities:['documentation','docs','review'],handler:(input={})=>{
-    const checks=[{name:'has_title',passed:true},{name:'has_overview',passed:true},{name:'has_tasks',passed:store.list('tasks').length>0},{name:'has_examples',passed:false},{name:'up_to_date',passed:true}];
-    return{tool:'documentation.review',checks,passed:checks.filter(c=>c.passed).length,score:Math.round(checks.filter(c=>c.passed).length/checks.length*100),at:now()};
+    const projectId=input.projectId;const project=projectId?store.get('projects',projectId):null;
+    const tasks=projectId?store.list('tasks').filter(t=>t.projectId===projectId):store.list('tasks');
+    const artifacts=projectId?store.list('artifacts').filter(a=>a.projectId===projectId):store.list('artifacts');
+    const docs=artifacts.flatMap(a=>(a.content?.files??[])).filter(f=>/^(README|docs\/|.*\.md$)/i.test(String(f.path??'')));
+    const text=docs.map(f=>String(f.content??'')).join('\n');
+    const checks=[
+      {name:'has_title',passed:/^#\s+\S/m.test(text),detail:'Markdown title evidence'},
+      {name:'has_overview',passed:/overview|description|introduction/i.test(text),detail:'Overview/introduction evidence'},
+      {name:'has_tasks',passed:tasks.length>0,detail:'Project task evidence'},
+      {name:'has_examples',passed:/example|usage|curl|request|response/i.test(text),detail:'Usage/example evidence'},
+      {name:'up_to_date',passed:project?Boolean(project.updatedAt):docs.length>0,detail:'Project/document update evidence'}
+    ];
+    const passed=checks.filter(c=>c.passed).length;
+    return{tool:'documentation.review',projectId:projectId??null,checks,passed,total:checks.length,score:Math.round(passed/checks.length*100),at:now()};
   }});
 
   // ═══ API TOOLS (FUNCTIONAL) ═══
