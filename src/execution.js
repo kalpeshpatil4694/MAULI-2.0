@@ -13,7 +13,11 @@ import './functional-code-executor.js';
 export { registerExecutor, listExecutors, grantExecutor } from './executor-registry.js';
 
 const EXECUTION_LEASE_MS = 90_000;
-const HEARTBEAT_INTERVAL_MS = 60_000;
+const HEARTBEAT_INTERVAL_MS = 75_000;
+// Do not spend a D1 row on a duplicate scheduler check when the heartbeat is already fresh.
+// The lease is 90s, so a 70s minimum gap leaves recovery headroom while cutting needless
+// heartbeat writes during the 1-minute scheduler cadence.
+const HEARTBEAT_MIN_WRITE_GAP_MS = 70_000;
 // A heartbeat may DEFER reclamation; it must never make a run immortal. Every recovery path
 // in the system asks the same question — "is this run stale?" — and stale() is a pure
 // function of heartbeatAt. So an execution whose terminal write never landed (isolate
@@ -67,6 +71,8 @@ export function heartbeatExecution(runId) { const run=store.get('runs',runId);if
   // Past the absolute lifetime the lease is no longer renewable. Returning false without a
   // write also stops the interval from re-persisting a dead run row on every tick.
   if (runOverLifetime(run)) return false;
+  const lastHeartbeat=Date.parse(run.heartbeatAt??run.startedAt??0);
+  if(Number.isFinite(lastHeartbeat)&&Date.now()-lastHeartbeat<HEARTBEAT_MIN_WRITE_GAP_MS)return true;
   const timestamp=now();store.put('runs',{...run,heartbeatAt:timestamp,updatedAt:timestamp,id:run.id});return true; }
 
 export async function executeTask(task,context={}) {
