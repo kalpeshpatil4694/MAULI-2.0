@@ -30,6 +30,10 @@ export function verifyResult(task, execution) {
   const checks = [];
   checks.push({ name: 'execution_completed', passed: execution?.state === 'completed' });
   checks.push({ name: 'has_result', passed: execution?.result !== undefined && execution?.result !== null });
+  const executionStatus=String(execution?.result?.status??'').toLowerCase();
+  if(['blocked','error','failed','unreachable'].includes(executionStatus)){
+    checks.push({name:'result_not_blocked',passed:false,reason:`Tool/executor reported status: ${execution?.result?.status}`});
+  }
   checks.push({ name: 'task_identity', passed: execution?.taskId === task?.id });
 
   if (task?.agentId != null || task?.assignedAgentId != null) {
