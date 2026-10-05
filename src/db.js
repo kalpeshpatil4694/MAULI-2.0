@@ -67,27 +67,29 @@ export async function ensureSchema(env) {
 }
 
 function projectStateFromTasks(project, tasks) {
-  // A project parked on a founder approval gate must keep that state. Deriving 'active'
-  // from its (blocked/assigned) tasks hid the gate: the dashboard showed an active project
-  // doing nothing, which reads as "my command was not processed" until the founder happens
-  // to open Approvals. The scheduler already refuses to run an awaiting_approval project.
+  // State shown to the founder must describe real work, not merely an old project flag.
+  // An approval gate is explicit; queued/working work is active; failed or blocked work
+  // with nothing pending is terminal. This prevents frozen projects from appearing active.
   if (project?.state === 'awaiting_approval') return 'awaiting_approval';
+  if (['failed','escalated','cancelled'].includes(project?.state)) return project.state === 'escalated' ? 'failed' : project.state;
   const own = tasks.filter(t => t?.projectId === project?.id);
   if (!own.length) return project?.state ?? 'planning';
-  if (own.some(t => t.state === 'failed')) return 'escalated';
-  if (own.some(t => ['working', 'running', 'blocked', 'assigned'].includes(t.state))) return 'active';
-  // A collapsed duplicate gate (cancelled) is settled work, not an open task: deriving
-  // 'active' from it kept a finished project looking unfinished on every read.
-  if (own.every(t => t.state === 'completed' || (t.state === 'cancelled' && t.collapsedDuplicate === true)))
-    return project?.finalDeliveryId ? 'completed' : 'active';
-  if (own.some(t => t.state === 'completed')) return 'active';
-  return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
+  const pending = own.some(t => ['queued','working','running','assigned','verifying'].includes(t.state));
+  const failed = own.some(t => t.state === 'failed');
+  const blocked = own.some(t => t.state === 'blocked');
+  const allSettled = own.every(t => t.state === 'completed' || (t.state === 'cancelled' && t.collapsedDuplicate === true));
+  if (allSettled) return project?.finalDeliveryId ? 'completed' : 'blocked';
+  if (failed && !pending) return 'failed';
+  if (blocked && !pending) return 'blocked';
+  if (pending) return 'active';
+  return project?.state ?? 'planning';
 }
 
 export async function d1List(env, type, { existingTasks, limit } = {}) {
+  const orderBy = type === 'projects' ? 'created_at DESC, id DESC' : 'updated_at DESC';
   const result = limit
-    ? await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC LIMIT ?').bind(type, limit).all()
-    : await env.DB.prepare('SELECT data FROM entities WHERE type = ? ORDER BY updated_at DESC').bind(type).all();
+    ? await env.DB.prepare(`SELECT data FROM entities WHERE type = ? ORDER BY ${orderBy} LIMIT ?`).bind(type, limit).all()
+    : await env.DB.prepare(`SELECT data FROM entities WHERE type = ? ORDER BY ${orderBy}`).bind(type).all();
   recordD1Read(env, Number(result?.meta?.rows_read) || 0);
   const rows = (result.results ?? []).map(row => JSON.parse(row.data));
   if (type !== 'projects' || !rows.length) return rows;
