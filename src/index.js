@@ -459,7 +459,7 @@ export default { async fetch(request, env, ctx) { try {
       {id:'groq',name:'Groq',icon:'⚡',category:'LLM',hint:'Fallback LLM that keeps generation working when Workers AI is out of allowance. Set GROQ_API_KEY in Cloudflare → Workers → Settings → Variables.',
         ok:groqReady,status:groqReady?'connected':'missing',
         statusLabel:groqReady?'Configured':'No key',
-        detail:groqReady?'A key is set, so '+groqModel(env)+' serves the workers-ai → groq → templates chain':'GROQ_API_KEY and MAULI_GROQ_KEY are both unset, so a spent Workers AI allowance falls straight to templates'},
+        detail:groqReady?'A key is set, so '+groqModel(env)+' serves the workers-ai → groq → templates chain':'No key set — generation falls back to deterministic templates'},
       {id:'do',name:'Durable Objects',icon:'🧱',category:'Runtime',hint:'Used for project execution and live channels.',
         ok:Boolean(env?.MAULI_PROJECT_EXECUTOR),status:env?.MAULI_PROJECT_EXECUTOR?'connected':'missing',
         statusLabel:env?.MAULI_PROJECT_EXECUTOR?'Bound':'Not bound',

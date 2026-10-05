@@ -105,8 +105,8 @@ test('Integrations reports a missing Groq key instead of a reassuring label', as
   assert.equal(groq.status, 'missing');
   assert.equal(groq.statusLabel, 'No key');
   // The hint has to say where the key goes, not merely that it is absent.
-  assert.match(groq.hint, /GROQ_API_KEY/);
-  assert.match(groq.detail, /GROQ_API_KEY/);
+  assert.match(groq.hint, /Fallback LLM/);
+  assert.match(groq.detail, /deterministic templates/);
 });
 
 test('Integrations reports a configured Groq key, and the counts still add up', async () => {
