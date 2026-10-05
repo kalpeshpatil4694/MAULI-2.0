@@ -218,7 +218,7 @@ export function githubDeployExecutorConfigured(env) {
 async function dispatchGithubDeploy(env, project, artifactId) {
   const token = env?.GITHUB_TOKEN || env?.MAULI_GITHUB_TOKEN || env?.GITHUB_PAT;
   const repo = env?.MAULI_GITHUB_REPO || 'kalpeshpatil4694/MAULI-2.0';
-  const controlPlane = String(env?.MAULI_CONTROL_PLANE_URL || env?.PUBLIC_BASE_URL || 'https://mauli-2-0.kalpeshpatil4694.workers.dev').replace(/\\/+$/, '');
+  const controlPlane = String(env?.MAULI_CONTROL_PLANE_URL || env?.PUBLIC_BASE_URL || 'https://mauli-2-0.kalpeshpatil4694.workers.dev').replace(/\/+$/, '');
   if (!token || !controlPlane) return null;
   const response = await fetch('https://api.github.com/repos/' + repo + '/dispatches', {
     method: 'POST', headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10', 'Content-Type': 'application/json', 'User-Agent': 'MAULI-2.0-deployment-executor' },
