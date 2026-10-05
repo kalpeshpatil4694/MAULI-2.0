@@ -1,15 +1,17 @@
-// A single request for a whole app asked the model to emit five complete files in one
-// completion. Measured against the live Groq provider that failed 6 times in 7 for anything
-// larger than a toy app: the answer was cut before the JSON closed, the executor had nothing
-// usable, and it quietly fell back to a template — which is why projects kept reaching
-// "Delivery blocked: MAULI could not build ... unrelated template".
+// Generation asks for ONE FILE PER REQUEST. A single request for a whole app asked the model
+// to emit five complete files as escaped JSON in one completion; measured against the live
+// Groq provider that failed for anything larger than a toy app — the answer was cut before the
+// JSON closed, and projects kept reaching "Delivery blocked: MAULI could not build ...
+// unrelated template". Per-file raw source is the primary path now, and it is repaired against
+// the fidelity gate before anything is shipped.
 //
-// Three things are pinned here, because each one can silently stop being true:
-//  1. per-file generation runs after the whole-app attempts fail, and survives a model that
-//     keeps answering with the whole-app envelope instead of one file;
+// Four things are pinned here, because each one can silently stop being true:
+//  1. an app is generated one file per request (no doomed whole-app attempts first);
 //  2. a per-file answer that is the whole-app envelope is refused rather than stored as
 //     source, which is the failure mode the fix could otherwise have introduced;
-//  3. a template fallback says, in words, that it is a template and not the founder's app.
+//  3. a per-file app that arrives as a static shell is REPAIRED against the fidelity gate,
+//     and one that cannot be repaired falls back to a template rather than shipping a demo;
+//  4. a template fallback says, in words, that it is a template and not the founder's app.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { store } from '../src/store.js';
@@ -64,7 +66,7 @@ function webTask(suffix) {
   return { pid, taskId: task.id };
 }
 
-test('a whole-app answer the model cannot finish still produces a real app, file by file', async () => {
+test('an app is generated one file per request and shipped as a real, installable app', async () => {
   store.configure(null);
   store.data = new Map();
   store.hydrated = true;
@@ -86,13 +88,86 @@ test('a whole-app answer the model cannot finish still produces a real app, file
   const js = artifact.content.files.find(f => f.path === 'www/app.js').content;
   assert.match(js, /localStorage\.setItem/, 'the JS must be real source');
   assert.ok(!/^\s*\{/.test(js), 'the JS must not be a JSON dump');
-  // The whole-app attempts really were tried first: per-file generation is the fallback,
-  // not a replacement that quietly costs five requests on every project.
+  // No whole-app attempt is made any more: the single JSON completion never produced a
+  // parseable app live, and every attempt cost up to 40s before per-file did the work.
   const wholeAppCalls = calls.filter(c => !c.includes(PER_FILE_MARKER));
-  assert.equal(wholeAppCalls.length, 3,
-    `the widened repair loop must make 1 initial + 2 repair attempts before per-file, saw ${wholeAppCalls.length}`);
+  assert.equal(wholeAppCalls.length, 0, `no whole-app request should be made, saw ${wholeAppCalls.length}`);
+  // One request per BEHAVIOUR file. package.json and README.md are synthesised locally, so
+  // they are never requested — they cannot fail the build and do not cost a model call.
   const perFileCalls = calls.filter(c => c.includes(PER_FILE_MARKER));
-  assert.equal(perFileCalls.length, 5, 'one request per planned file, package.json included');
+  assert.equal(perFileCalls.length, 3, 'one request per behaviour file');
+  // The manifest is always real, even though the model was never asked for it.
+  const manifest = JSON.parse(artifact.content.files.find(f => f.path === 'package.json').content);
+  assert.equal(manifest.name, 'list');
+  assert.equal(manifest.scripts.start, 'npx serve www');
+});
+
+// The live failure this closes: the per-file answer for a page came back as a static shell
+// (no controls in the HTML, no listener or handler binding in the JS), the fidelity gate
+// refused it with `no-interaction`, and the project fell to a template even though the model
+// had actually written it. The repair round rewrites the behaviour files with the gate's own
+// findings, so the model's code is kept and made to work.
+const STATIC_SHELL = {
+  'www/index.html': '<!DOCTYPE html><html><head><link rel="stylesheet" href="styles.css"></head><body><h1>Expenses</h1><p>Nothing to do yet</p><script src="app.js"></script></body></html>',
+  'www/app.js': 'var items=JSON.parse(localStorage.getItem("items")||"[]");function render(){var el=document.getElementById("list");if(el)el.innerHTML=items.join("");}render();',
+  'www/styles.css': PER_FILE_SOURCES['www/styles.css'],
+};
+
+/**
+ * A model that answers the first request for each file with a static shell, then answers the
+ * REPAIR request (the one that names the review failure) with real source. `alwaysBad` keeps
+ * it broken so the fallback can be observed too.
+ */
+function repairingEnv(calls, { alwaysBad = false } = {}) {
+  return {
+    calls,
+    AI: {
+      async run(_model, payload) {
+        const user = (payload.messages ?? []).map(m => m.content).join('\n');
+        calls.push(user);
+        const path = Object.keys(PER_FILE_SOURCES).find(p => user.includes(PER_FILE_MARKER + p));
+        if (!path) return { response: 'x' };
+        const isRepair = /failed the functional review/.test(user);
+        if (isRepair && !alwaysBad) return { response: PER_FILE_SOURCES[path] };
+        return { response: STATIC_SHELL[path] ?? PER_FILE_SOURCES[path] };
+      },
+    },
+  };
+}
+
+test('a per-file app that arrives as a static shell is repaired against the fidelity gate', async () => {
+  store.configure(null);
+  store.data = new Map();
+  store.hydrated = true;
+  seedAgents();
+  const calls = [];
+  const { taskId } = webTask(TAIL());
+
+  const result = await generateFunctionalArtifact({ task: store.get('tasks', taskId), env: repairingEnv(calls) });
+
+  const artifact = store.get('artifacts', result.artifactId);
+  assert.equal(artifact.metadata.aiGenerated, true, 'the repaired app is real AI code, not a template');
+  assert.equal(artifact.metadata.templateFallback, undefined, 'a repaired app must not be a template fallback');
+  assert.equal(artifact.metadata.fidelity.passed, true, 'the shipped app passes the fidelity gate');
+  const html = artifact.content.files.find(f => f.path === 'www/index.html').content;
+  assert.match(html, /onclick=/, 'the repaired HTML wires real controls');
+  const repairCalls = calls.filter(c => /failed the functional review/.test(c));
+  assert.ok(repairCalls.length >= 1, 'the gate failure must trigger a repair request');
+});
+
+test('a per-file app that cannot be repaired falls back to a template, never ships a demo', async () => {
+  store.configure(null);
+  store.data = new Map();
+  store.hydrated = true;
+  seedAgents();
+  const calls = [];
+  const { taskId } = webTask(TAIL());
+
+  const result = await generateFunctionalArtifact({ task: store.get('tasks', taskId), env: repairingEnv(calls, { alwaysBad: true }) });
+
+  const artifact = store.get('artifacts', result.artifactId);
+  assert.equal(artifact.metadata.aiGenerated, false, 'a demo must never be registered as AI code');
+  assert.equal(artifact.metadata.templateFallback, true, 'the deterministic template is the honest fallback');
 });
 
 test('a per-file answer that is the whole-app envelope is refused, not written as source', async () => {
