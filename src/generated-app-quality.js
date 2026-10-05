@@ -491,6 +491,46 @@ export function analyzeGeneratedApp(files, { objective = '', requirements = [] }
       `code reads elements that are never declared: ${dangling.slice(0, 8).join(', ')}`);
   }
 
+  // 11. User input interpolated into innerHTML. A delivered expense tracker rendered rows with
+  // `div.innerHTML = \`…${expense.description}…\``, so anything the founder typed into the
+  // description field executed as HTML on the next render. Every other gate passed that app:
+  // the handlers worked, the data persisted, the total was right. Only reading the value's
+  // origin catches it. An escaping helper in the interpolation is accepted — the model is
+  // allowed to escape, not to concatenate raw input.
+  // A template literal that builds HTML AND interpolates a value without escaping is the shape
+// of the defect. Looking for the interpolation only after `innerHTML =` misses the commonest
+// form of all — `.innerHTML = rows.map(r => `<li>${r.text}</li>`).join('')` — because the
+// template is inside the assigned expression, not right after the `=`. The tag is what makes
+// it HTML rather than a message string.
+const rawInterpolation = /`[^`]*<[a-zA-Z][^`]*\$\{(?![^}]*(?:escape|sanitiz|htmlEsc))/.test(clean)
+    || /\.\s*innerHTML\s*\+=\s*[A-Za-z_$][\w$.]*/i.test(clean)
+    || /(?:insertAdjacentHTML|outerHTML)\s*\(\s*['"`][^'"`]*['"`]\s*,\s*`[^`]*\$\{/i.test(clean);
+  if (rawInterpolation) {
+    push('xss-innerhtml', SEVERITY.CRITICAL,
+      'user-entered text is interpolated into HTML; build the node and set textContent, or escape the value first');
+  }
+
+  // 12. A record identified by its position in a list that is also being filtered. The same
+  // app tagged each rendered row with its index in the FILTERED list and then spliced that
+  // index out of the underlying array, so filtering by month and pressing delete removed a
+  // different expense than the one on screen — silent data loss on the founder's own core
+  // feature, which every gate scored as working. Identity must be a value stored on the
+  // record, never a position in a view.
+  if (/\bdata-(?:index|idx|row|position|pos|i)\s*=/i.test(clean) && /\.\s*(?:splice|filter)\s*\(/i.test(clean)) {
+    push('positional-record-identity', SEVERITY.CRITICAL,
+      'records are identified by their position in a filtered list, so editing or deleting a row can act on the wrong record; give each record a stable id and use that');
+  }
+
+  // 13. Stored data parsed without a guard. `JSON.parse(localStorage.getItem('x')) || []`
+  // throws on a single corrupted value and the app is dead on every load after it, with no
+  // way for the founder to recover. A file with no try block anywhere cannot be guarding
+  // anything, so the absence of one is the evidence.
+  const parsesStorage = /JSON\.parse\s*\(\s*(?:localStorage|sessionStorage)\s*\.\s*getItem/i.test(clean);
+  if (parsesStorage && !/\btry\s*\{/i.test(clean)) {
+    push('unguarded-storage-parse', SEVERITY.CRITICAL,
+      'stored data is parsed with no error handling, so one corrupted value crashes the app on load; wrap it in try/catch and fall back to an empty state');
+  }
+
   // Coverage reads executed source only — see evaluateRequirementCoverage(). The
   // allText scan above stays for placeholder wording, which is a red flag wherever it
   // ships, including docs.

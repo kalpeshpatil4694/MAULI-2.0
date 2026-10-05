@@ -22,7 +22,7 @@ const TAIL = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const PER_FILE_SOURCES = {
   'www/index.html': '<!DOCTYPE html><html><head><link rel="stylesheet" href="styles.css"></head><body><ul id="list"></ul><input id="new" placeholder="add an item"><button onclick="add()">Add</button><script src="app.js"></script></body></html>',
-  'www/app.js': 'var items=JSON.parse(localStorage.getItem("items")||"[]");function render(){document.getElementById("list").innerHTML=items.map(function(i){return "<li>"+i+"</li>"}).join("");localStorage.setItem("items",JSON.stringify(items))}function add(){var v=document.getElementById("new").value;if(!v)return;items.push(v);render()}render();',
+  'www/app.js': 'var items=[];try{items=JSON.parse(localStorage.getItem("items"))||[]}catch(e){items=[]}function render(){document.getElementById("list").innerHTML=items.map(function(i){return "<li>"+i+"</li>"}).join("");localStorage.setItem("items",JSON.stringify(items))}function add(){var v=document.getElementById("new").value;if(!v)return;items.push(v);render()}render();',
   'www/styles.css': 'body{font-family:system-ui;background:#0b1120;color:#fff;margin:0;padding:24px}#list{list-style:none;padding:0}#list li{padding:8px;background:#1e293b;border-radius:6px;margin:4px 0}button{background:#00d4ff;border:0;padding:8px 12px;border-radius:6px;cursor:pointer}',
   'package.json': '{\n  "name": "item-list",\n  "version": "1.0.0",\n  "private": true,\n  "scripts": {\n    "start": "npx serve www"\n  }\n}',
   'README.md': '# Item list\n\nA small list that persists to localStorage.\n\nRun it with `npx serve www`.',
@@ -189,6 +189,31 @@ test('a per-file answer that is the whole-app envelope is refused, not written a
   if (js) assert.ok(!/^\s*\{/.test(js.content), 'a JSON envelope must never be stored as app.js');
   // It fell through to the deterministic template, and it says so.
   assert.equal(artifact.metadata.aiGenerated, false);
+});
+
+// The files are generated in a fixed, deliberate order: the BEHAVIOUR file first, then the
+// markup authored against it, with the already-generated source carried into the next
+// request. Asked independently — the way per-file generation originally worked — a delivered
+// app read an id its HTML never declared. This pins both halves: the order, and that the
+// later request really carries the earlier source.
+test('the markup is generated against the behaviour file, not independently of it', async () => {
+  store.configure(null);
+  store.data = new Map();
+  store.hydrated = true;
+  seedAgents();
+  const calls = [];
+  const { taskId } = webTask(TAIL());
+
+  await generateFunctionalArtifact({ task: store.get('tasks', taskId), env: perFileEnv(calls) });
+
+  const asked = calls.filter(c => c.includes(PER_FILE_MARKER));
+  const jsAt = asked.findIndex(c => c.includes(PER_FILE_MARKER + 'www/app.js'));
+  const htmlAt = asked.findIndex(c => c.includes(PER_FILE_MARKER + 'www/index.html'));
+  assert.ok(jsAt >= 0 && htmlAt >= 0, 'both behaviour files are requested');
+  assert.ok(jsAt < htmlAt, `the JavaScript must be written first, saw js=${jsAt} html=${htmlAt}`);
+  const htmlRequest = asked[htmlAt];
+  assert.match(htmlRequest, /\/\/ file: www\/app\.js/, 'the HTML request must carry the generated JS');
+  assert.ok(htmlRequest.includes('function add()'), 'the JS source itself, not just its name, is in context');
 });
 
 test('a template fallback states plainly that it is a template, not the founder app', async () => {

@@ -159,7 +159,10 @@ function repairInstruction(violationCodes) {
     'fake-async': 'Timers are used as a substitute for real state changes. Make every timer-driven update change real state.',
     'realtime-not-implemented': 'Real-time was requested. Implement it for real (WebSocket, SSE, or a bounded polling loop against a real endpoint).',
     'broken-navigation': 'The app links to pages/assets it does not contain, so clicks open nothing. Either emit every linked .html file under www/ or remove the link — every href/src must resolve to a file that is in your output.',
-    'missing-element': 'The code reads elements that are not declared anywhere, so it throws on the founder\'s first click. Give every element the app reads with getElementById/querySelector a matching id attribute in the HTML (or in markup the app renders itself) — and remove reads for ids nothing declares.'
+    'missing-element': 'The code reads elements that are not declared anywhere, so it throws on the founder\'s first click. Give every element the app reads with getElementById/querySelector a matching id attribute in the HTML (or in markup the app renders itself) — and remove reads for ids nothing declares.',
+    'xss-innerhtml': 'Text the founder typed is interpolated into HTML, so anything they enter runs as markup. Render values with .textContent on a node you create, or escape the value before putting it in an HTML string. Template literals that only contain literals and numbers are fine.',
+    'positional-record-identity': 'Records are identified by their position in a list that is also being filtered, so editing or deleting a row can act on the WRONG record. Give every record its own stable id when it is created, put that id in a data-id attribute, and delete/edit by id — never by list index.',
+    'unguarded-storage-parse': 'Stored data is parsed with no error handling, so one corrupted value crashes the app on every load. Wrap the parse in try/catch and fall back to an empty state.'
   };
   return violationCodes
     .map((code) => lines[code] ?? ('Fix the '+code+' problem.'))
@@ -219,14 +222,29 @@ function looksLikeFileSource(path, content) {
 // locally and correctly by ensurePackageJson()/ensureReadme().
 const FILE_PLAN = {
   web: [
-    ['www/index.html', 'the ONE complete HTML page. Include <!DOCTYPE html>, <head> with <link rel="stylesheet" href="styles.css"> and <script src="app.js"></script> in <body>. Every element, id, class and event handler the app uses must appear here.'],
-    ['www/app.js', 'the ONE complete JavaScript file. All state, event handlers, DOM rendering and persistence (localStorage) live here. Every handler the HTML calls must be DEFINED here with a real body.'],
+    // Contract-first: the behaviour file is written FIRST and the markup is authored AGAINST
+    // it. Asked the other way round, the two are written without seeing each other and
+    // disagree — a delivered expense tracker read `document.getElementById('date')` from a
+    // form that declared no such input, so the founder's first click threw. Generating the
+    // JS first and the HTML second, with the JS in context, makes that class of drift
+    // impossible rather than merely unlikely.
+    ['www/app.js', 'the ONE complete JavaScript file, written FIRST. All state, event handlers, DOM rendering and persistence (localStorage) live here. Every element you read with getElementById must get a plain, obvious id ("expense-list", "add-form") that the HTML can declare.'],
+    ['www/index.html', 'the ONE complete HTML page, written SECOND against the JavaScript you were given. Include <!DOCTYPE html>, <head> with <link rel="stylesheet" href="styles.css"> and <script src="app.js"></script> in <body>. Declare an id for EVERY element the JavaScript reads, and add an id to every control it needs. A real <form> for input, a <button type="submit"> inside it, and semantic headings — not a pile of divs.'],
     ['www/styles.css', 'the ONE complete CSS file. All styling, layout, colours, spacing and responsive @media rules.'],
   ],
   backend: [
     ['server.js', 'the ONE complete server file. All routing, request handling, validation and persistence live here. It must start a real HTTP server.'],
   ],
 };
+
+// The defects that make a generated app feel cheap even though every gate passes. They are
+// written into the prompt because they are the ones the model actually produces.
+const QUALITY_RULES = [
+  'CORRECTNESS OF DATA: every stored record gets its own stable id (Date.now(), crypto.randomUUID(), or a counter you own). NEVER identify a record by its position in a list you are filtering — a filtered list\'s index points at a different record in the underlying array, so deleting "the row the founder clicked" silently deletes the wrong one. Put the record id in a data attribute and delete by that id.',
+  'SAFETY: never interpolate user-entered text into innerHTML. Build the node, set .textContent, or escape the value first. A description of <img src=x onerror=...> typed into the app must render as text, not execute.',
+  'ROBUSTNESS: wrap JSON.parse of stored data in try/catch and fall back to an empty state, so corrupt stored data cannot crash the app on load.',
+  'DESIGN: this is a product, not a wireframe. Real spacing and a type scale, a considered colour palette, aligned controls, hover and focus states, and one responsive @media rule. Validate input with an inline message under the field — never a bare alert().'
+];
 
 /**
  * The whole-app prompt tells the model to answer with a JSON envelope. In per-file mode that
@@ -250,8 +268,9 @@ function perFileSystemPrompt(systemPrompt) {
     // while its submit handler read `#date` and the form declared no such input, so the
     // founder's first click threw. Both sides of the id contract are stated in one prompt.
     'Because index.html and app.js are written one at a time, they can disagree about ids: ' +
-    'every id you read with getElementById in app.js MUST be declared as id="…" in ' +
-    'index.html, and never read an id that only app.js could have invented.';
+    'the JavaScript is written FIRST and the HTML is written against it, so every id the ' +
+    'JavaScript reads is already decided and MUST be declared as id="…" in the HTML.' +
+    '\n\n' + QUALITY_RULES.join('\n');
 }
 
 // The files that carry the product's working logic, and therefore the only ones a fidelity
@@ -305,7 +324,11 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
   }
 
   for (const [path, spec] of plan) {
-    const content = await request(path, spec);
+    // Every file after the first is written against the ones already generated. This is what
+    // turns per-file generation from independent guesses into one coherent app.
+    const context = [...collected.values()]
+      .map(f => '// file: ' + f.path + '\n' + f.content).join('\n\n');
+    const content = await request(path, spec, { context });
     if (content) collected.set(path, { path, content });
     else missing.push(path);
   }

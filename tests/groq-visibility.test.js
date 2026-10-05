@@ -10,6 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../src/index.js';
+import { GROQ_DEFAULT_MODEL } from '../src/groq-ai.js';
 import { store } from '../src/store.js';
 
 const env = { MAULI_TEST_MODE: 'true', SKIP_RESULT_PERSISTENCE: 'true' };
@@ -39,8 +40,10 @@ test('health reports Groq as unconfigured when no key is set', async () => {
 test('health reports a Groq key that reached the Worker', async () => {
   const data = await health({ GROQ_API_KEY: KEY });
   assert.equal(data.groqConfigured, true);
-  // Only the non-secret model default is published, never the key.
-  assert.equal(data.groqModel, 'llama-3.3-70b-versatile');
+  // Only the non-secret model default is published, never the key. It is compared to the
+  // configured default rather than a pinned string, so changing the model does not turn a
+  // visibility test into a tripwire that has to be edited on every upgrade.
+  assert.equal(data.groqModel, GROQ_DEFAULT_MODEL);
   // The control: the field flips with the environment, so the assertion above is reading
   // the env rather than a hard-coded true.
   const without = await health();

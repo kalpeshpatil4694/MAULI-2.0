@@ -10,7 +10,11 @@ test('founder command response keeps dashboard-compatible top-level result', () 
   assert.match(worker, /const responseData\s*=\s*\{/);
   assert.match(worker, /data:\s*responseData/);
   assert.match(worker, /\.\.\.responseData/);
-  assert.match(dashboard, /JSON\.stringify\(r\.result\|\|r/);
+  // The contract is that the dashboard unwraps `result` off the envelope. What it used to
+  // DO with that envelope — stringify it into the founder's view — was the thing this file
+  // used to pin, and is now covered by tests/dashboard-command-outcome.test.js. Assert the
+  // contract itself, not the raw dump it used to produce.
+  assert.match(dashboard, /r\.result\|\|r/);
 });
 
 test('founder command dashboard refreshes state through the adaptive live bridge after queue acknowledgement', () => {

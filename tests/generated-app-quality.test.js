@@ -98,6 +98,82 @@ test('an element the app renders itself is not reported as missing', () => {
   assert.equal(report.violations.some((v) => v.code === 'missing-element'), false, JSON.stringify(report.violations));
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The three defects that made a delivered, gate-passing expense tracker cheap:
+// it injected what the founder typed as HTML, deleted the WRONG record once a
+// filter was on, and died on load if the stored value was ever corrupted. All
+// three passed every gate, because "a handler ran" was never "the handler was
+// correct". These pin the fixes, each with a negative control.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const xssHtml = '<!DOCTYPE html><html><body><input id="description"><input id="amount"><button onclick="add()">Add</button><ul id="list"></ul><script src="app.js"></script></body></html>';
+
+test('text the founder typed is never interpolated into HTML', () => {
+  const app = [
+    { path: 'www/index.html', content: xssHtml },
+    { path: 'www/app.js', content: 'let rows=[];try{rows=JSON.parse(localStorage.getItem("rows"))||[]}catch(e){rows=[]}function add(){var d=document.getElementById("description").value;rows.push({id:String(Date.now()),text:d});localStorage.setItem("rows",JSON.stringify(rows));document.getElementById("list").innerHTML=rows.map(function(r){return `<li>${r.text}</li>`}).join("");}document.getElementById("list");' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build an expense tracker' });
+  const hit = report.violations.find((v) => v.code === 'xss-innerhtml');
+  assert.ok(hit, JSON.stringify(report.violations));
+  assert.equal(report.passed, false);
+});
+
+// Negative control: building nodes and setting textContent is the correct way, and a
+// template literal that contains only literals must not be swept up with it.
+test('rendering with textContent, or a literal-only template, is not flagged', () => {
+  const app = [
+    { path: 'www/index.html', content: xssHtml },
+    { path: 'www/app.js', content: 'let rows=[];try{rows=JSON.parse(localStorage.getItem("rows"))||[]}catch(e){rows=[]}function add(){var d=document.getElementById("description").value;rows.push({id:String(Date.now()),text:d});localStorage.setItem("rows",JSON.stringify(rows));var li=document.createElement("li");li.textContent=d;document.getElementById("list").appendChild(li);}document.getElementById("list");' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build an expense tracker' });
+  assert.equal(report.violations.some((v) => v.code === 'xss-innerhtml'), false, JSON.stringify(report.violations));
+});
+
+test('deleting by list position instead of record id is rejected', () => {
+  // Exactly what shipped: rows tagged with their index in the FILTERED list, spliced out
+  // of the unfiltered array — so filtering and deleting removes a different record.
+  const app = [
+    { path: 'www/index.html', content: xssHtml },
+    { path: 'www/app.js', content: 'let rows=[];try{rows=JSON.parse(localStorage.getItem("rows"))||[]}catch(e){rows=[]}function render(){var f=rows.filter(function(r){return r.month==="03"});document.getElementById("list").innerHTML=f.map(function(r,i){return `<li data-index="${i}">${r.id}</li>`}).join("");}function del(e){rows.splice(Number(e.target.getAttribute("data-index")),1);localStorage.setItem("rows",JSON.stringify(rows));}document.getElementById("list").addEventListener("click",del);render();' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build an expense tracker with a month filter' });
+  const hit = report.violations.find((v) => v.code === 'positional-record-identity');
+  assert.ok(hit, JSON.stringify(report.violations));
+  assert.equal(report.passed, false);
+});
+
+// Negative control: a stable id in the markup, and filtering that never splices by position.
+test('deleting by a stable record id is not flagged', () => {
+  const app = [
+    { path: 'www/index.html', content: xssHtml },
+    { path: 'www/app.js', content: 'let rows=[];try{rows=JSON.parse(localStorage.getItem("rows"))||[]}catch(e){rows=[]}function render(){var f=rows.filter(function(r){return r.month==="03"});document.getElementById("list").innerHTML=f.map(function(r){return `<li data-id="${r.id}">${r.id}</li>`}).join("");}function del(e){var id=e.target.getAttribute("data-id");rows=rows.filter(function(r){return r.id!==id});localStorage.setItem("rows",JSON.stringify(rows));}document.getElementById("list").addEventListener("click",del);render();' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build an expense tracker with a month filter' });
+  assert.equal(report.violations.some((v) => v.code === 'positional-record-identity'), false, JSON.stringify(report.violations));
+});
+
+test('stored data parsed with no guard is rejected', () => {
+  const app = [
+    { path: 'www/index.html', content: xssHtml },
+    { path: 'www/app.js', content: 'var rows=JSON.parse(localStorage.getItem("rows")||"[]");function add(){var d=document.getElementById("description").value;rows.push({id:String(Date.now()),text:d});localStorage.setItem("rows",JSON.stringify(rows));document.getElementById("list").textContent=String(rows.length);}document.getElementById("list");' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build an expense tracker' });
+  const hit = report.violations.find((v) => v.code === 'unguarded-storage-parse');
+  assert.ok(hit, JSON.stringify(report.violations));
+  assert.equal(report.passed, false);
+});
+
+// Negative control: the same parse, guarded.
+test('a guarded storage parse is not flagged', () => {
+  const app = [
+    { path: 'www/index.html', content: xssHtml },
+    { path: 'www/app.js', content: 'var rows=[];try{rows=JSON.parse(localStorage.getItem("rows"))||[]}catch(e){rows=[]}function add(){var d=document.getElementById("description").value;rows.push({id:String(Date.now()),text:d});localStorage.setItem("rows",JSON.stringify(rows));document.getElementById("list").textContent=String(rows.length);}document.getElementById("list");' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build an expense tracker' });
+  assert.equal(report.violations.some((v) => v.code === 'unguarded-storage-parse'), false, JSON.stringify(report.violations));
+});
+
 test('a data request with no persistence is rejected', () => {
   const report = analyzeGeneratedApp([
     { path: 'www/index.html', content: '<!DOCTYPE html><html><body><ul id="list"></ul><button onclick="add()">Add</button><script src="app.js"></script></body></html>' },

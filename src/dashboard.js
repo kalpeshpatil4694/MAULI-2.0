@@ -244,7 +244,8 @@ select.inp{cursor:pointer}
             <span id="cmdPlatHint" style="font-size:10px;color:var(--text2)"></span>
             <div class="loading" id="cmdLoad"><div class="spinner"></div></div>
           </div>
-          <pre class="card" id="cmdRes" style="display:none;margin-top:10px;font-size:11px;max-height:250px;overflow:auto;font-family:monospace;background:var(--bg1)"></pre>
+          <div id="cmdOutcome" style="display:none;margin-top:12px"></div>
+          <details class="card" id="cmdRawWrap" style="display:none;margin-top:10px"><summary style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;cursor:pointer;user-select:none">Raw API response</summary><pre id="cmdRes" style="font-size:11px;max-height:260px;overflow:auto;font-family:monospace;background:var(--bg1);margin-top:8px;border-radius:var(--rs)"></pre></details>
         </div>
         <div class="card">
           <div class="card-h"><div class="card-t">🚀 Quick Actions</div></div>
@@ -1074,27 +1075,89 @@ async function loadPlatforms(){
 function platLabel(id){const p=PLATFORMS.find(x=>x.id===id);return p?(p.icon+' '+p.label):'🌐 Web'}
 
 // ─── COMMAND ───
+// The founder's most important screen used to answer a command with a raw JSON dump in a
+// <pre>. The numbers a founder needs — what was created, what state it is in, what happens
+// next, where the code is — were buried in it. This renders the same response as an outcome
+// the founder can read at a glance, and keeps the raw payload one click away for debugging
+// instead of in front of them by default.
+function renderCommandOutcome(o){
+  const el=$('cmdOutcome');if(!el)return;
+  const tone=o.failed?'r':(o.state==='completed'?'g':(o.state==='blocked'||o.state==='failed'?'y':'a'));
+  const steps=o.tasks&&o.tasks.length?o.tasks.slice(0,6):[];
+  let h='<div class="card" style="margin:0;border-color:var(--border2)">';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  h+='<span class="badge badge-'+tone+'">'+esc(o.headline||'Command accepted')+'</span>';
+  if(o.platform)h+='<span class="badge badge-b">'+esc(platLabel(o.platform))+'</span>';
+  if(o.project)h+='<span class="badge badge-'+badge(o.state)+'">'+esc(o.state||'queued')+'</span>';
+  h+='<span style="margin-left:auto;font-size:10px;color:var(--text3);font-family:monospace">run ' +esc(String(o.runId||'—'))+'</span>';
+  h+='</div>';
+  if(o.title)h+='<div style="margin-top:10px;font-size:14px;font-weight:600">'+esc(o.title)+'</div>';
+  if(o.objective)h+='<div style="margin-top:3px;font-size:12px;color:var(--text2);line-height:1.5">'+esc(o.objective)+'</div>';
+  if(o.progress!=null)h+='<div class="pbar" style="margin-top:12px"><div class="pfill" style="width:'+Math.max(0,Math.min(100,o.progress))+'%"></div></div>';
+  if(steps.length){
+    h+='<div style="margin-top:12px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px">Plan · '+o.tasks.length+' task'+(o.tasks.length===1?'':'s')+'</div><div style="margin-top:6px">';
+    for(const t of steps)h+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px"><span class="badge badge-'+badge(t.state)+'">'+esc(t.state||'queued')+'</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.title||t.id)+'</span></div>';
+    if(o.tasks.length>steps.length)h+='<div style="font-size:10px;color:var(--text3);padding-top:4px">+'+(o.tasks.length-steps.length)+' more in Tasks</div>';
+    h+='</div>';
+  }
+  h+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.6">'+esc(o.next||'')+'</div>';
+  if(o.actions&&o.actions.length){
+    h+='<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">';
+    for(const a of o.actions)h+='<button class="btn btn-a btn-s" onclick="'+esc(a.fn)+'">'+esc(a.label)+'</button>';
+    h+='</div>';
+  }
+  h+='</div>';
+  el.style.display='block';setHtml(el,h);
+}
+// The dashboard has no per-project route, so "open" means: show the project list and load
+// that project's files into the Editor, which is the one place a founder acts on real code.
+function openProject(pid){go('projects');try{const sel=$('edProj');if(sel){sel.value=String(pid);loadProjFiles(String(pid));}}catch(_){}}
+function showRawCommandResponse(payload){
+  $('cmdRes').textContent=typeof payload==='string'?payload:JSON.stringify(payload,null,2);
+  $('cmdRawWrap').style.display='block';
+}
 async function sendCmd(){
   const cmd=$('cmdIn').value.trim();if(!cmd){toast('Enter a command','err');return}
-  $('cmdBtn').disabled=true;$('cmdLoad').classList.add('show');$('cmdRes').style.display='none';
+  $('cmdBtn').disabled=true;$('cmdLoad').classList.add('show');
+  $('cmdOutcome').style.display='none';$('cmdRawWrap').style.display='none';
   try{const r=await api('/api/command',{method:'POST',body:JSON.stringify({command:cmd,platform:SEL_PLATFORM})});
-    const queued=r.result||r;const rawResult=JSON.stringify(r.result||r,null,2);
+    const queued=r.result||r;
     const project=queued?.project||queued?.result?.project||null;
     const platform=queued?.platform?.platform||queued?.result?.platform?.platform||project?.platform||SEL_PLATFORM;
-    $('cmdRes').style.display='block';
-    $('cmdRes').textContent=JSON.stringify({
-      status:queued?.status||queued?.result?.status||'queued',
-      runId:queued?.runId||queued?.result?.runId||null,
+    const tasks=Array.isArray(queued?.tasks)?queued.tasks:[];
+    showRawCommandResponse(queued);
+    renderCommandOutcome({
+      headline:project?'Project created':'Command accepted',
+      title:project?(project.name||'Untitled project'):null,
+      objective:project?(project.objective||cmd):cmd,
+      state:project?.state||'planning',
       platform:platform,
-      project:project?{id:project.id,name:project.name,objective:project.objective,state:project.state,platform:project.platform,queuedAt:project.queuedAt}:null,
-      tasks:Array.isArray(queued?.tasks)?queued.tasks.map(t=>({id:t.id,title:t.title,state:t.state,executor:t.executor})):[],
-      message:project?('Project created for '+platLabel(platform)+' and sent to the execution scheduler.'):'Command accepted; waiting for project state.'
-    },null,2);
+      runId:queued?.runId||queued?.result?.runId||null,
+      tasks:tasks.map(t=>({id:t.id,title:t.title,state:t.state})),
+      progress:tasks.length?Math.round(tasks.filter(t=>['completed','verified'].includes(t.state)).length/tasks.length*100):0,
+      next:project?('MAULI is building this now. Code, evidence and the downloadable workspace appear under Projects once every gate has passed.'):'MAULI accepted the command and is planning the project.',
+      actions:project?[{label:'Open project',fn:"openProject('"+String(project.id).replace(/'/g,"")+"')"},{label:'Watch live',fn:"go('monitor')"}]:[{label:'View projects',fn:"go('projects')"}]
+    });
     toast(project?('Project created for '+platLabel(platform)):'Command accepted','ok');$('cmdIn').value='';await loadState();
     if(project?.id){
-      setTimeout(async()=>{try{const d=await api('/api/projects/'+encodeURIComponent(project.id)+'/detail');const detail=d.detail||d.data?.detail;if(detail){$('cmdRes').textContent=JSON.stringify({status:detail.project?.state,platform:detail.project?.platform,project:detail.project,summary:detail.summary,tasks:detail.tasks?.map(t=>({id:t.id,title:t.title,state:t.state,executor:t.executor,verificationId:t.verificationId})),artifacts:detail.artifacts?.map(a=>({id:a.id,type:a.type,projectId:a.projectId}))},null,2);await loadState();}}catch(_){ }},1500);
+      setTimeout(async()=>{try{const d=await api('/api/projects/'+encodeURIComponent(project.id)+'/detail');const detail=d.detail||d.data?.detail;
+        if(!detail)return;
+        showRawCommandResponse(detail);
+        const dt=detail.tasks||[];
+        renderCommandOutcome({
+          headline:detail.project?.state==='completed'?'Delivered':'Building',
+          title:detail.project?.name,objective:detail.project?.objective,
+          state:detail.project?.state,platform:detail.project?.platform||platform,
+          runId:queued?.runId||queued?.result?.runId||null,
+          tasks:dt.map(t=>({id:t.id,title:t.title,state:t.state})),
+          progress:dt.length?Math.round(dt.filter(t=>['completed','verified'].includes(t.state)).length/dt.length*100):0,
+          next:detail.summary||'MAULI is working through the plan. Delivery unlocks when every gate passes.',
+          actions:[{label:'Open project',fn:"openProject('"+String(project.id).replace(/'/g,"")+"')"},{label:'Watch live',fn:"go('monitor')"}]
+        });
+        await loadState();
+      }catch(_){ }},1500);
     }
-  }catch(e){$('cmdRes').style.display='block';$('cmdRes').textContent='Error: '+e.message;toast('Failed','err')}
+  }catch(e){showRawCommandResponse({error:String(e?.message||e)});renderCommandOutcome({failed:true,headline:'Command failed',title:cmd,next:String(e?.message||e),actions:[{label:'Try again',fn:"$('cmdIn').focus()"}]});toast('Failed','err')}
   finally{$('cmdBtn').disabled=false;$('cmdLoad').classList.remove('show')}
 }
 function qCmd(c){$('cmdIn').value=c;sendCmd()}
