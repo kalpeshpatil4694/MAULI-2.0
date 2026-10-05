@@ -106,7 +106,22 @@ function registerBuiltinTools(){
 
   registerTool({name:'security.audit',description:'Comprehensive security audit of project',risk:'read',capabilities:['security','audit','compliance'],handler:(input={})=>{
     const projects=store.list('projects');const tasks=store.list('tasks');const agents=store.list('agents');
-    const checks=[{name:'auth_enabled',passed:true,detail:'Founder auth active'},{name:'rate_limiting',passed:true,detail:'Rate limiter active'},{name:'input_validation',passed:true,detail:'Input validation active'},{name:'no_hardcoded_secrets',passed:true,detail:'No secrets in code'},{name:'xss_protection',passed:true,detail:'Sanitization active'},{name:'cors_configured',passed:true,detail:'CORS headers set'},{name:'store_integrity',passed:store.integrity().healthy,detail:'Store data valid'}];
+    const code=store.list('artifacts').filter(a=>a.type==='code-workspace').flatMap(a=>(a.content?.files??[]).map(f=>({path:f.path,content:String(f.content??'')})));
+    const hasFounderAuth=code.some(f=>/requireFounder|founder.*auth|authorization/i.test(f.content));
+    const hasRateLimit=code.some(f=>/rateLimit|checkRateLimit|rate.?limit/i.test(f.content));
+    const hasValidation=code.some(f=>/validate|schema|sanitize|trim\(\)|JSON\.parse/i.test(f.content));
+    const secretHits=code.filter(f=>/(-----BEGIN (RSA|PRIVATE) KEY-----|\b(api[_-]?key|secret|password|token)\s*[:=]\s*['"][^'"]{8,})/i.test(f.content));
+    const xssHits=code.filter(f=>/innerHTML|document\.write|new Function|eval\(/i.test(f.content));
+    const hasCors=code.some(f=>/Access-Control-Allow-Origin|cors/i.test(f.content));
+    const checks=[
+      {name:'auth_enabled',passed:hasFounderAuth,detail:hasFounderAuth?'Founder authentication evidence found':'No founder-auth enforcement evidence found'},
+      {name:'rate_limiting',passed:hasRateLimit,detail:hasRateLimit?'Rate limiter evidence found':'No rate-limit enforcement evidence found'},
+      {name:'input_validation',passed:hasValidation,detail:hasValidation?'Validation/parsing evidence found':'No input-validation evidence found'},
+      {name:'no_hardcoded_secrets',passed:secretHits.length===0,detail:secretHits.length?'Potential hardcoded secrets in '+secretHits.slice(0,5).map(f=>f.path).join(', '):'No obvious hardcoded secret pattern found'},
+      {name:'xss_protection',passed:xssHits.length===0,detail:xssHits.length?'Potential unsafe sink in '+xssHits.slice(0,5).map(f=>f.path).join(', '):'No obvious unsafe XSS sink found'},
+      {name:'cors_configured',passed:hasCors,detail:hasCors?'CORS configuration evidence found':'No CORS configuration evidence found'},
+      {name:'store_integrity',passed:store.integrity().healthy,detail:'Store data valid'}
+    ];
     const passed=checks.filter(c=>c.passed).length;
     return{tool:'security.audit',score:Math.round(passed/checks.length*100),checks,passed,total:checks.length,summary:passed+'/'+checks.length+' checks passed',at:now()};
   }});
