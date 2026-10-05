@@ -212,7 +212,7 @@ function registerBuiltinTools(){
     return{tool:'ai.train',model:input.model||'llama-3.3-70b',status:'configured',summary:'AI training configured for Cloudflare Workers AI',at:now()};
   }});
 
-  registerTool({name:'ai.infer',description:'Run AI inference',risk:'read',capabilities:['machine-learning','ai','inference','prediction'],handler:(input={})=>{
+  registerTool({name:'ai.infer',description:'Run AI inference',risk:'read',capabilities:['machine-learning','ai','inference','prediction'],handler:async(input={},context={})=>{
     const model=input.model||'@cf/meta/llama-3.3-70b-instruct-fp8-fast';const prompt=String(input.prompt??'').slice(0,8000);if(!prompt)return{tool:'ai.infer',model,status:'error',error:'prompt required',at:now()};if(!context.env?.AI?.run)return{tool:'ai.infer',model,status:'blocked',reason:'workers_ai_binding_missing',summary:'Workers AI binding is not available in this execution context.',at:now()};try{const result=await context.env.AI.run(model,{prompt});return{tool:'ai.infer',model,status:'completed',result,at:now()};}catch(e){return{tool:'ai.infer',model,status:'error',error:e.message,at:now()};}
   }});
 
