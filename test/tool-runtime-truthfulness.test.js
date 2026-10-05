@@ -4,7 +4,7 @@ import { executeTool } from '../src/tools.js';
 import { verifyResult } from '../src/verification.js';
 
 test('deployment tool never reports an unexecuted deployment as ready', async () => {
-  const result = await executeTool('deploy.execute', {}, { agentId: 'agent-qa', approved: true });
+  const result = await executeTool('deploy.execute', {}, { agentId: 'agent-qa', approved: true, approvalId: 'test-approval' });
   assert.equal(result.status, 'blocked');
   assert.equal(result.reason, 'deployment_requires_external_runner');
 });
