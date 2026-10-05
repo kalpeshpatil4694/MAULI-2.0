@@ -184,6 +184,11 @@ function newestByRecency(list, n) {
     .sort((a, b) => Date.parse(b?.updatedAt ?? b?.createdAt ?? 0) - Date.parse(a?.updatedAt ?? a?.createdAt ?? 0))
     .slice(0, n);
 }
+function newestProjectsFirst(list, n) {
+  return [...(Array.isArray(list) ? list : [])]
+    .sort((a, b) => Date.parse(b?.createdAt ?? b?.commandReceivedAt ?? b?.queuedAt ?? 0) - Date.parse(a?.createdAt ?? a?.commandReceivedAt ?? a?.queuedAt ?? 0) || String(b?.id ?? '').localeCompare(String(a?.id ?? '')))
+    .slice(0, n);
+}
 
 // A serving isolate hydrates once and then answers from memory; if it hydrated while a
 // command was still being written it can hold the project row without its tasks, and it
@@ -321,7 +326,7 @@ async function statePayload(env, recoveredRuns) {
     const storeArtifacts = store.list('artifacts');
     const codeProjects = codeProjectIds(storeArtifacts);
     const buildable = buildableProjectIds(storeArtifacts);
-    const projects = compactStateList(newestByRecency(listProjects(),100),'projects').map(p => {
+    const projects = compactStateList(newestProjectsFirst(listProjects(),100),'projects').map(p => {
       const hasCode = codeProjects.has(p && p.id);
       return { ...p, hasCode, canBuild: hasCode && buildable.has(p && p.id) };
     });
