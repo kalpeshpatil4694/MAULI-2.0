@@ -750,7 +750,7 @@ function renderAgents(){
 function projRealState(p){const t=S.tasks.filter(t=>t.projectId===p.id);if(!t.length)return p.state||'queued';if(t.some(t=>t.state==='failed')&&!t.some(t=>['working','assigned','queued'].includes(t.state)))return 'failed';if(t.some(t=>['working','assigned'].includes(t.state)))return 'active';if(t.every(t=>t.state==='completed'))return 'completed';if(t.some(t=>t.state==='completed'))return 'active';return p.state||'queued';}
 function renderProjects(){
   const search=($('projSearch')?.value||'').toLowerCase();const filter=$('projFilter')?.value||'';
-  let list=S.projects;if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>projRealState(p)===filter);
+  let list=[...S.projects].sort((a,b)=>Date.parse(b?.updatedAt??b?.createdAt??b?.queuedAt??0)-Date.parse(a?.updatedAt??a?.createdAt??a?.queuedAt??0));if(search)list=list.filter(p=>(p.name||p.objective||p.id||'').toLowerCase().includes(search));if(filter)list=list.filter(p=>projRealState(p)===filter);
   let h='<table class="tbl"><thead><tr><th>Name</th><th>Status</th><th>Deployment</th><th>Production Runtime</th><th>Runtime URL</th><th>Final Delivery</th><th>Tasks</th><th>Actions</th></tr></thead><tbody>';
   // hasCode comes from the server (it can see every artifact); the capped local sample
   // is only a fallback, which is why the download/preview/build buttons used to vanish
