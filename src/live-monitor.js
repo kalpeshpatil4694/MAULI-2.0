@@ -116,12 +116,17 @@ export function getLiveStatus() {
     const lastActivity = agentActivities[0] || null;
     return { id: agent.id, name: agent.name, state: agent.state, lastActivity: lastActivity ? { type: lastActivity.type, description: lastActivity.description, timestamp: lastActivity.timestamp } : null, isRecent: agentActivities.length > 0 };
   });
-  const activeProjects = projects.filter(p => p.state === 'active').map(p => {
+  const activeProjects = projects.map(p => {
     const projectTasks = tasks.filter(t => t.projectId === p.id);
     const done = projectTasks.filter(t => t.state === 'completed').length;
+    const pending = projectTasks.some(t => ['queued','working','running','assigned','verifying'].includes(t.state));
+    const failed = projectTasks.some(t => t.state === 'failed');
+    const blocked = projectTasks.some(t => t.state === 'blocked');
+    const derivedState = p.state === 'awaiting_approval' ? 'awaiting_approval' : failed && !pending ? 'failed' : blocked && !pending ? 'blocked' : pending ? 'active' : p.state;
+    if(derivedState !== 'active') return null;
     const progress = getProjectProgress(p.id);
     return { id: p.id, name: p.name, tasks: projectTasks.length, completed: done, percentage: projectTasks.length > 0 ? Math.round(done / projectTasks.length * 100) : 0, stage: progress.stage, currentAgent: progress.currentAgent, status: progress.status };
-  });
+  }).filter(Boolean);
   return {
     timestamp: now(),
     agents: { total: agents.length, available: agents.filter(a => a.state === 'available').length, working: agents.filter(a => a.state === 'working').length, details: agentStatus },
