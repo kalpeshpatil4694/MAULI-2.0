@@ -16,7 +16,7 @@ test('API tester refuses to fake localhost execution when no deployment URL exis
 });
 
 test('mobile build never reports a build as ready without a build runner', async () => {
-  const result = await executeTool('mobile.build', {}, { agentId: 'agent-qa' });
+  const result = await executeTool('mobile.build', {}, { agentId: 'agent-qa', approved: true });
   assert.equal(result.status, 'blocked');
   assert.equal(result.reason, 'mobile_build_requires_external_runner');
 });
