@@ -72,6 +72,32 @@ test('a control bound with a DOM property assignment counts as interaction', () 
   assert.ok(report.stats.interactionCount > 0);
 });
 
+// Files are generated one at a time, so the markup and the script are written without
+// seeing each other. This app scored 100/100 and still threw on the founder's first click:
+// the handler reads `#date`, and the form has no such input.
+test('code that reads an element the product never declares is rejected', () => {
+  const app = [
+    { path: 'www/index.html', content: '<!DOCTYPE html><html><body><form id="expenseForm"><input id="description"><input id="amount"><button type="submit">Add</button></form><div id="expenseList"></div><span id="monthlyTotal"></span><script src="app.js"></script></body></html>' },
+    { path: 'www/app.js', content: 'function add(e){e.preventDefault();var d=document.getElementById("date").value;localStorage.setItem("d",d);document.getElementById("expenseList").innerHTML=d;}document.getElementById("expenseForm").addEventListener("submit",add);' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build an expense tracker that saves entries' });
+  assert.equal(report.passed, false);
+  const hit = report.violations.find((v) => v.code === 'missing-element');
+  assert.ok(hit, JSON.stringify(report.violations));
+  assert.match(hit.detail, /date/);
+});
+
+// Negative control for the check above: a control the app renders ITSELF declares its id in
+// its own markup, so a list that builds rows with `id="row-…"` must not be refused.
+test('an element the app renders itself is not reported as missing', () => {
+  const app = [
+    { path: 'www/index.html', content: '<!DOCTYPE html><html><body><div id="list"></div><button onclick="add()">Add</button><script src="app.js"></script></body></html>' },
+    { path: 'www/app.js', content: 'function add(){var row=document.createElement("div");row.setAttribute("id","row-1");row.innerHTML="<span id=\\"row-1-label\\">item</span>";document.getElementById("list").appendChild(row);localStorage.setItem("row-1","x");}' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build a list app that saves items' });
+  assert.equal(report.violations.some((v) => v.code === 'missing-element'), false, JSON.stringify(report.violations));
+});
+
 test('a data request with no persistence is rejected', () => {
   const report = analyzeGeneratedApp([
     { path: 'www/index.html', content: '<!DOCTYPE html><html><body><ul id="list"></ul><button onclick="add()">Add</button><script src="app.js"></script></body></html>' },

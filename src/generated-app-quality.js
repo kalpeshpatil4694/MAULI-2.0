@@ -178,6 +178,30 @@ function definedNames(js) {
 // naive call scan reports `if` as an unbound handler. Only real identifiers count.
 export const JS_KEYWORDS = new Set(['if', 'else', 'for', 'while', 'do', 'switch', 'case', 'return', 'function', 'new', 'typeof', 'instanceof', 'void', 'delete', 'in', 'of', 'try', 'catch', 'throw', 'await', 'async', 'yield', 'this', 'super', 'class', 'const', 'let', 'var']);
 
+// Ids the product declares anywhere it ships. Markup `id="…"`, a setAttribute call, or an
+// id written into markup the app renders itself — a node created at runtime still declares
+// its id in source, so scanning every file is what keeps this from firing on a control the
+// app legitimately builds in JavaScript.
+function declaredElementIds(files) {
+  const ids = new Set();
+  for (const f of files) {
+    const content = String(f.content ?? '');
+    for (const m of content.matchAll(/\bid\s*=\s*["'`]([^"'`]+)["'`]/g)) ids.add(m[1]);
+    for (const m of content.matchAll(/setAttribute\s*\(\s*["'`]id["'`]\s*,\s*["'`]([^"'`]+)["`]/g)) ids.add(m[1]);
+  }
+  return ids;
+}
+
+// Element references the code makes: `getElementById('x')` and `querySelector('#x')`. A
+// reference built at runtime (`getElementById('row-' + id)`) is not matched — the literal
+// must be complete — because its target cannot be judged from source.
+function referencedElementIds(js) {
+  const refs = new Set();
+  for (const m of String(js).matchAll(/getElementById\s*\(\s*["'`]([^"'`]+)["'`]/g)) refs.add(m[1]);
+  for (const m of String(js).matchAll(/querySelector(?:All)?\s*\(\s*["'`]#([A-Za-z_][\w-]*)/g)) refs.add(m[1]);
+  return refs;
+}
+
 // `onclick="doThing()"` / `onclick='doThing(...)'` — the classic dead button.
 function inlineHandlerRefs(html) {
   const refs = new Set();
@@ -451,6 +475,20 @@ export function analyzeGeneratedApp(files, { objective = '', requirements = [] }
   } else if (broken.length) {
     push('missing-asset', SEVERITY.WARNING,
       `referenced assets the product does not ship: ${broken.slice(0, 6).map((b) => `${b.ref} (in ${b.from})`).join(', ')}`);
+  }
+
+  // 10. The code reaches for an element the product never declares. Files are generated
+  // separately, so the markup and the script are written without seeing each other, and the
+  // pair can disagree: an app whose submit handler reads `#date` while the form has no such
+  // input throws on the founder's very first click. Every other check passes — the handlers
+  // exist, the buttons are bound, the data is persisted — so this shipped a 100/100 fidelity
+  // app whose one core action could never run. The declared ids are collected from every
+  // file, so a control the app renders itself is not flagged.
+  const declaredIds = declaredElementIds(list);
+  const dangling = [...referencedElementIds(clean)].filter((id) => !declaredIds.has(id));
+  if (dangling.length) {
+    push('missing-element', SEVERITY.CRITICAL,
+      `code reads elements that are never declared: ${dangling.slice(0, 8).join(', ')}`);
   }
 
   // Coverage reads executed source only — see evaluateRequirementCoverage(). The
