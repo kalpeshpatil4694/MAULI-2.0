@@ -106,13 +106,36 @@ function ensurePackageJson(files, objective) {
 
 const DEFAULT_CODE_MODEL_FALLBACK = '@cf/qwen/qwen3-30b-a3b-fp8';
 
+// The answer the founder must never have to guess at. A template artifact is a working app,
+// so from the outside it is indistinguishable from the requested product — which is how a
+// generic habit tracker reached a founder who asked for a call recorder. Delivery already
+// REFUSES an unmatched template, but a matched one still ships, and then the only honest
+// thing is to say plainly what it is.
+export const TEMPLATE_FALLBACK_WARNING =
+  'This is a MAULI template, not your app. The model could not write code for this request, ' +
+  'so you are looking at a generic starting point: the layout and interactions work, but they ' +
+  'are not built for what you asked for. Nothing here was generated from your command.';
+const AI_UNAVAILABLE_WARNING =
+  'This is a placeholder, not your app. No language model was reachable when this project was ' +
+  'generated, so only an empty shell was produced.';
+
 // The bounded repair loop: Detect → Diagnose → Fix → Rebuild → Retest.
 // "Detect" is the static fidelity gate run on the model's own output. "Diagnose" turns
 // the violation codes into a repair instruction. "Fix/Rebuild" is one more AI attempt
 // whose prompt carries the diagnosis. "Retest" re-runs the same gate. Bounded to one
 // repair per generation attempt, so a persistently bad model cannot spin forever — the
 // bounded attempts + template fallback below remain the outer safety net.
-const MAX_REPAIR_ATTEMPTS = 1;
+// Widened from one repair to two. Measured live against Groq, the FIRST attempt is usually
+// rejected as unparseable or incomplete and the retry is what succeeds; with a single repair
+// there was one chance at the retry and everything after it fell to a template.
+const MAX_REPAIR_ATTEMPTS = 2;
+
+// The whole-app request asks for five complete files in one completion. Even with a raised
+// token ceiling that can be cut short, so the per-file path below exists as the robust
+// answer — but it costs one request per file, so it runs only after the single-request
+// attempts have actually failed.
+const WHOLE_APP_MAX_TOKENS = 6000;
+const PER_FILE_MAX_TOKENS = 4000;
 
 function repairInstruction(violationCodes) {
   const lines = {
@@ -141,6 +164,108 @@ function repairInstruction(violationCodes) {
 }
 
 /**
+ * Strip the markdown fence a model wraps raw source in. A per-file answer is plain source,
+ * not JSON, so the fence is the only wrapper that has to come off.
+ */
+function stripFence(raw) {
+  let s = text(raw).trim();
+  const fenced = s.match(/^```(?:[a-zA-Z0-9_+-]*)[ \t]*\r?\n([\s\S]*?)\r?\n?```$/);
+  if (fenced) return fenced[1];
+  return s.replace(/^```[a-zA-Z0-9_+-]*[ \t]*\r?\n?/, '').replace(/\r?\n?```\s*$/, '');
+}
+
+/**
+ * Reduce one per-file answer to the file's own source.
+ *
+ * The whole-app system prompt demands a JSON envelope, so a model may answer with one even
+ * when told to emit raw source. Two cases have to be told apart:
+ *   * a JSON answer carrying exactly this one file's content → unwrap and use it;
+ *   * a JSON answer that is the WHOLE-APP envelope (a `files` array) → it is not this file,
+ *     and writing it into www/app.js would make an app whose "source" is a JSON dump that
+ *     happens to contain the words. That is refused, not accepted for its length.
+ */
+function unwrapFileContent(path, raw) {
+  const stripped = stripFence(raw).trim();
+  const parsed = parseModel(stripped);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    if (Array.isArray(parsed.files)) return '';
+    if (typeof parsed.content === 'string' && parsed.content.trim()) return parsed.content;
+    const keyed = parsed[path] ?? parsed[String(path).split('/').pop()];
+    if (typeof keyed === 'string' && keyed.trim()) return keyed;
+  }
+  return stripped;
+}
+
+/** Is this plausibly the source of the file at `path`, and not prose about it? */
+function looksLikeFileSource(path, content) {
+  const body = String(content ?? '').trim();
+  if (body.length < 20) return false;
+  if (/\.html?$/i.test(path)) return /<!DOCTYPE|<html|<body|<div/i.test(body);
+  if (/\.css$/i.test(path)) return /\{[^}]*:[^}]*\}/.test(body);
+  if (/\.json$/i.test(path)) { try { return typeof JSON.parse(body) === 'object'; } catch { return false; } }
+  return true;
+}
+
+// What each file must be, when it is asked for on its own. The whole-app prompt cannot say
+// this per file, which is exactly why a truncated single request loses the lot.
+const FILE_PLAN = {
+  web: [
+    ['www/index.html', 'the ONE complete HTML page. Include <!DOCTYPE html>, <head> with <link rel="stylesheet" href="styles.css"> and <script src="app.js"></script> in <body>. Every element, id, class and event handler the app uses must appear here.'],
+    ['www/app.js', 'the ONE complete JavaScript file. All state, event handlers, DOM rendering and persistence (localStorage) live here. Every handler the HTML calls must be DEFINED here with a real body.'],
+    ['www/styles.css', 'the ONE complete CSS file. All styling, layout, colours, spacing and responsive @media rules.'],
+    ['package.json', 'a complete package.json as JSON with at least name, version and a "start" script.'],
+    ['README.md', 'a short README describing the app and how to run it.'],
+  ],
+  backend: [
+    ['server.js', 'the ONE complete server file. All routing, request handling, validation and persistence live here. It must start a real HTTP server.'],
+    ['package.json', 'a complete package.json as JSON with at least name, version, main and a "start" script.'],
+    ['README.md', 'a short README describing the app and how to run it.'],
+  ],
+};
+
+/**
+ * Generate the app ONE FILE PER REQUEST.
+ *
+ * The single-request path needs every file to survive one completion. Measured against the
+ * live Groq provider that failed 6 times in 7 for anything larger than a toy app — the
+ * completion was cut before the JSON closed, so the executor had nothing usable and quietly
+ * fell back to a template. Asking for one file at a time cannot truncate the other four, and
+ * each answer is plain source rather than a JSON envelope, so it is also far easier to
+ * parse. It costs more requests, so it runs only after the whole-app attempts failed.
+ */
+async function generateFileByFile({ runtimeEnv, systemPrompt, objective, acceptance, task }) {
+  const plan = isWebTask(task) ? FILE_PLAN.web : FILE_PLAN.backend;
+  const files = [];
+  const missing = [];
+  for (const [path, spec] of plan) {
+    const ask = 'Write ' + path + ' for this product.\n\n' + spec +
+      '\n\nProduct: ' + objective +
+      '\nAcceptance criteria: ' + JSON.stringify(acceptance) +
+      '\n\nThe other files already exist or are being written separately, so reference them by name and do not inline them. ' +
+      'Output ONLY the raw contents of ' + path + '. No markdown fence, no explanation, no JSON wrapper, no other file.';
+    try {
+      const raw = await withTimeout(code(runtimeEnv, [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: ask },
+      ], { maxTokens: PER_FILE_MAX_TOKENS }), AI_ATTEMPT_TIMEOUT_MS);
+      const content = unwrapFileContent(path, raw).trim();
+      // A file that came back empty, or as prose/envelope instead of the file, is not a
+      // file. Refusing it here is what keeps a half-written app from being registered as
+      // the product.
+      if (!looksLikeFileSource(path, content)) { missing.push(path); continue; }
+      files.push({ path, content });
+    } catch (e) { missing.push(`${path}: ${text(e).slice(0, 80)}`); }
+  }
+  if (!files.length) return { files: null, error: `per-file generation produced nothing (${missing.join('; ') || 'no files requested'})` };
+  const withManifest = ensurePackageJson(files, objective);
+  // The same structural bar the single-request path is held to, so a per-file app that is
+  // missing its HTML is refused exactly as a truncated one is.
+  if (invalid(withManifest, task)) return { files: null, error: `per-file output is incomplete (${missing.join('; ') || 'missing required files'})` };
+  const quality = analyzeGeneratedApp(withManifest, { objective, requirements: task?.requirements ?? [] });
+  return { files: withManifest, quality, missing };
+}
+
+/**
  * Run the model once, parse, validate structurally, then run the fidelity gate on the
  * result; on gate failure spend at most MAX_REPAIR_ATTEMPTS extra model calls whose
  * prompt names exactly what the gate found. Returns the best valid files or null.
@@ -157,7 +282,7 @@ async function generateWithRepair({ runtimeEnv, systemPrompt, objective, accepta
       const raw = await withTimeout(code(runtimeEnv, [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
-      ], { maxTokens: 3000 }), AI_ATTEMPT_TIMEOUT_MS);
+      ], { maxTokens: WHOLE_APP_MAX_TOKENS }), AI_ATTEMPT_TIMEOUT_MS);
       const parsed = parseModel(raw);
       const files = ensurePackageJson(filesOf(parsed?.files), objective);
       if (!parsed || invalid(files, task)) { lastError = 'invalid output (missing required files or too little code)'; continue; }
@@ -175,8 +300,19 @@ async function generateWithRepair({ runtimeEnv, systemPrompt, objective, accepta
       return { files, parsed, quality };
     } catch (e) { lastError = text(e); }
   }
+  // The whole-app attempts are exhausted and nothing usable came back. Before the answer is
+  // handed to the template fallback, ask for the files one at a time: it costs more
+  // requests but it cannot lose four files to one truncated completion.
+  if (!bestValid || !bestQuality?.passed) {
+    const perFile = await generateFileByFile({ runtimeEnv, systemPrompt, objective, acceptance, task })
+      .catch(error => ({ files: null, error: text(error) }));
+    if (perFile?.files) {
+      return { files: perFile.files, parsed: null, quality: perFile.quality, strategy: 'file-by-file' };
+    }
+    if (perFile?.error) lastError = lastError ? `${lastError}; ${perFile.error}` : perFile.error;
+  }
   return bestValid
-    ? { files: bestValid, parsed: null, quality: bestQuality }
+    ? { files: bestValid, parsed: null, quality: bestQuality, strategy: 'whole-app' }
     : { files: null, parsed: null, quality: null, error: lastError };
 }
 
@@ -241,13 +377,14 @@ export async function probeAiGeneration(objective, { env, acceptance = [], inclu
   }
   const systemPrompt = WEB_TASK_PROMPT + '\n\nTask: ' + objective + '\nAcceptance criteria: ' + JSON.stringify(acceptance);
   let lastError = '';
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const PROBE_ATTEMPTS = 2;
+  for (let attempt = 0; attempt < PROBE_ATTEMPTS; attempt++) {
     try {
       const prompt = attempt === 0 ? objective : objective + '\n\nIMPORTANT: Your previous response was invalid. Generate COMPLETE source code for all files. Each file must have full, working code. Output ONLY the JSON object.';
       const raw = await withTimeout(code(runtimeEnv, [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
-      ], { maxTokens: 3000 }), AI_ATTEMPT_TIMEOUT_MS);
+      ], { maxTokens: WHOLE_APP_MAX_TOKENS }), AI_ATTEMPT_TIMEOUT_MS);
       const parsed = parseModel(raw);
       const files = ensurePackageJson(filesOf(parsed?.files), objective);
       // Validate against a web task: this probe uses the web prompt, so it must be held to
@@ -259,7 +396,7 @@ export async function probeAiGeneration(objective, { env, acceptance = [], inclu
         // so the probe route cannot suggest an app is deliverable when it is a demo.
         const quality = analyzeGeneratedApp(files, { objective });
         return {
-          available: true, generated: true, attempt: attempt + 1,
+          available: true, generated: true, attempt: attempt + 1, strategy: 'whole-app',
           fidelity: { passed: quality.passed, score: quality.score, violations: quality.violations.map(v => v.code) },
           fileCount: files.length,
           files: includeContent
@@ -272,6 +409,23 @@ export async function probeAiGeneration(objective, { env, acceptance = [], inclu
       }
       lastError = bad ? 'output rejected: missing required files or too little code' : 'model returned no usable files';
     } catch (error) { lastError = text(error); }
+  }
+  // The whole-app attempts failed. Try the same per-file path the executor uses, so the
+  // probe reports what the executor would actually do — a probe that stops at the single
+  // request would call a working generator "broken".
+  const perFile = await generateFileByFile({ runtimeEnv, systemPrompt, objective, acceptance, task: { title: objective, requiredCapabilities: ['frontend', 'ui'] } })
+    .catch(error => ({ files: null, error: text(error) }));
+  if (perFile?.files) {
+    return {
+      available: true, generated: true, attempt: PROBE_ATTEMPTS + 1, strategy: 'file-by-file',
+      fidelity: { passed: perFile.quality?.passed ?? null, score: perFile.quality?.score ?? null, violations: (perFile.quality?.violations ?? []).map(v => v.code) },
+      fileCount: perFile.files.length,
+      files: perFile.files.map(f => ({ path: f.path, bytes: String(f.content ?? '').length })),
+      summary: 'Generated file by file after the single-request answer was unusable',
+      hasPlaceholder: false,
+      preview: String(perFile.files.find(f => /index\.html$/i.test(f.path))?.content ?? '').slice(0, 400),
+      wholeAppError: text(lastError).slice(0, 200),
+    };
   }
   return { available: true, generated: false, error: text(lastError).slice(0, 400), model: env?.MAULI_CODE_MODEL ?? null };
 }
@@ -326,7 +480,7 @@ function generateFromArchitecture({ task, agentId, objective, acceptance }) {
   };
 }
 
-async function generateFunctionalArtifact({ task, env, agentId }) {
+export async function generateFunctionalArtifact({ task, env, agentId }) {
   const runtimeEnv = resolveRuntimeEnv(env);
   const objective = text(task.description || task.title || 'Build a software application');
   const acceptance = Array.isArray(task.acceptance) ? task.acceptance : [];
@@ -348,10 +502,16 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
       templateResult.files = ensurePackageJson(templateResult.files, objective);
       const artifact = registerArtifact({
         projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
-        content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: templateResult.notes || [] },
-        metadata: { generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length, templateMatched: templateResult.templateMatched === true }
+        content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), TEMPLATE_FALLBACK_WARNING] },
+        metadata: {
+          generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length,
+          templateMatched: templateResult.templateMatched === true,
+          // No model was reachable at all, so this template is even further from the founder's
+          // command than the AI-failed fallback. It must say so rather than pass as the app.
+          aiGenerated: false, templateFallback: true, founderWarning: TEMPLATE_FALLBACK_WARNING
+        }
       });
-      return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: templateResult.notes || [], acceptance };
+      return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), TEMPLATE_FALLBACK_WARNING], acceptance };
     }
     // Generate a basic functional app instead of just a README stub
     const stubFiles = [
@@ -363,10 +523,10 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
     ];
     const artifact = registerArtifact({
       projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
-      content: { summary: 'Basic placeholder for: ' + objective, files: stubFiles, tests: [], notes: ['AI binding unavailable — minimal template used'] },
-      metadata: { generatedBy: 'functional-code-executor', stub: true, fileCount: stubFiles.length }
+      content: { summary: 'Basic placeholder for: ' + objective, files: stubFiles, tests: [], notes: ['AI binding unavailable — minimal template used', AI_UNAVAILABLE_WARNING] },
+      metadata: { generatedBy: 'functional-code-executor', stub: true, fileCount: stubFiles.length, aiGenerated: false, templateFallback: true, founderWarning: AI_UNAVAILABLE_WARNING }
     });
-    return { type: 'code', artifactId: artifact.id, summary: artifact.content.summary, files: stubFiles, tests: [], notes: ['AI binding unavailable'], acceptance };
+    return { type: 'code', artifactId: artifact.id, summary: artifact.content.summary, files: stubFiles, tests: [], notes: ['AI binding unavailable', AI_UNAVAILABLE_WARNING], acceptance };
   }
 
   // Try AI generation with improved prompts
@@ -378,7 +538,7 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   // prompt names exactly what the fidelity gate found (Detect → Diagnose → Fix → Retest).
   // After the loop we fall back to templates so the task still completes inside its lease
   // instead of dying when the invocation window expires.
-  let { files, parsed, quality, error } = await generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task });
+  let { files, parsed, quality, error, strategy } = await generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task });
   lastError = error ?? '';
 
   // If AI produced code that ALSO passed the fidelity gate, ship it. When even the repair
@@ -409,6 +569,11 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
       content: { summary: text(parsed?.summary || 'AI-generated implementation for ' + objective), files, tests, notes },
       metadata: {
         generatedBy: 'functional-code-executor', aiGenerated: true, fileCount: files.length, taskType: webTask ? 'web-ui' : 'backend',
+        // How the code actually arrived. 'file-by-file' means the single-request answer was
+        // unusable and each file was asked for on its own — recorded because the two paths
+        // have very different cost and reliability profiles, and an operator needs to tell
+        // them apart when judging whether generation is working.
+        strategy: strategy ?? 'whole-app',
         fidelity: quality ? { passed: quality.passed, score: quality.score, violations: quality.violations.map(v => v.code) } : null
       }
     });
@@ -421,18 +586,24 @@ async function generateFunctionalArtifact({ task, env, agentId }) {
   if (architectural?.error) throw new Error(architectural.error);
   if (architectural?.artifactId) {
     return { ...architectural, notes: [...(architectural.notes ?? []), `Model output refused (${lastError || 'unusable'}); built from the founder's specification instead`] };
-  }
-  const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
-  if (templateResult.files?.length > 0) {
-    // Same requirement as the branch above: a fallback project still has to be installable.
-    templateResult.files = ensurePackageJson(templateResult.files, objective);
-    const artifact = registerArtifact({
-      projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
-      content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), 'Template fallback used'] },
-      metadata: { generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length, aiFailed: true, aiError: lastError, templateMatched: templateResult.templateMatched === true }
-    });
-    return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: templateResult.notes || [], acceptance };
-  }
+  }    const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
+    if (templateResult.files?.length > 0) {
+      // Same requirement as the branch above: a fallback project still has to be installable.
+      templateResult.files = ensurePackageJson(templateResult.files, objective);
+      const artifact = registerArtifact({
+        projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
+        content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), 'Template fallback used', TEMPLATE_FALLBACK_WARNING] },
+        metadata: {
+          generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length,
+          aiFailed: true, aiError: lastError, templateMatched: templateResult.templateMatched === true,
+          // Explicit, machine-readable provenance. Every consumer (delivery manifest,
+          // dashboard, audit) can now say "this is a template" without inferring it from
+          // the absence of an aiGenerated flag.
+          aiGenerated: false, templateFallback: true, founderWarning: TEMPLATE_FALLBACK_WARNING
+        }
+      });
+      return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), TEMPLATE_FALLBACK_WARNING], acceptance };
+    }
 
   throw new Error('Code generation failed: AI returned invalid code and no template matched.');
 }

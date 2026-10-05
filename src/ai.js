@@ -19,6 +19,16 @@ const AI_SAFE_REQUEST_LIMIT = 90;
 // and no error. Every AI call now has a deadline, after which it is an ordinary AI failure
 // and the deterministic fallback takes over.
 const DEFAULT_AI_TIMEOUT_MS = 60_000;
+// Workers AI models cap their own output far below Groq's, so its ceiling stays conservative;
+// a request above it is not honoured but is never an error either. `MAULI_AI_MAX_TOKENS`
+// overrides both providers.
+const WORKERS_AI_MAX_TOKENS_CEILING = 4096;
+function aiMaxTokens(env, requested) {
+  const override = Number(env?.MAULI_AI_MAX_TOKENS);
+  const ceiling = Number.isFinite(override) && override > 0 ? override : WORKERS_AI_MAX_TOKENS_CEILING;
+  const want = Number(requested);
+  return Math.min(ceiling, Math.max(900, Number.isFinite(want) && want > 0 ? want : 900));
+}
 
 function dayKey(date = new Date()) { return date.toISOString().slice(0, 10); }
 function aiState(env) {
@@ -63,8 +73,8 @@ async function cloudflareGenerate(env, messages, options = {}) {
       temperature: options.temperature ?? 0.2,
       // The executor requests enough tokens for a complete multi-file artifact; clamping
       // that to 1200 guaranteed truncated/invalid JSON, so every AI call was wasted and
-      // the pipeline silently fell back to templates. Honour the request up to 3000.
-      max_tokens: Math.min(3000, Math.max(900, Number(options.maxTokens ?? 900)))
+      // the pipeline silently fell back to templates. Honour the request up to the ceiling.
+      max_tokens: aiMaxTokens(env, options.maxTokens)
     }), aiTimeoutMs(env, options), `Workers AI (${modelId})`);
     return response?.response ?? response;
   };
@@ -143,7 +153,7 @@ export async function generateAI(env, messages, options = {}) {
 }
 export async function generate(env, messages, options = {}) { return generateAI(env, messages, options); }
 export async function reason(env, messages, options = {}) { return generateAI(env, messages, { ...options, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 900 }); }
-export async function code(env, messages, options = {}) { return generateAI(env, messages, { ...options, model: resolveCodeModel(env, options), fallbackModel: env?.MAULI_MODEL ?? DEFAULT_MODEL, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 1200 }); }
+export async function code(env, messages, options = {}) { return generateAI(env, messages, { ...options, model: resolveCodeModel(env, options), fallbackModel: env?.MAULI_MODEL ?? DEFAULT_MODEL, temperature: options.temperature ?? 0.1, maxTokens: options.maxTokens ?? 4000 }); }
 
 const CAPABILITIES = ['research','planning','product-planning','frontend','ui','backend','api','database','schema','sql','security','testing','verification'];
 function cleanList(value, limit = 30) { return Array.isArray(value) ? value.map(x => String(x).trim()).filter(Boolean).slice(0, limit) : []; }

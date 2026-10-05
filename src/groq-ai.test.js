@@ -67,12 +67,25 @@ await withFetchStub(
 );
 
 // Code generation routes through the same fallback, so a Groq key rescues a spent Workers AI
-// allowance for the code path as well.
+// allowance for the code path as well. The code path asks for a budget big enough to hold a
+// COMPLETE multi-file artifact: it used to ask for 1200 tokens, which cut the answer off
+// mid-file for anything larger than a toy app and sent the executor to a template. An
+// explicit `maxTokens` still wins, and the ceiling still clamps an absurd request.
 await withFetchStub(() => okResponse('{"files":[]}'), async (calls) => {
   const env = { GROQ_API_KEY: 'gsk_test_key', AI: { async run() { throw new Error('4006 exceeded'); } } };
   assert.equal(await code(env, messages), '{"files":[]}');
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].body.max_tokens, 1200);
+  assert.ok(calls[0].body.max_tokens >= 4000, `the code path must request a multi-file budget, asked for ${calls[0].body.max_tokens}`);
+});
+await withFetchStub(() => okResponse('{"files":[]}'), async (calls) => {
+  const env = { GROQ_API_KEY: 'gsk_test_key', AI: { async run() { throw new Error('4006 exceeded'); } } };
+  await code(env, messages, { maxTokens: 1500 });
+  assert.equal(calls[0].body.max_tokens, 1500, 'an explicit request is still honoured');
+});
+await withFetchStub(() => okResponse('{"files":[]}'), async (calls) => {
+  const env = { GROQ_API_KEY: 'gsk_test_key', MAULI_AI_MAX_TOKENS: '2048', AI: { async run() { throw new Error('4006 exceeded'); } } };
+  await code(env, messages);
+  assert.equal(calls[0].body.max_tokens, 2048, 'an operator ceiling still clamps the request');
 });
 
 // An explicit `provider: 'groq'` goes straight to Groq — Cloudflare is not attempted, so a
