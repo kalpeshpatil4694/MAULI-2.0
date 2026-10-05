@@ -12,6 +12,20 @@ import { withDeadline } from './core.js';
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 const GROQ_DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_TIMEOUT_MS = 60_000;
+// A whole-app prompt asks for five complete files (HTML + JS + CSS + manifest + README).
+// Capped at 3000 tokens the completion was cut mid-file for anything but the smallest app,
+// so the JSON never parsed and the executor fell through to a template — measured live:
+// only 3 of 9 generations produced usable output before this change. llama-3.3-70b has a
+// far larger budget, so the ceiling is raised and an operator can tune or lower it.
+const GROQ_MAX_TOKENS_CEILING = 8000;
+
+/** The ceiling for one completion: operator override, else the Groq ceiling. */
+export function groqMaxTokens(env, options = {}) {
+  const override = Number(env?.MAULI_AI_MAX_TOKENS);
+  const ceiling = Number.isFinite(override) && override > 0 ? override : GROQ_MAX_TOKENS_CEILING;
+  const requested = Number(options.maxTokens);
+  return Math.min(ceiling, Math.max(900, Number.isFinite(requested) && requested > 0 ? requested : 900));
+}
 
 /**
  * A missing or blank key is a configuration state, not a runtime failure. It is thrown as
@@ -59,9 +73,10 @@ export async function groqGenerate(env, messages, options = {}) {
       .filter((m) => m && m.role && m.content != null)
       .map((m) => ({ role: m.role, content: m.content })),
     temperature: options.temperature ?? 0.2,
-    // The pipeline asks for enough tokens to emit a complete multi-file artifact; honour it
-    // up to the same 3000 ceiling Workers AI uses so the two providers behave alike.
-    max_tokens: Math.min(3000, Math.max(900, Number(options.maxTokens ?? 900)))
+    // The pipeline asks for enough tokens to emit a complete multi-file artifact. A 3000
+    // ceiling truncated exactly the large apps this provider exists to generate, so the
+    // budget is honoured up to the (overridable) ceiling instead of being pinned low.
+    max_tokens: groqMaxTokens(env, options)
   };
 
   const response = await withDeadline(fetch(`${GROQ_BASE}/chat/completions`, {

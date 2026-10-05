@@ -60,6 +60,18 @@ export function buildFinalDelivery(project,{enforceGates=false,env=null}={}) {
     const wrongTemplates=[...new Set(unmatched.map(a=>a.metadata?.template))].filter(Boolean);
     throw new Error(`Delivery blocked: MAULI could not build "${objective.slice(0,80)}" and would have delivered an unrelated template (${wrongTemplates.join(', ')})`);
   }
+  // A MATCHED template still ships, and it is still not the founder's app. The refusal above
+  // cannot cover that case, so the delivery says so in words the founder reads on download
+  // rather than leaving them to assume the zip was written from their command.
+  const fallbackArtifacts=codeArtifacts.filter(a=>a.metadata?.templateFallback===true);
+  const templateFallback=fallbackArtifacts.length?{
+    isTemplate:true,
+    artifactCount:fallbackArtifacts.length,
+    templates:[...new Set(fallbackArtifacts.map(a=>a.metadata?.template).filter(Boolean))],
+    aiErrors:[...new Set(fallbackArtifacts.map(a=>a.metadata?.aiError).filter(Boolean))].slice(0,5),
+    warning:fallbackArtifacts.find(a=>a.metadata?.founderWarning)?.metadata?.founderWarning
+      ??'This is a MAULI template, not your app: the model could not write code for this request.'
+  }:null;
   const gates = new Map(tasks.filter(t => t.pipelineGate && t.gateType).map(t => [t.gateType,t]));
 
   // A gate that RAN and reported `passed:false` must block delivery. Until now a gate's
@@ -284,6 +296,7 @@ export function buildFinalDelivery(project,{enforceGates=false,env=null}={}) {
       deliveredAt: now()
     },
     integrityManifest: integrityResult?.manifest??[],
+    templateFallback,
     tasks: tasks.map(t => ({
       id: t.id,
       title: t.title,
@@ -319,6 +332,7 @@ export function buildFinalDelivery(project,{enforceGates=false,env=null}={}) {
       // The founder-facing delivery verdict (point 17). The artifact only exists when every
       // gate, including Production Runtime, has passed — so this is READY, never BLOCKED.
       deliveryStatus: 'FINAL DELIVERY READY',
+      templateFallback,
       productionRuntime: describeRuntimeAcceptance(runtimeReport)
     }
   });

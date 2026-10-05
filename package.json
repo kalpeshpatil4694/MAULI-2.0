@@ -22,6 +22,7 @@
     "verify:wrangler": "node scripts/wrangler-config-gate.mjs",
     "verify:live": "node scripts/audit-live-channel.mjs",
     "verify:app": "node scripts/verify-generated-app.mjs --verify",
+    "measure:groq": "node scripts/measure-groq-generation.mjs",
     "test:security": "node --test tests/founder-auth.test.js tests/tool-security.test.js test/security-governance.test.js tests/d1-write-budget.test.js tests/d1-monotonic-writes.test.js",
     "self-test": "node --test test/*.test.js"
   },
