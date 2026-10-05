@@ -222,7 +222,7 @@ function registerBuiltinTools(){
   }});
 
   registerTool({name:'media.process',description:'Process media files',risk:'read',capabilities:['media','processing','conversion'],handler:(input={})=>{
-    return{tool:'media.process',status:'available',summary:'Media processing available',at:now()};
+    return{tool:'media.process',status:'blocked',reason:'media_processing_requires_external_runner',summary:'No media file was processed in the Worker runtime.',at:now()};
   }});
 
   // ═══ MONITORING TOOLS (FUNCTIONAL) ═══
