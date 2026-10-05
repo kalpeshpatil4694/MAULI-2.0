@@ -212,7 +212,8 @@ select.inp{cursor:pointer}
         <button class="hamburger" onclick="toggleSb()">☰</button>
         <span class="status-dot" id="hDot"></span>
         <span style="font-size:11px;color:var(--text2)" id="hText">Connecting...</span>
-        <span style="font-size:11px;color:var(--text3)" id="groqChip" title="Groq fallback provider status, read from /api/health">Groq: —</span>
+        <span style="font-size:11px;color:var(--text3)" id="groqChip" title="Groq fallback provider status, read from /api/health">➖ Groq: —</span>
+        <span style="font-size:11px;color:var(--text2);display:none" id="groqState" title="Groq fallback provider status, read from /api/health"></span>
         <span style="font-size:13px;font-weight:600;margin-left:8px" id="pageTitle">Command Center</span>
       </div>
       <div class="topbar-r">
@@ -720,6 +721,11 @@ function paintGroqChip(d){
   el.style.color='var(--green)';
   el.textContent='✅ Groq: Configured'+(d.groqModel?' · '+esc(d.groqModel):'')+(d.generationPath?' · path: '+esc(d.generationPath):'');
   el.title='Groq is configured — generation path: '+String(d.generationPath||'—')+'. Read from /api/health; the key itself is never shown.';
+  const st=$('groqState');if(st){
+    st.style.color='var(--green)';
+    st.textContent='Configured - '+esc(d.groqModel||'—')+' - path: '+esc(d.generationPath||'—');
+    st.style.display='inline';
+  }
 }
 async function loadGroqChip(){
   try{const r=await api('/api/health');paintGroqChip(r.data||r);}
