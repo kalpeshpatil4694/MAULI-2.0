@@ -865,10 +865,18 @@ export function describeStoredRuntimeAcceptance(project) {
     deployment: dep.url ?? dep.errorMessage ?? dep.status
   };
   if (project.architecture && project.architecture.backend === false) {
+    // A local app owes no acceptance RUN, so there is nothing to be "not run yet". Its Final
+    // Delivery is READY exactly when the project actually completed — the scheduler only marks
+    // a project completed after the delivery built with enforceGates, and for a browser-only
+    // project that gate passed on its own local bar (UI interaction + device persistence).
+    // Reporting BLOCKED here contradicted a finished, delivered project in the Projects table.
+    const completed = project.state === 'completed';
     return {
       ...projected,
       status: 'not-run',
       label: 'LOCAL',
+      finalDelivery: completed ? 'READY' : 'BLOCKED',
+      blockingReason: completed ? null : projected.blockingReason,
       reason: 'Browser-only architecture: there is no server to deploy. The production-runtime gate judges UI interaction, persistence and requirement evidence from executed source — open Project Details for the verdict.'
     };
   }

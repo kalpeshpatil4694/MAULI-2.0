@@ -212,8 +212,7 @@ select.inp{cursor:pointer}
         <button class="hamburger" onclick="toggleSb()">☰</button>
         <span class="status-dot" id="hDot"></span>
         <span style="font-size:11px;color:var(--text2)" id="hText">Connecting...</span>
-        <span style="font-size:11px;color:var(--text3)" id="groqChip" title="Groq fallback provider status, read from /api/health">➖ Groq: —</span>
-        <span style="font-size:11px;color:var(--text2);display:none" id="groqState" title="Groq fallback provider status, read from /api/health"></span>
+        <span style="font-size:11px;color:var(--text3)" id="groqChip" title="Groq fallback provider status, read from /api/health">➖</span>
         <span style="font-size:13px;font-weight:600;margin-left:8px" id="pageTitle">Command Center</span>
       </div>
       <div class="topbar-r">
@@ -708,28 +707,27 @@ function updateStats(){
 // The topbar is the one place painted on every page, so this status needs no navigation and
 // no click: it answers "did the GROQ_API_KEY secret reach this Worker?" from the moment the
 // dashboard loads. It reads /api/health — only the config verdict travels, never the key.
+//
+// The chip is a SYMBOL, not a sentence. Printing "Configured - <model> - path: <path>" in the
+// topbar wrapped onto its own line and doubled the status (the chip carried the same words),
+// so the row read as two overlapping labels on a phone. The detail is not lost — it lives in
+// the tooltip and as full rows on the Health page — while the bar stays one glyph wide.
 function paintGroqChip(d){
   const el=$('groqChip');if(!el)return;
   if(!d||typeof d.groqConfigured==='undefined'){
-    el.style.color='var(--text3)';el.textContent='➖ Groq: —';
-    el.title='/api/health did not report a Groq verdict.';return;
+    el.style.color='var(--text3)';el.textContent='➖';
+    el.title='Groq: unknown — /api/health did not report a verdict.';return;
   }
   if(!d.groqConfigured){
-    el.style.color='var(--yellow)';el.textContent='❌ Groq: Not Configured';
-    el.title='GROQ_API_KEY and MAULI_GROQ_KEY are unset on this Worker, so a spent Workers AI allowance falls straight to templates.';return;
+    el.style.color='var(--yellow)';el.textContent='❌';
+    el.title='Groq: Not Configured — GROQ_API_KEY and MAULI_GROQ_KEY are unset on this Worker, so a spent Workers AI allowance falls straight to templates.';return;
   }
-  el.style.color='var(--green)';
-  el.textContent='✅ Groq: Configured'+(d.groqModel?' · '+esc(d.groqModel):'')+(d.generationPath?' · path: '+esc(d.generationPath):'');
-  el.title='Groq is configured — generation path: '+String(d.generationPath||'—')+'. Read from /api/health; the key itself is never shown.';
-  const st=$('groqState');if(st){
-    st.style.color='var(--green)';
-    st.textContent='Configured - '+esc(d.groqModel||'—')+' - path: '+esc(d.generationPath||'—');
-    st.style.display='inline';
-  }
+  el.style.color='var(--green)';el.textContent='✅';
+  el.title='Groq: Configured · model '+String(d.groqModel||'—')+' · generation path '+String(d.generationPath||'—')+'. Read from /api/health; the key itself is never shown.';
 }
 async function loadGroqChip(){
   try{const r=await api('/api/health');paintGroqChip(r.data||r);}
-  catch(_){const el=$('groqChip');if(el){el.style.color='var(--text3)';el.textContent='➖ Groq: —';}}
+  catch(_){const el=$('groqChip');if(el){el.style.color='var(--text3)';el.textContent='➖';el.title='Groq: unknown — /api/health did not answer.';}}
 }
 
 // ─── RENDERERS ───
@@ -1161,7 +1159,11 @@ async function loadBuilds(){let h='';for(const p of S.projects){const hasCode=S.
 
 // ─── MESSAGING ───
 async function loadMsgs(){try{const r=await api('/api/messages');const msgs=r.messages||r||[];let h='';for(const m of(Array.isArray(msgs)?msgs:[]).slice(-20).reverse()){const c=m.type==='alert'?'r':m.type==='review'?'y':'a';
-  h+='<div style="padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">'+esc(m.from||'—')+' → '+esc(m.to||'—')+'</b><span class="badge badge-'+c+'">'+esc(m.type||'info')+'</span></div><div style="font-size:11px;margin-top:2px">'+esc(m.content||m.message||'')+'</div></div>'}
+  // The stored record uses the canonical fields {fromAgentId,toAgentId,body,subject}; the old
+  // renderer read the dashboard's own short names {from,to,content}, so every real message
+  // printed as "— → —" with an empty body even after it had been sent.
+  const from=m.fromAgentId||m.from||'—';const to=m.toAgentId||m.to||'—';const text=m.body||m.content||m.message||'';const subj=m.subject&&m.subject!=='Untitled'?('<b>'+esc(m.subject)+'</b> '):'';
+  h+='<div style="padding:6px 0;border-bottom:1px solid rgba(30,45,74,.3)"><div style="display:flex;justify-content:space-between"><b style="font-size:12px">'+esc(from)+' → '+esc(to)+'</b><span class="badge badge-'+c+'">'+esc(m.type||'info')+'</span></div><div style="font-size:11px;margin-top:2px">'+subj+esc(text)+'</div></div>'}
   $('msgList').innerHTML=h||'<div style="color:var(--text2);padding:10px">No messages</div>';
   const opts=S.agents.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name||a.id)+'</option>').join('');
   if($('msgFrom'))$('msgFrom').innerHTML='<option value="">From...</option>'+opts;if($('msgTo'))$('msgTo').innerHTML='<option value="">To...</option>'+opts;
