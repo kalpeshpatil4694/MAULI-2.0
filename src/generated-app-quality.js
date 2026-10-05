@@ -396,9 +396,19 @@ export function analyzeGeneratedApp(files, { objective = '', requirements = [] }
   if (unbound.length) push('unbound-handler', SEVERITY.CRITICAL, `handlers referenced but not defined: ${unbound.slice(0, 8).join(', ')}`);
 
   // 4. No interaction at all — a static page, not an app.
-  const hasHandlerAttr = /\son[a-z]+\s*=/i.test(html);
+  //
+  // A control can be bound three ways, and this scan used to see only the first: an inline
+  // attribute in the STATIC HTML (`onclick="add()"`), an inline attribute in markup the app
+  // renders ITSELF (`list.innerHTML = '<button onclick="del(1)">'`), or a DOM property
+  // assignment (`el.onclick = fn`). The last two live in the JavaScript. The runtime verifier
+  // already executes both — verify-generated-app.mjs scans rendered `innerHTML` for exactly
+  // this reason — so reading only the static HTML called a working list/tracker "no working
+  // controls" and refused the app at the fidelity gate. A real dynamic app usually ships a
+  // near-empty index.html and builds its controls in JS, which is precisely this case.
+  const hasInlineHandler = /\son[a-z]+\s*=\s*["'`]/i.test(clean) || /\son[a-z]+\s*=/i.test(html);
+  const hasPropAssignment = /\.\s*on[a-z]+\s*=/i.test(clean);
   const hasListener = /addEventListener\s*\(/i.test(clean);
-  const interactionCount = Math.max(refs.size, hasListener ? 1 : 0, hasHandlerAttr ? 1 : 0);
+  const interactionCount = Math.max(refs.size, (hasListener || hasInlineHandler || hasPropAssignment) ? 1 : 0);
   if (web && interactionCount === 0) push('no-interaction', SEVERITY.CRITICAL, 'no event handlers, listeners or bound actions found');
 
   // 5. Data-intent requirement with no persistence/API call anywhere.

@@ -46,6 +46,32 @@ test('a static page with no interaction is rejected', () => {
   assert.ok(report.violations.some((v) => v.code === 'no-interaction'), JSON.stringify(report.violations));
 });
 
+// The live failure this closes: a generated app whose index.html is a thin shell and whose
+// JavaScript renders the controls (innerHTML with inline handlers) was reported as having
+// "no working controls" and refused. The runtime verifier already scans rendered markup; the
+// static gate must not disagree with it about the same app.
+test('an app that renders its controls from JavaScript is not called "no interaction"', () => {
+  const app = [
+    { path: 'www/index.html', content: '<!DOCTYPE html><html><body><div id="list"></div><script src="app.js"></script></body></html>' },
+    { path: 'www/app.js', content: 'var items=JSON.parse(localStorage.getItem("items")||"[]");function render(){document.getElementById("list").innerHTML=items.map(function(i,n){return "<li>"+i+" <button onclick=\'removeItem("+n+")\'>x</button></li>"}).join("");localStorage.setItem("items",JSON.stringify(items));}function addItem(){items.push("n");render();}function removeItem(n){items.splice(n,1);render();}render();' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build a todo list app that persists tasks' });
+  assert.equal(report.violations.some((v) => v.code === 'no-interaction'), false, JSON.stringify(report.violations));
+  assert.ok(report.stats.interactionCount > 0, 'a rendered control is a bound control');
+});
+
+// A control attached with a DOM property (`el.onclick = fn`) is as real as an inline
+// attribute. The gate used to see only the attribute form and refused working apps for it.
+test('a control bound with a DOM property assignment counts as interaction', () => {
+  const app = [
+    { path: 'www/index.html', content: '<!DOCTYPE html><html><body><div id="value">0</div><button id="inc">+</button><script src="app.js"></script></body></html>' },
+    { path: 'www/app.js', content: 'var count=0;document.getElementById("inc").onclick=function(){count=count+1;document.getElementById("value").textContent=String(count);localStorage.setItem("count",String(count));};' },
+  ];
+  const report = analyzeGeneratedApp(app, { objective: 'Build a counter app' });
+  assert.equal(report.violations.some((v) => v.code === 'no-interaction'), false, JSON.stringify(report.violations));
+  assert.ok(report.stats.interactionCount > 0);
+});
+
 test('a data request with no persistence is rejected', () => {
   const report = analyzeGeneratedApp([
     { path: 'www/index.html', content: '<!DOCTYPE html><html><body><ul id="list"></ul><button onclick="add()">Add</button><script src="app.js"></script></body></html>' },

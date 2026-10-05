@@ -120,24 +120,33 @@ test('generation runs the bounded repair loop and rebuilds a rejected app', asyn
     acceptance: [{ field: 'type', equals: 'code' }],
     executor: 'internal.code'
   });
-  // First answer looks like an app but never persists anything; the repair pass fixes it.
-  const noPersistence = JSON.stringify({
-    summary: 'Tracker',
-    files: [
-      { path: 'www/index.html', content: WORKING_HTML },
-      { path: 'www/app.js', content: 'let items=[];function render(){document.getElementById("list").innerHTML=items.map(function(t){return "<li>"+t+"</li>"}).join("");}function add(){var v=document.getElementById("item").value.trim();if(!v)return;items.push(v);render();}render();' },
-      { path: 'www/styles.css', content: 'body{font-family:system-ui}' }
-    ]
-  });
-  const fixed = JSON.stringify({ summary: 'Tracker with persistence', files: WORKING_APP });
-  let call = 0;
-  const env = { AI: { async run() { call += 1; return { response: call === 1 ? noPersistence : fixed }; } } };
+  // Generation is one file per request. The first answer for app.js looks like an app but
+  // never persists anything; the repair request (the one that names the review failure) fixes
+  // it. Every other file is answered correctly on the first try.
+  const noPersistence = 'let items=[];function render(){document.getElementById("list").innerHTML=items.map(function(t){return "<li>"+t+"</li>"}).join("");}function add(){var v=document.getElementById("item").value.trim();if(!v)return;items.push(v);render();}render();';
+  const PER_FILE = 'Output ONLY the raw contents of ';
+  const calls = [];
+  const env = {
+    AI: {
+      async run(_model, payload) {
+        const user = (payload.messages ?? []).map((m) => m.content).join('\n');
+        calls.push(user);
+        const path = ['www/index.html', 'www/app.js', 'www/styles.css'].find((p) => user.includes(PER_FILE + p));
+        const isRepair = /failed the functional review/.test(user);
+        if (path === 'www/index.html') return { response: WORKING_HTML };
+        if (path === 'www/app.js') return { response: isRepair ? WORKING_JS : noPersistence };
+        if (path === 'www/styles.css') return { response: 'body{font-family:system-ui}' };
+        return { response: '' };
+      },
+    },
+  };
 
   const executor = getExecutor('internal.code').handler;
   const result = await executor({ task, env, agentId: 'agent-test-frontend' });
 
-  assert.ok(call > 1, 'the rejected app must trigger a repair attempt');
+  assert.ok(calls.some((c) => /failed the functional review/.test(c)), 'the rejected app must trigger a repair attempt');
   assert.match(result.files.find((f) => f.path === 'www/app.js').content, /localStorage/, 'the repaired app persists data');
+  assert.equal(store.get('artifacts', result.artifactId).metadata.strategy, 'file-by-file', 'the app is generated one file at a time');
   const artifact = store.get('artifacts', result.artifactId);
   assert.equal(artifact.metadata.fidelity.passed, true, JSON.stringify(artifact.metadata));
   const gate = analyzeGeneratedApp(result.files, { objective: 'Build an expense tracker web app', requirements: ['Track expenses and persist them'] });
