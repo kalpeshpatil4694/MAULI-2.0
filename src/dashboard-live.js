@@ -105,7 +105,7 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       const hasTotals=Number.isFinite(Number(totals.tasks))||Number.isFinite(Number(totals.projects));
       if(!d.degraded||hasTotals){
         set('sProj',Number.isFinite(Number(totals.projects))?Number(totals.projects):projects.length);set('navP',projects.length);
-        if(Array.isArray(d.tasks)){set('sTask',Number.isFinite(Number(totals.tasks))?Number(totals.tasks):d.tasks.length);set('navT',d.tasks.filter(t=>t.state==='working').length||d.tasks.length);}
+        if(Array.isArray(d.tasks)){set('sTask',Number.isFinite(Number(totals.tasks))?Number(totals.tasks):d.tasks.length);set('navT',Number.isFinite(Number(d.summary?.running))?Number(d.summary.running):d.tasks.filter(t=>['working','assigned','verifying'].includes(t.state)).length);}
         if(Array.isArray(d.agents)){set('sAg',d.agents.length);set('navA',d.agents.length);}
         if(Array.isArray(d.artifacts))set('sArt',Number.isFinite(Number(totals.artifacts))?Number(totals.artifacts):d.artifacts.length);
       }
