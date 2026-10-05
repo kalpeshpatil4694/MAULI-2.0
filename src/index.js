@@ -174,6 +174,16 @@ function buildableProjectIds(artifacts) {
 }
 
 function compactStateList(list, type) { return (Array.isArray(list) ? list : []).map(item => compactStateItem(item, type)); }
+// store.list() returns insertion order, and after hydration (D1 `ORDER BY updated_at DESC`)
+// that order is NEWEST-first. A trailing `slice(-n)` therefore kept the OLDEST n rows and hid
+// the newest ones — so a freshly worked project's tasks, or a just-generated artifact, never
+// reached the dashboard even though the total counter included them. Keep the newest n by
+// recency, matching the D1 query's `ORDER BY updated_at DESC LIMIT n`.
+function newestByRecency(list, n) {
+  return [...(Array.isArray(list) ? list : [])]
+    .sort((a, b) => Date.parse(b?.updatedAt ?? b?.createdAt ?? 0) - Date.parse(a?.updatedAt ?? a?.createdAt ?? 0))
+    .slice(0, n);
+}
 
 // A serving isolate hydrates once and then answers from memory; if it hydrated while a
 // command was still being written it can hold the project row without its tasks, and it
@@ -311,14 +321,14 @@ async function statePayload(env, recoveredRuns) {
     const storeArtifacts = store.list('artifacts');
     const codeProjects = codeProjectIds(storeArtifacts);
     const buildable = buildableProjectIds(storeArtifacts);
-    const projects = compactStateList(listProjects().slice(-100),'projects').map(p => {
+    const projects = compactStateList(newestByRecency(listProjects(),100),'projects').map(p => {
       const hasCode = codeProjects.has(p && p.id);
       return { ...p, hasCode, canBuild: hasCode && buildable.has(p && p.id) };
     });
-    const tasks = compactStateList(listTasks().slice(-300),'tasks');
-    const artifacts = compactStateList(store.list('artifacts').slice(-100),'artifacts');
+    const tasks = compactStateList(newestByRecency(listTasks(),300),'tasks');
+    const artifacts = compactStateList(newestByRecency(store.list('artifacts'),100),'artifacts');
     const agents = compactStateList(listAgents().slice(0,50),'agents');
-    const approvals = compactStateList(listApprovals().slice(-50),'approvals');
+    const approvals = compactStateList(newestByRecency(listApprovals(),50),'approvals');
     const events = compactStateList(store.recentEvents(30),'events');
     // Totals come from the same cached D1 COUNT the cold-isolate snapshot uses, so the
     // counters are identical whichever isolate answers a refresh (the capped in-memory
