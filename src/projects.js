@@ -10,19 +10,20 @@ const settledTask = t => t.state === 'completed' || (t.state === 'cancelled' && 
 
 function projectStateFromTasks(project) {
   const tasks = store.list('tasks').filter(t => t?.projectId === project?.id);
+  if (project?.state === 'awaiting_approval') return 'awaiting_approval';
+  if (['failed','escalated','cancelled'].includes(project?.state)) return project.state === 'escalated' ? 'failed' : project.state;
   if (!tasks.length) return project?.state ?? 'planning';
-  const nonQa = tasks.filter(t => !t.finalProjectVerification);
-  const qa = tasks.filter(t => t.finalProjectVerification);
-  if (nonQa.some(t => t.state === 'failed')) return 'active';
-  // 'completed' must mean DELIVERED. Deriving it from tasks alone let a project whose
-  // delivery was refused read as finished while the founder had nothing to download.
-  if (tasks.every(settledTask) && qa.length > 0 && qa.every(t => settledTask(t) && t.verificationId))
-    return project?.finalDeliveryId ? 'completed' : 'active';
-  if (tasks.some(t => ['working','running','assigned','verifying'].includes(t.state))) return 'active';
-  if (tasks.some(t => t.state === 'blocked')) return 'active';
-  if (nonQa.length && nonQa.every(settledTask) && qa.some(t => !settledTask(t))) return 'active';
-  if (tasks.every(settledTask)) return project?.finalDeliveryId ? 'completed' : 'active';
-  return project?.state === 'completed' ? 'active' : (project?.state ?? 'planning');
+  const pending = tasks.some(t => ['queued','working','running','assigned','verifying'].includes(t.state));
+  const failed = tasks.some(t => t.state === 'failed');
+  const blocked = tasks.some(t => t.state === 'blocked');
+  const allSettled = tasks.every(settledTask);
+  // Active means work is actually pending/running. A blocked or failed pipeline with no
+  // runnable work is terminal and must never masquerade as an active project forever.
+  if (allSettled) return project?.finalDeliveryId ? 'completed' : 'blocked';
+  if (failed && !pending) return 'failed';
+  if (blocked && !pending) return 'blocked';
+  if (pending) return 'active';
+  return project?.state ?? 'planning';
 }
 
 export function createProject({ name, objective, founderCommand = '', requirements = [], priority = 'normal', commandRunId = null, commandReceivedAt = null, platform = null, requirementSpec = null, architecture = null }) {
