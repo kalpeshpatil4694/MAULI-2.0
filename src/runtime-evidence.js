@@ -207,6 +207,9 @@ export async function ensureGeneratedDeployment(projectId, env = null) {
   if (existing.status === DEPLOYMENT_STATUS.DEPLOYED && existing.url) {
     return { deployed: true, deployment: existing, reason: 'already deployed' };
   }
+  if (existing.status === DEPLOYMENT_STATUS.DEPLOYING) {
+    return { deployed: false, pending: true, deployment: existing, reason: 'deployment is already in progress; waiting for the executor callback' };
+  }
   const out = await dispatchGeneratedDeployment(env, {
     project,
     files: mergedProjectFiles(projectId),
@@ -281,6 +284,7 @@ export async function ensureRuntimeAcceptance(projectId, env = null) {
   // Deploy first when the project owes a deployment: the acceptance run must be told WHICH
   // URL to hit, and running the source in-process is a local fixture, not production proof.
   const deployment = normalizeDeployment(project.runtimeDeployment);
+  if (deployment.status === DEPLOYMENT_STATUS.DEPLOYING) return { dispatched:false, recorded:false, pending:true, reason:'deployment is still in progress; runtime acceptance waits for its real URL' };
   let target = deployment;
   if (deployment.status !== DEPLOYMENT_STATUS.DEPLOYED) {
     const deployed = await ensureGeneratedDeployment(projectId, env);
