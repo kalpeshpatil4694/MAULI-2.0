@@ -24,7 +24,7 @@ test('Projects task summary is authoritative and counts the same lifecycle state
   const env = fakeSummaryD1([{
     project_id: pid,
     total: 14,
-    completed: 5,
+    completed: 12,
     failed: 0,
     running: 0,
     pending: 0,
@@ -33,7 +33,7 @@ test('Projects task summary is authoritative and counts the same lifecycle state
   const summary = await projectTaskSummary(env, [{ id: pid, state: 'active' }]);
   assert.deepEqual(summary.get(pid), {
     total: 14,
-    completed: 5,
+    completed: 12,
     failed: 0,
     running: 0,
     pending: 0,
