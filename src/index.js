@@ -221,7 +221,7 @@ export function __resetD1TaskCache() { _d1TaskCache.at = 0; _d1TaskCache.rows = 
 // correlated counts proportional to the project's own tasks instead of scanning every task row.
 const PROJECT_TASK_SUMMARY_TTL = 5000;
 const _projectTaskSummaryCache = { at: 0, map: null, key: '' };
-async function projectTaskSummary(env, projects) {
+export async function projectTaskSummary(env, projects) {
   if (!Array.isArray(projects) || !projects.length) return new Map();
   if (!hasD1(env)) {
     const ids = [...new Set(projects.map(p => p?.id).filter(Boolean))];
@@ -285,6 +285,10 @@ async function projectTaskSummary(env, projects) {
     return memoryTasks.length ? fallback : new Map();
   }
 }
+
+// Test hook: project counters are cached to keep dashboard polling cheap, but tests and
+// diagnostics need a deterministic way to force the next request to re-read the source.
+export function __resetProjectTaskSummaryCache() { _projectTaskSummaryCache.at=0; _projectTaskSummaryCache.map=null; _projectTaskSummaryCache.key=''; }
 
 // A single failed D1 read must not discard the whole snapshot. Cold isolates routinely
 // race the background hydration, and an all-or-nothing snapshot used to throw and fall
