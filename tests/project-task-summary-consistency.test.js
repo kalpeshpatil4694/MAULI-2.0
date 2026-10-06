@@ -27,7 +27,8 @@ test('Projects task summary is authoritative and counts the same lifecycle state
     completed: 5,
     failed: 0,
     running: 0,
-    pending: 9
+    pending: 0,
+    blocked: 2
   }]);
   const summary = await projectTaskSummary(env, [{ id: pid, state: 'active' }]);
   assert.deepEqual(summary.get(pid), {
@@ -35,7 +36,8 @@ test('Projects task summary is authoritative and counts the same lifecycle state
     completed: 5,
     failed: 0,
     running: 0,
-    pending: 9
+    pending: 0,
+    blocked: 2
   });
 });
 
@@ -53,4 +55,14 @@ test('D1 summary cache can be reset between requests/tests', () => {
   __resetProjectTaskSummaryCache();
   store.data = new Map();
   assert.ok(true);
+});
+
+
+test('blocked-only project is never classified as active by the dashboard state rule', () => {
+  const html = dashboardHTML();
+  const start = html.indexOf('function projRealState');
+  const end = html.indexOf('function renderProjects', start);
+  const rule = html.slice(start, end);
+  assert.match(rule, /blocked>0&&running===0&&pending===0\)return 'blocked'/);
+  assert.match(rule, /running>0\|\|pending>0\)return 'active'/);
 });
