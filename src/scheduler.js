@@ -7,7 +7,7 @@ import { store } from './store.js';
 import { selectAgents, updateAgent } from './agents.js';
 import { executeTask, runOverLifetime } from './execution.js';
 import { verifyResult, retryDecision } from './verification.js';
-import { completeTask, failTask, markVerifying, assignTask } from './tasks.js';
+import { completeTask, failTask, markVerifying, assignTask, startTask } from './tasks.js';
 import { buildFinalDeliveryDurable } from './delivery.js';
 import { saveCommandResult } from './result-recorder.js';
 import { ensureProjectPipeline } from './pipeline-gates.js';
