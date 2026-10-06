@@ -215,6 +215,45 @@ async function d1TasksFresh(env) {
 // way to force a cold read.
 export function __resetD1TaskCache() { _d1TaskCache.at = 0; _d1TaskCache.rows = null; }
 
+// Authoritative per-project task counters for the Projects table. The dashboard row list is
+// intentionally capped, so deriving 1/15 from the visible task sample is wrong whenever a
+// project's older tasks fall outside that cap. The expression index above makes these
+// correlated counts proportional to the project's own tasks instead of scanning every task row.
+const PROJECT_TASK_SUMMARY_TTL = 30000;
+const _projectTaskSummaryCache = { at: 0, map: null, key: '' };
+async function projectTaskSummary(env, projects) {
+  if (!hasD1(env) || !Array.isArray(projects) || !projects.length) return new Map();
+  const ids = [...new Set(projects.map(p => p?.id).filter(Boolean))];
+  const key = ids.join('|');
+  const nowMs = Date.now();
+  if (_projectTaskSummaryCache.map && _projectTaskSummaryCache.key === key && nowMs - _projectTaskSummaryCache.at < PROJECT_TASK_SUMMARY_TTL) {
+    return _projectTaskSummaryCache.map;
+  }
+  try {
+    const placeholders = ids.map(() => '?').join(',');
+    const sql = `SELECT p.id AS project_id,
+      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id) AS total,
+      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state')='completed') AS completed,
+      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state')='failed') AS failed,
+      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state') IN ('working','assigned','verifying','running')) AS running,
+      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state') IN ('queued','blocked')) AS pending
+      FROM entities p WHERE p.type='projects' AND p.id IN (${placeholders})`;
+    const result = await env.DB.prepare(sql).bind(...ids).all();
+    recordD1Read(env, Number(result?.meta?.rows_read) || 0);
+    const map = new Map();
+    for (const row of result.results ?? []) map.set(row.project_id, {
+      total:Number(row.total)||0, completed:Number(row.completed)||0, failed:Number(row.failed)||0,
+      running:Number(row.running)||0, pending:Number(row.pending)||0
+    });
+    for (const id of ids) if (!map.has(id)) map.set(id,{total:0,completed:0,failed:0,running:0,pending:0});
+    _projectTaskSummaryCache.at=nowMs; _projectTaskSummaryCache.map=map; _projectTaskSummaryCache.key=key;
+    return map;
+  } catch (error) {
+    noteStateReadFailure('project-task-summary', error);
+    return _projectTaskSummaryCache.map || new Map();
+  }
+}
+
 // A single failed D1 read must not discard the whole snapshot. Cold isolates routinely
 // race the background hydration, and an all-or-nothing snapshot used to throw and fall
 // back to the (empty) in-memory state — which is what made the dashboard counters
@@ -287,11 +326,13 @@ async function stateSnapshot(env) {
   const artifactList = keep(artifacts, 'artifacts');
   const eventList = Array.isArray(events) ? events : keep(null, 'events');
   const totals = await safeTypeCounts(env);
+  const taskSummaries = await projectTaskSummary(env, projectList);
   const codeProjects = codeProjectIds(artifactList);
   const buildable = buildableProjectIds(artifactList);
   const withCode = p => {
     const hasCode = codeProjects.has(p && p.id);
-    return { ...p, hasCode, canBuild: hasCode && buildable.has(p && p.id) };
+    const taskSummary = taskSummaries.get(p?.id) || null;
+    return { ...p, hasCode, canBuild: hasCode && buildable.has(p && p.id), ...(taskSummary ? { taskSummary } : {}) };
   };
   const snapshot = {
     agents: compactStateList(dedupeAgentList(agentList).slice(0,50),'agents'),
@@ -339,7 +380,9 @@ async function statePayload(env, recoveredRuns) {
     // counters are identical whichever isolate answers a refresh (the capped in-memory
     // lists below them differ by isolate, the numbers must not).
     const totals = await safeTypeCounts(env) ?? { projects: listProjects().length, tasks: listTasks().length, artifacts: store.list('artifacts').length };
-    return { agents, projects, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: totals.projects, tasks: totals.tasks, running: totals.running ?? tasks.filter(t => ['working','assigned','verifying'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: totals.artifacts, totals } };
+    const taskSummaries = await projectTaskSummary(env, projects);
+    const projectsWithSummary = projects.map(p => ({ ...p, ...(taskSummaries.get(p?.id) ? { taskSummary: taskSummaries.get(p.id) } : {}) }));
+    return { agents, projects:projectsWithSummary, tasks, approvals, tools:listTools().slice(0,50), artifacts, events, recoveredRuns, degraded:false, summary:{ projects: totals.projects, tasks: totals.tasks, running: totals.running ?? tasks.filter(t => ['working','assigned','verifying'].includes(t.state)).length, failed: tasks.filter(t => t.state === 'failed').length, artifacts: totals.artifacts, totals } };
   };
   if (store.hydrated) return memoryState();
   if (hasD1(env)) {
