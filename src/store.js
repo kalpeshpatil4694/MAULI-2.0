@@ -1,5 +1,5 @@
 import { id, now } from './core.js';
-import { hasD1, d1List, d1ListUpdatedSince, d1Put, d1Get, d1Event, d1Events } from './db.js';
+import { hasD1, d1List, d1ListUpdatedSince, d1ListByJsonState, d1Put, d1Get, d1Event, d1Events } from './db.js';
 
 // The fields one write actually changes relative to the copy its writer read. A rejected
 // compare-and-set means another isolate moved the row on, so the same transition is
@@ -278,6 +278,49 @@ export class MemoryStore {
       return { synced: 0, skipped: false, error: error?.message ?? String(error) };
     }).finally(() => { this._syncing = null; });
     return this._syncing;
+  }
+
+  // Cron/scheduler bootstrap must not hydrate historical tables every minute. The scheduler
+  // only needs current projects, runnable/stuck tasks, pending approvals, live runs and recent
+  // verification/artifact evidence. Historical command results, memory, tools and completed
+  // task history are HTTP/dashboard concerns. Keeping this path small is what prevents a
+  // one-minute cron from consuming millions of D1 rows_read per day.
+  async hydrateScheduler() {
+    if (!hasD1(this.env)) return false;
+    const load = async (type, rows) => {
+      const bucket = this.data.get(type) ?? new Map();
+      for (const item of rows ?? []) {
+        if (!item?.id) continue;
+        bucket.set(item.id, item);
+        if (item.updatedAt) this.versions.set(`${type}/${item.id}`, item.updatedAt);
+      }
+      if (bucket.size) this.data.set(type, bucket);
+      return rows ?? [];
+    };
+    try {
+      const [projects, tasks, agents, approvals, runs, verifications, artifacts] = await Promise.all([
+        d1List(this.env, 'projects', { limit: 100 }),
+        d1ListByJsonState(this.env, 'tasks', ['queued','assigned','working','verifying','blocked'], { limit: 500, order: 'ASC' }),
+        d1List(this.env, 'agents', { limit: 100 }),
+        d1ListByJsonState(this.env, 'approvals', ['pending','approved'], { limit: 100, order: 'ASC' }),
+        d1ListByJsonState(this.env, 'runs', ['running'], { limit: 100, order: 'ASC' }),
+        d1List(this.env, 'verifications', { limit: 200 }),
+        d1List(this.env, 'artifacts', { limit: 200 })
+      ]);
+      await load('projects', projects);
+      await load('tasks', tasks);
+      await load('agents', agents);
+      await load('approvals', approvals);
+      await load('runs', runs);
+      await load('verifications', verifications);
+      await load('artifacts', artifacts);
+      this.hydrateFailures=[];
+      this.hydrated=true;
+      return true;
+    } catch (error) {
+      this.noteHydrateFailure('scheduler-bootstrap', error);
+      return false;
+    }
   }
 
   async hydrateLearning() { return this.hydrate(['agents','memory']); }
