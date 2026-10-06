@@ -59,6 +59,9 @@ export async function ensureSchema(env) {
     // Without this, "WHERE type=? ORDER BY updated_at DESC LIMIT n" still scans every row
     // of that type (2560 duplicate agents) to sort — the LIMIT only helped with this index.
     `CREATE INDEX IF NOT EXISTS idx_entities_type_updated ON entities(type, updated_at)`,
+    // Project list task counters are computed from task rows. Keep projectId indexed inside
+    // the JSON entity so those per-project aggregates do not scan the entire tasks table.
+    `CREATE INDEX IF NOT EXISTS idx_entities_task_project ON entities(type, json_extract(data, '$.projectId'))`,
     `CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)`,
     `CREATE TABLE IF NOT EXISTS mauli_d1_quota (day TEXT PRIMARY KEY, reserved INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`
   ];
