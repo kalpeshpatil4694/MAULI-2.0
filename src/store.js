@@ -1,5 +1,5 @@
 import { id, now } from './core.js';
-import { hasD1, d1List, d1Put, d1Get, d1Event, d1Events } from './db.js';
+import { hasD1, d1List, d1ListUpdatedSince, d1Put, d1Get, d1Event, d1Events } from './db.js';
 
 // The fields one write actually changes relative to the copy its writer read. A rejected
 // compare-and-set means another isolate moved the row on, so the same transition is
@@ -75,7 +75,7 @@ function comparable(value) {
 }
 
 export class MemoryStore {
-  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this.hydrateErrors=[]; this.hydrateFailures=[]; this._hydrating=null; this.versions=new Map(); }
+  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this.hydrateErrors=[]; this.hydrateFailures=[]; this._hydrating=null; this.versions=new Map(); this.syncWatermarks=new Map(); this._syncing=null; }
   // Single-flight hydration: concurrent callers (worker light paths and the HTTP init
   // path) share one in-flight promise instead of each re-reading every D1 table.
   hydrateOnce() {
@@ -237,6 +237,49 @@ export class MemoryStore {
     if(this.hydrateErrors.length>50)this.hydrateErrors.splice(0,this.hydrateErrors.length-50);
     console.warn(`hydrate failed (${type}):`,reason,recovered?'(recovered on retry)':'');
   }
+  // Incrementally reconcile this isolate with D1 before scheduler work. Cloudflare
+  // Workers do not share module memory between isolates, so a scheduler isolate can otherwise
+  // keep an older task/project snapshot forever. Only rows newer than the per-type watermark
+  // are read; this avoids rehydrating entire tables every cron tick.
+  async syncFromD1(types=['projects','tasks','approvals','runs','verifications','executions','artifacts']) {
+    if (!hasD1(this.env) || !this.hydrated) return { synced: 0, skipped: true };
+    if (this._syncing) return this._syncing;
+    this._syncing = (async () => {
+      let synced = 0;
+      for (const type of types) {
+        const bucket = this.data.get(type) ?? new Map();
+        // On the first sync after hydration, use the newest row already loaded as the
+        // watermark. New rows/updates written by another isolate then arrive on the next
+        // query instead of rereading the hydrated cache.
+        if (!this.syncWatermarks.has(type)) {
+          let newest = '';
+          for (const row of bucket.values()) {
+            const ts = row?.updatedAt ?? '';
+            if (ts && ts > newest) newest = ts;
+          }
+          this.syncWatermarks.set(type, newest);
+        }
+        const after = this.syncWatermarks.get(type) || '';
+        const rows = await d1ListUpdatedSince(this.env, type, after, { limit: 500 });
+        if (!rows.length) continue;
+        for (const row of rows) {
+          if (!row?.id) continue;
+          bucket.set(row.id, row);
+          if (row.updatedAt) this.versions.set(`${type}/${row.id}`, row.updatedAt);
+          synced++;
+        }
+        this.data.set(type, bucket);
+        const last = rows[rows.length - 1]?.updatedAt;
+        if (last) this.syncWatermarks.set(type, last);
+      }
+      return { synced, skipped: false };
+    })().catch(error => {
+      this.hydrateErrors.push({ type:'incremental-sync', reason:(error?.message ?? String(error)).slice(0,200), at:new Date().toISOString(), recovered:false });
+      return { synced: 0, skipped: false, error: error?.message ?? String(error) };
+    }).finally(() => { this._syncing = null; });
+    return this._syncing;
+  }
+
   async hydrateLearning() { return this.hydrate(['agents','memory']); }
   metrics() {
     const entities = {};
