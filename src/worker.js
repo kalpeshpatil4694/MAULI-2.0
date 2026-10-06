@@ -25,7 +25,7 @@ let _d1Failed = false; let _d1FailTime = 0; const D1_FAIL_COOLDOWN = 300000; // 
 // duplicate task runs (and burn the free-tier D1 write budget). Execution is now owned
 // exclusively by the cron trigger and by explicit POSTs (/api/command, /api/approvals/:id,
 // /api/chat), which is what makes polling cheap and idempotent.
-async function hydrate(env) {
+async function hydrate(env, { scheduler = false } = {}) {
   if (_workerInit && (Date.now() - _lastHydrateTime) < HYDRATE_COOLDOWN) return;
   // After a D1 failure (e.g. daily rows_read limit), retry after the cooldown so the
   // worker self-heals when the limit resets instead of staying in memory mode forever.
@@ -36,7 +36,10 @@ async function hydrate(env) {
   try {
     if (!_workerInit) await ensureSchema(env);
     store.configure(env);
-    if (!store.hydrated) await store.hydrateOnce();
+    if (!store.hydrated) {
+      if (scheduler) await store.hydrateScheduler();
+      else await store.hydrateOnce();
+    }
     _d1Failed = false;
     _d1FailTime = 0;
   } catch (d1Error) {
@@ -178,12 +181,19 @@ export default {
     return response;
   },  async scheduled(event, rawEnv, ctx) {
     const env = boundedD1(rawEnv);
-    // Skip hydration if store is already hydrated — avoids D1 reads every 5 min
-    if (!store.hydrated) await hydrate(env);
+    // Scheduler gets a deliberately small lifecycle-only bootstrap. A full store hydration
+    // here used to read thousands of historical rows on every fresh cron isolate and could
+    // consume the 5M/day D1 rows_read allowance by itself.
+    if (!store.hydrated) await hydrate(env, { scheduler: true });
     const run = async () => {
-      // Collapse duplicate agents (old cold-start registration created ~60 copies per
-      // name) and re-point task/run references before the tick so stuck tasks unstick.
-      await dedupeAgents(env).catch(() => null);
+      // Agent deduplication is maintenance, not per-minute execution work. Running the
+      // full agents-table sweep on every cron isolate was a major D1 rows_read consumer.
+      // Run it once every 6 hours; scheduler task claiming does not depend on the cleanup.
+      const scheduledMs = Number(event?.scheduledTime) || Date.now();
+      const scheduledDate = new Date(scheduledMs);
+      if (scheduledDate.getUTCMinutes() === 0 && scheduledDate.getUTCHours() % 6 === 0) {
+        await dedupeAgents(env).catch(() => null);
+      }
       // The scheduler owns project finalization (finalizeCommand): routing the cron tick
       // through runMaintenance keeps cron and tests on one code path.
       await runMaintenance(env, { scheduledTime: event?.scheduledTime ?? Date.now() });
