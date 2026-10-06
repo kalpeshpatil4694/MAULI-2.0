@@ -284,7 +284,7 @@ export async function ensureRuntimeAcceptance(projectId, env = null) {
   // Deploy first when the project owes a deployment: the acceptance run must be told WHICH
   // URL to hit, and running the source in-process is a local fixture, not production proof.
   const deployment = normalizeDeployment(project.runtimeDeployment);
-  if (deployment.status === DEPLOYMENT_STATUS.DEPLOYING) return { dispatched:false, recorded:false, pending:true, reason:'deployment is still in progress; runtime acceptance waits for its real URL' };
+  if (deployment.status === DEPLOYMENT_STATUS.DEPLOYING) return { dispatched:false, recorded:false, pending:true, reason:'deployment is still in progress; GitHub hosted executor will run runtime acceptance after deployment' };
   let target = deployment;
   if (deployment.status !== DEPLOYMENT_STATUS.DEPLOYED) {
     const deployed = await ensureGeneratedDeployment(projectId, env);
@@ -298,6 +298,9 @@ export async function ensureRuntimeAcceptance(projectId, env = null) {
     architecture: project.architecture ?? null,
     requirements: project.requirementSpec?.requirements ?? []
   });
+  if (!env?.MAULI_RUNTIME_EXECUTOR && (env?.GITHUB_TOKEN || env?.MAULI_GITHUB_TOKEN || env?.GITHUB_PAT)) {
+    return { dispatched: false, recorded: false, pending: true, reason: 'GitHub hosted executor owns deployment + runtime acceptance; waiting for callback', deployment: target };
+  }
   if (!out.acceptance) return { dispatched: out.dispatched, recorded: false, reason: out.reason ?? 'the runner returned no valid acceptance report', deployment: target };
   recordRuntimeAcceptance(projectId, out.acceptance);
   return { dispatched: true, recorded: true, reason: null, deployment: target };
