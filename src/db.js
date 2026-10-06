@@ -62,6 +62,9 @@ export async function ensureSchema(env) {
     // Project list task counters are computed from task rows. Keep projectId indexed inside
     // the JSON entity so those per-project aggregates do not scan the entire tasks table.
     `CREATE INDEX IF NOT EXISTS idx_entities_task_project ON entities(type, json_extract(data, '$.projectId'))`,
+    // Scheduler queries filter tasks/approvals/runs by lifecycle state. Without this expression index,
+    // every one-minute cron tick scans the whole entities table even when only a handful of tasks are runnable.
+    `CREATE INDEX IF NOT EXISTS idx_entities_type_state_updated ON entities(type, json_extract(data, '$.state'), updated_at)`,
     `CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)`,
     `CREATE TABLE IF NOT EXISTS mauli_d1_quota (day TEXT PRIMARY KEY, reserved INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)`
   ];
@@ -172,6 +175,19 @@ export async function d1Put(env, type, value, { critical = false, expectedUpdate
 // that definitely exist in D1. Routes that must always answer for a specific
 // record (build status, project deliverable files) use this as a fallback so
 // they never report "not found" for data that is really there.
+export async function d1ListByJsonState(env, type, states = [], { limit = 500, order = 'ASC' } = {}) {
+  if (!hasD1(env) || !type || !Array.isArray(states) || !states.length) return [];
+  const safeLimit = Math.min(1000, Math.max(1, Number(limit) || 500));
+  const safeOrder = String(order).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+  const placeholders = states.map(() => '?').join(',');
+  const result = await env.DB
+    .prepare(`SELECT data FROM entities WHERE type = ? AND json_extract(data, '$.state') IN (${placeholders}) ORDER BY updated_at ${safeOrder} LIMIT ?`)
+    .bind(type, ...states.map(String), safeLimit)
+    .all();
+  recordD1Read(env, Number(result?.meta?.rows_read) || 0);
+  return (result.results ?? []).map(row => JSON.parse(row.data));
+}
+
 export async function d1ListUpdatedSince(env, type, updatedAfter, { limit = 500 } = {}) {
   if (!hasD1(env) || !type) return [];
   const after = String(updatedAfter || '');
