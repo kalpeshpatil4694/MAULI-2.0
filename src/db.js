@@ -169,6 +169,18 @@ export async function d1Put(env, type, value, { critical = false, expectedUpdate
 // that definitely exist in D1. Routes that must always answer for a specific
 // record (build status, project deliverable files) use this as a fallback so
 // they never report "not found" for data that is really there.
+export async function d1ListUpdatedSince(env, type, updatedAfter, { limit = 500 } = {}) {
+  if (!hasD1(env) || !type) return [];
+  const after = String(updatedAfter || '');
+  const safeLimit = Math.min(1000, Math.max(1, Number(limit) || 500));
+  const result = await env.DB
+    .prepare('SELECT data FROM entities WHERE type = ? AND updated_at > ? ORDER BY updated_at ASC, id ASC LIMIT ?')
+    .bind(type, after, safeLimit)
+    .all();
+  recordD1Read(env, Number(result?.meta?.rows_read) || 0);
+  return (result.results ?? []).map(row => JSON.parse(row.data));
+}
+
 export async function d1Get(env, type, id) {
   if (!hasD1(env) || !type || !id) return null;
   try {
