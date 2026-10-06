@@ -950,7 +950,9 @@ export function toRuntimeEvidenceProjection(acceptance) {
 // fabricates a PASS when no runner is configured.
 // ---------------------------------------------------------------------------
 export function runtimeExecutorConfigured(env) {
-  return Boolean((env?.MAULI_RUNTIME_EXECUTOR && String(env.MAULI_RUNTIME_EXECUTOR).trim()) || ((env?.GITHUB_TOKEN || env?.MAULI_GITHUB_TOKEN || env?.GITHUB_PAT) && (env?.MAULI_CONTROL_PLANE_URL || env?.PUBLIC_BASE_URL)));
+  const hosted = (env?.GITHUB_TOKEN || env?.MAULI_GITHUB_TOKEN || env?.GITHUB_PAT)
+    && (env?.MAULI_CONTROL_PLANE_URL || env?.PUBLIC_BASE_URL || 'https://mauli-2-0.kalpeshpatil4694.workers.dev');
+  return Boolean((env?.MAULI_RUNTIME_EXECUTOR && String(env.MAULI_RUNTIME_EXECUTOR).trim()) || hosted);
 }
 
 /**
