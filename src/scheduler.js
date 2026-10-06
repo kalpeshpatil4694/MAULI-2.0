@@ -225,6 +225,13 @@ async function finalizeCommand(projectId,env={},indexedTasks=null){const project
   const finalDeliveryId=finalDelivery?.id??project.finalDeliveryId??null;finalProject=await store.putDurable('projects',{...project,state:'completed',finalDeliveryId,completedAt:project.completedAt??now(),id:project.id}),result={status:'completed',runId,command:project.founderCommand,project:finalProject,tasks,finalDelivery};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.completed',{runId,projectId,status:'completed',at:now()});return result;}if(hasFailed&&!hasQueued&&!hasRunning){const failedProject=await store.putDurable('projects',{...project,state:'failed',failedAt:project.failedAt??now(),id:project.id}),result={status:'failed',runId,command:project.founderCommand,project:failedProject,tasks,error:'One or more tasks failed after recovery/retry limits.'};await saveCommandResult({runId,command:project.founderCommand,generatedAt:now(),result},env).catch(()=>null);store.addEvent('command.failed',{runId,projectId,status:'failed',at:now()});return result;}return null;}
 function indexTasksByProject(){const byProject=new Map();for(const task of store.list('tasks')){const key=task.projectId??'';let list=byProject.get(key);if(!list)byProject.set(key,list=[]);list.push(task);}return byProject;}
 export async function schedulerTick(env={},context={}){
+  // Every cron invocation may run in a different Worker isolate. Reconcile the scheduler's
+  // in-memory view with only D1 rows newer than its per-type watermark before making any
+  // claim/recovery decision. Without this, a newly-created or completed task in another
+  // isolate could remain invisible and the project would sit assigned/active indefinitely.
+  await store.syncFromD1(['projects','tasks','approvals','runs','verifications','executions','artifacts']).catch(error => {
+    store.addEvent('scheduler.sync_error',{error:error?.message ?? String(error),at:now()});
+  });
   // Internal application generation is autonomous. Older projects created before the
   // governance split may still be parked on an internal-code approval row; release only
   // those founder-command gates. Production/deployment/destructive/external/cost actions
