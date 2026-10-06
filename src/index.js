@@ -260,7 +260,7 @@ export async function projectTaskSummary(env, projects) {
       total:Number(row.total)||0, completed:Number(row.completed)||0, failed:Number(row.failed)||0,
       running:Number(row.running)||0, pending:Number(row.pending)||0, blocked:Number(row.blocked)||0
     });
-    for (const id of ids) if (!map.has(id)) map.set(id,{total:0,completed:0,failed:0,running:0,pending:0});
+    for (const id of ids) if (!map.has(id)) map.set(id,{total:0,completed:0,failed:0,running:0,pending:0,blocked:0});
     _projectTaskSummaryCache.at=nowMs; _projectTaskSummaryCache.map=map; _projectTaskSummaryCache.key=key;
     return map;
   } catch (error) {
@@ -279,7 +279,8 @@ export async function projectTaskSummary(env, projects) {
         if (task.state === 'completed') summary.completed++;
         if (task.state === 'failed') summary.failed++;
         if (['working','assigned','verifying','running'].includes(task.state)) summary.running++;
-        if (['queued','blocked'].includes(task.state)) summary.pending++;
+        if (['queued','assigned'].includes(task.state)) summary.pending++;
+        if (task.state === 'blocked') summary.blocked++;
         summary.authoritative = true;
       }
       if ([...fallback.values()].some(s => s.total > 0)) return fallback;
