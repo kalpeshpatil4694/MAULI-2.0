@@ -73,7 +73,7 @@ async function findBuild(buildId, env) {
 // Lazy initialization — only run once per Worker lifetime
 let _initialized = false;
 let _toolsReady = false;
-async function initOnce(env, ctx) {
+async function initOnce(env, ctx, { hydrate = true } = {}) {
   if (_initialized) return;
   _initialized = true;
   try { await ensureSchema(env); } catch(_) {} // DDL may fail if D1 limit exceeded — non-fatal
@@ -85,7 +85,7 @@ async function initOnce(env, ctx) {
   // already in D1. Reading a row-capped cache while another isolate wrote the row
   // is the whole defect. Cost is unchanged (the same tables were read either way)
   // and hydrateOnce() is single-flight, so only the first request pays for it.
-  if (!store.hydrated) {
+  if (hydrate && !store.hydrated) {
     await store.hydrateOnce().catch(()=>{});
   }
 }
@@ -447,10 +447,19 @@ function ensureTools() {
 }
 
 export default { async fetch(request, env, ctx) { try {
-  await initOnce(env, ctx);
+  const url=new URL(request.url);
+  // /api/state is already backed by a bounded, cached D1 snapshot. Hydrating the entire
+  // historical store before that endpoint would defeat the read budget protection on every
+  // fresh isolate. Keep the high-frequency read paths store-free; execution/detail paths still
+  // get the full durable hydration when they actually need it.
+  const readOnlyLightPath = request.method === 'GET' && (
+    url.pathname === '/' || url.pathname === '/api/state' || url.pathname === '/api/health' ||
+    url.pathname === '/api/heartbeat' || url.pathname === '/api/usage' || url.pathname === '/api/platforms' ||
+    url.pathname.startsWith('/api/cf/')
+  );
+  await initOnce(env, ctx, { hydrate: !readOnlyLightPath });
   ensureTools();
   const recoveredRuns=recoverRunningExecutions();
-  const url=new URL(request.url);
   if(request.method==='GET'&&url.pathname==='/') return new Response(dashboardHTML(),{headers:{'content-type':'text/html;charset=UTF-8','cache-control':'no-store'}});
   if(request.method==='GET'&&url.pathname==='/api/usage'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const report=await getUsageReport(env);const cfReport=await import('./cloudflare-api.js').then(m=>m.getFullUsageReport(env)).catch(()=>null);if(cfReport&&cfReport.apiConnected){report.d1.cfTotalMB=cfReport.d1.totalMB;report.d1.cfPercent=cfReport.d1.percent;report.d1.cfAvailable=true;}return ok({usage:report});}
   if(request.method==='POST'&&url.pathname==='/api/cleanup'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const result=await cleanupD1(env,body);return ok({cleanup:result});}
