@@ -209,7 +209,10 @@ export function assertRuntimeIdentity({
 
 /** Is a deploy runner configured? Named so "no runner" can never read as "deployed". */
 export function deployExecutorConfigured(env) {
-  return Boolean(env?.MAULI_DEPLOY_EXECUTOR && String(env.MAULI_DEPLOY_EXECUTOR).trim());
+  return Boolean(
+    (env?.MAULI_DEPLOY_EXECUTOR && String(env.MAULI_DEPLOY_EXECUTOR).trim())
+      || githubDeployExecutorConfigured(env)
+  );
 }
 
 export function githubDeployExecutorConfigured(env) {
