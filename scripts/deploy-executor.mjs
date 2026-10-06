@@ -34,6 +34,63 @@ function wranglerCommand() {
   return WRANGLER_BIN;
 }
 
+function validHttpUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) return null;
+    return parsed.toString().replace(/\/+$/, '');
+  } catch (_) { return null; }
+}
+
+/**
+ * Wrangler can successfully publish a Worker without printing its workers.dev URL in the
+ * human-readable output. Never pass an undefined/invalid value to fetch(). Resolve the
+ * account subdomain from Cloudflare and then verify the resulting URL over real HTTP.
+ */
+async function resolveWorkersDevUrl(workerName) {
+  const name = String(workerName || '').trim();
+  if (!name) return { url: null, reason: 'generated Worker name is missing' };
+  const who = await run(wranglerCommand(), ['whoami', '--json'], { cwd: process.cwd() });
+  if (who.code !== 0) return { url: null, reason: 'Wrangler deployed the Worker but account discovery failed: ' + redact(who.stderr || who.stdout) };
+
+  let accountId = process.env.CLOUDFLARE_ACCOUNT_ID || null;
+  try {
+    const parsed = JSON.parse(who.stdout || '{}');
+    const accounts = Array.isArray(parsed?.accounts) ? parsed.accounts : [];
+    accountId = accountId || parsed?.account_id || parsed?.accountId || parsed?.result?.account_id || parsed?.result?.accountId || accounts.find((a) => a?.id)?.id || null;
+  } catch (_) {}
+  if (!accountId) {
+    accountId = String(who.stdout || '').match(/\b[0-9a-f]{32}\b/i)?.[0] || null;
+  }
+  if (!accountId) return { url: null, reason: 'Wrangler deployed the Worker but no Cloudflare account id was available for URL resolution' };
+
+  const headers = { Authorization: 'Bearer ' + String(process.env.CLOUDFLARE_API_TOKEN || ''), Accept: 'application/json' };
+  const base = 'https://api.cloudflare.com/client/v4/accounts/' + encodeURIComponent(accountId);
+  try {
+    const sub = await fetch(base + '/workers/subdomain', { headers });
+    const body = await sub.json().catch(() => null);
+    const subdomain = body?.result?.subdomain;
+    if (!sub.ok || !subdomain) return { url: null, reason: 'Worker deployed but Cloudflare workers.dev subdomain lookup failed: ' + redact(body?.errors?.[0]?.message || ('HTTP ' + sub.status)) };
+
+    const script = await fetch(base + '/workers/scripts/' + encodeURIComponent(name) + '/subdomain', { headers });
+    const scriptBody = await script.json().catch(() => null);
+    if (script.ok && scriptBody?.result?.enabled === false) {
+      const enable = await fetch(base + '/workers/scripts/' + encodeURIComponent(name) + '/subdomain', {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true, previews_enabled: false })
+      });
+      const enableBody = await enable.json().catch(() => null);
+      if (!enable.ok || enableBody?.success !== true) return { url: null, reason: 'Worker deployed but its workers.dev route could not be enabled: ' + redact(enableBody?.errors?.[0]?.message || ('HTTP ' + enable.status)) };
+    }
+    const url = validHttpUrl('https://' + name + '.' + String(subdomain).replace(/^https?:\/\//i, '').replace(/\/+$/, '') + '.workers.dev');
+    return url ? { url, reason: null } : { url: null, reason: 'Cloudflare returned an invalid workers.dev subdomain' };
+  } catch (error) {
+    return { url: null, reason: 'Worker deployed but Cloudflare URL resolution failed: ' + redact(error?.message ?? error) };
+  }
+}
+
 const SECRET_VALUE_RE = /(?:bearer\s+)[A-Za-z0-9._~+/=-]{8,}|\b[A-Za-z0-9_-]{32,}\b|(?:token|key|secret|password)\s*[=:]\s*\S+/gi;
 export function redact(value) {
   // 400 characters truncated wrangler's own output right where the binding table is —
@@ -261,6 +318,7 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
   }
   const root = await mkdtemp(join(tmpdir(), `mauli-deploy-${randomUUID().slice(0, 8)}-`));
   const safe = String(projectId ?? 'project').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  const workerName = projectId ? `generated-${safe}`.slice(0, 63) : null;
   try {
     const written = await stageProject(list, { root });
     if (!written) {
@@ -278,7 +336,6 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
         // database by entity name (for example generated_order) would let two unrelated
         // Founder commands see each other's rows. The name is deterministic so redeploys
         // of the same project reuse the same database and preserve its data.
-        const workerName = `generated-${safe}`.slice(0, 63);
         // Schema-versioned: a changed migration means a fresh database whose table matches the
         // new Worker, and an unchanged one reuses the existing database. See schemaHashSuffix().
         const databaseName = `generated-${safe}${await schemaHashSuffix(root)}`.slice(0, 63);
@@ -335,13 +392,15 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     try { parsed = JSON.parse(deployed.stdout); } catch (_) { parsed = null; }
     const result = parsed?.result ?? parsed ?? {};
     const output = `${deployed.stdout}\n${deployed.stderr}`;
-    const url = result.url ?? /https:\/\/[^\s"']+\.workers\.dev/.exec(output)?.[0] ?? null;
-    if (!url) {
-      return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: 'deployment', errorMessage: 'wrangler reported success without a deployment URL, so there is nothing to run an acceptance against' } };
+    let finalUrl = validHttpUrl(result?.url) || validHttpUrl(/https:\/\/[^\s"']+/.exec(output)?.[0] ?? null);
+    if (!finalUrl && workerName) {
+      const resolved = await resolveWorkersDevUrl(workerName);
+      finalUrl = resolved.url;
+      if (!finalUrl) return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: 'deployment', errorMessage: resolved.reason || 'no valid deployment URL could be resolved' } };
     }
+    if (!finalUrl) return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: 'deployment', errorMessage: 'wrangler reported success without a valid deployment URL; URL resolution produced no runtime URL' } };
     const deploymentId = result.deployment_id ?? result.version_id ?? result.id
       ?? /Current Version ID:\s*([0-9a-f-]{16,})/i.exec(output)?.[1] ?? null;
-    const finalUrl = String(url).replace(/\/+$/, '');
 
     // Do not hand a URL to the acceptance runner until the edge is really serving THIS
     // version. Without this wait, the acceptance probes whatever the previous deployment
