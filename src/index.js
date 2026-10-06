@@ -225,14 +225,15 @@ export async function projectTaskSummary(env, projects) {
   if (!Array.isArray(projects) || !projects.length) return new Map();
   if (!hasD1(env)) {
     const ids = [...new Set(projects.map(p => p?.id).filter(Boolean))];
-    const map = new Map(ids.map(id => [id,{total:0,completed:0,failed:0,running:0,pending:0}]));
+    const map = new Map(ids.map(id => [id,{total:0,completed:0,failed:0,running:0,pending:0,blocked:0}]));
     for (const task of store.list('tasks')) {
       const summary = map.get(task?.projectId); if (!summary) continue;
       summary.total++;
       if (task.state === 'completed') summary.completed++;
       if (task.state === 'failed') summary.failed++;
       if (['working','assigned','verifying','running'].includes(task.state)) summary.running++;
-      if (['queued','blocked'].includes(task.state)) summary.pending++;
+      if (['queued','assigned'].includes(task.state)) summary.pending++;
+      if (task.state === 'blocked') summary.blocked++;
     }
     return map;
   }
@@ -249,14 +250,15 @@ export async function projectTaskSummary(env, projects) {
       (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state')='completed') AS completed,
       (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state')='failed') AS failed,
       (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state') IN ('working','assigned','verifying','running')) AS running,
-      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state') IN ('queued','blocked')) AS pending
+      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state') IN ('queued','assigned')) AS pending,
+      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state')='blocked') AS blocked
       FROM entities p WHERE p.type='projects' AND p.id IN (${placeholders})`;
     const result = await env.DB.prepare(sql).bind(...ids).all();
     recordD1Read(env, Number(result?.meta?.rows_read) || 0);
     const map = new Map();
     for (const row of result.results ?? []) map.set(row.project_id, {
       total:Number(row.total)||0, completed:Number(row.completed)||0, failed:Number(row.failed)||0,
-      running:Number(row.running)||0, pending:Number(row.pending)||0
+      running:Number(row.running)||0, pending:Number(row.pending)||0, blocked:Number(row.blocked)||0
     });
     for (const id of ids) if (!map.has(id)) map.set(id,{total:0,completed:0,failed:0,running:0,pending:0});
     _projectTaskSummaryCache.at=nowMs; _projectTaskSummaryCache.map=map; _projectTaskSummaryCache.key=key;
