@@ -72,19 +72,7 @@ export default {
     // a scheduler tick, and the per-project execution lock.
     const env = boundedD1(rawEnv);
     const url = new URL(request.url);
-    // Light paths never block the response on hydration: they either render static HTML
-    // ("/" is a pure template — dashboardHTML has no store access) or read memory-only
-    // types that hydration does not load (notifications, file_edits). Blocking on those
-    // made first paint take 12-15 s (ensureSchema + full hydrate) on every cold isolate.
-    const lightPath = url.pathname === "/" || url.pathname === "/dashboard" || url.pathname === "/api/notifications" || url.pathname.startsWith("/api/edits") || url.pathname === "/api/health" || url.pathname === "/api/heartbeat" || url.pathname.startsWith("/api/cf/") || url.pathname === "/api/state" || url.pathname === "/api/usage" || url.pathname === "/api/activity" || url.pathname === "/api/live-status" || url.pathname === "/api/learning/stats" || url.pathname === "/api/learning/skill-tree" || url.pathname === "/api/collaboration/stats" || url.pathname === "/api/messages" || url.pathname === "/api/mcp/servers" || url.pathname === "/api/self-test" || url.pathname === "/api/result-diagnostic";
-    // Only block on hydration for POST/command traffic. Light polling paths (the dashboard
-    // hits these every 60s) hydrate in the background so the response stays cheap while the
-    // isolate still converges to memory-served data instead of re-reading D1 forever.
-    if (!_workerInit) {
-      if (lightPath) { if (ctx?.waitUntil) ctx.waitUntil(hydrate(env).catch(() => {})); }
-      else await hydrate(env);
-    }
-
+    // Request hydration is handled by the application layer so read endpoints can stay cheap.
     // Founder commands are queued immediately. Execution is owned by the persistent scheduler,
     // so a long build can never turn into a false 60-second timeout response.
     if (request.method === 'POST' && url.pathname === '/api/command') {
