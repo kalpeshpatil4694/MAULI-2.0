@@ -1591,6 +1591,7 @@ function wranglerJsonc({ table, realtime, backend = true }) {
   return `{
   "name": "generated-${table}-api",${backend ? `
   "main": "worker/index.js",` : ''}
+  "workers_dev": ${backend ? 'true' : 'false'},
   "compatibility_date": "2026-08-19",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
