@@ -1,6 +1,6 @@
 import { ok, fail, json, now, validateString, validateId, sanitize, corsHeaders } from './core.js';
 import { store } from './store.js';
-import { d1QuotaSnapshot, d1ReadQuotaSnapshot, d1WriteSourcesSnapshot, d1WriteBlockedSnapshot } from './d1-quota.js';
+import { d1QuotaSnapshot, d1ReadQuotaSnapshot, d1WriteSourcesSnapshot, d1WriteBlockedSnapshot, recordD1Read } from './d1-quota.js';
 import { seedAgents, listAgents, dedupeAgentList } from './agents.js';
 import { listProjects } from './projects.js';
 import { listTasks } from './tasks.js';
@@ -219,10 +219,23 @@ export function __resetD1TaskCache() { _d1TaskCache.at = 0; _d1TaskCache.rows = 
 // intentionally capped, so deriving 1/15 from the visible task sample is wrong whenever a
 // project's older tasks fall outside that cap. The expression index above makes these
 // correlated counts proportional to the project's own tasks instead of scanning every task row.
-const PROJECT_TASK_SUMMARY_TTL = 30000;
+const PROJECT_TASK_SUMMARY_TTL = 5000;
 const _projectTaskSummaryCache = { at: 0, map: null, key: '' };
 async function projectTaskSummary(env, projects) {
-  if (!hasD1(env) || !Array.isArray(projects) || !projects.length) return new Map();
+  if (!Array.isArray(projects) || !projects.length) return new Map();
+  if (!hasD1(env)) {
+    const ids = [...new Set(projects.map(p => p?.id).filter(Boolean))];
+    const map = new Map(ids.map(id => [id,{total:0,completed:0,failed:0,running:0,pending:0}]));
+    for (const task of store.list('tasks')) {
+      const summary = map.get(task?.projectId); if (!summary) continue;
+      summary.total++;
+      if (task.state === 'completed') summary.completed++;
+      if (task.state === 'failed') summary.failed++;
+      if (['working','assigned','verifying','running'].includes(task.state)) summary.running++;
+      if (['queued','blocked'].includes(task.state)) summary.pending++;
+    }
+    return map;
+  }
   const ids = [...new Set(projects.map(p => p?.id).filter(Boolean))];
   const key = ids.join('|');
   const nowMs = Date.now();
@@ -250,7 +263,26 @@ async function projectTaskSummary(env, projects) {
     return map;
   } catch (error) {
     noteStateReadFailure('project-task-summary', error);
-    return _projectTaskSummaryCache.map || new Map();
+    // Do not fall back to the capped /api/state task sample. A partial sample is exactly
+    // what caused the Projects table to show 1/14 while Project Details showed 5/14.
+    // If the full in-memory task set is available, use it; otherwise omit the summary so
+    // the UI can show "syncing" instead of inventing a number.
+    const ids = [...new Set(projects.map(p => p?.id).filter(Boolean))];
+    const fallback = new Map(ids.map(id => [id,{total:0,completed:0,failed:0,running:0,pending:0,authoritative:false}]));
+    const memoryTasks = store.list('tasks');
+    if (memoryTasks.length) {
+      for (const task of memoryTasks) {
+        const summary = fallback.get(task?.projectId); if (!summary) continue;
+        summary.total++;
+        if (task.state === 'completed') summary.completed++;
+        if (task.state === 'failed') summary.failed++;
+        if (['working','assigned','verifying','running'].includes(task.state)) summary.running++;
+        if (['queued','blocked'].includes(task.state)) summary.pending++;
+        summary.authoritative = true;
+      }
+      if ([...fallback.values()].some(s => s.total > 0)) return fallback;
+    }
+    return _projectTaskSummaryCache.map || fallback;
   }
 }
 
