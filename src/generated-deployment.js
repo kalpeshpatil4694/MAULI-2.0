@@ -241,7 +241,7 @@ export async function dispatchGeneratedDeployment(env, { project = null, files =
       if (dispatched?.ok) return { deployed:false, pending:true, reason:'GitHub Actions deployment executor dispatched; waiting for callback', category:'deployment-pending', deployment:normalizeDeployment({status:DEPLOYMENT_STATUS.DEPLOYING,projectId:project?.id??null,artifactId,environment:'production',attemptedAt:new Date().toISOString()}) };
       return { deployed:false, reason:dispatched?.errorMessage??'GitHub Actions dispatch failed', category:dispatched?.errorCategory??'deployment', deployment:normalizeDeployment({status:DEPLOYMENT_STATUS.FAILED,projectId:project?.id??null,artifactId,errorCategory:dispatched?.errorCategory??'deployment',errorMessage:dispatched?.errorMessage??'GitHub Actions dispatch failed'}) };
     }
-    return { deployed:false, reason:'No deployment executor is configured', category:'executor-unavailable', deployment:normalizeDeployment({status:DEPLOYMENT_STATUS.NOT_DEPLOYED,projectId:project?.id??null,artifactId}) };
+    return { deployed:false, reason:'No deployment executor is configured: MAULI_DEPLOY_EXECUTOR or GitHub hosted executor', category:'executor-unavailable', deployment:normalizeDeployment({status:DEPLOYMENT_STATUS.NOT_DEPLOYED,projectId:project?.id??null,artifactId}) };
   }
   const payload = {
     projectId: project?.id ?? null,
