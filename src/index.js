@@ -282,7 +282,7 @@ async function projectTaskSummary(env, projects) {
       }
       if ([...fallback.values()].some(s => s.total > 0)) return fallback;
     }
-    return _projectTaskSummaryCache.map || fallback;
+    return memoryTasks.length ? fallback : new Map();
   }
 }
 
