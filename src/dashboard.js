@@ -756,7 +756,7 @@ function renderProjects(){
   // hasCode comes from the server (it can see every artifact); the capped local sample
   // is only a fallback, which is why the download/preview/build buttons used to vanish
   // for finished projects whose artifact sat outside /api/state's newest 100.
-  for(const p of list){const hasCode=('hasCode' in p)?!!p.hasCode:S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');const canBuild=('canBuild' in p)?!!p.canBuild:hasCode;const rs=projRealState(p);const ts=p.taskSummary||null;const tasks=ts?[]:S.tasks.filter(t=>t.projectId===p.id);const done=ts?Number(ts.completed)||0:tasks.filter(t=>t.state==='completed').length;const total=ts?Number(ts.total)||0:tasks.length;
+  for(const p of list){const hasCode=('hasCode' in p)?!!p.hasCode:S.artifacts.some(a=>a.projectId===p.id&&a.type==='code-workspace');const canBuild=('canBuild' in p)?!!p.canBuild:hasCode;const rs=projRealState(p);const ts=p.taskSummary||null;const authoritativeTaskSummary=Boolean(ts&&ts.authoritative!==false);const done=authoritativeTaskSummary?Number(ts.completed)||0:0;const total=authoritativeTaskSummary?Number(ts.total)||0:0;
     // Point 16: the runtime verdict is a column of its own, so the founder reads
     // PASS / FAILED / BLOCKED next to the project state instead of having to open it and
     // find a "QA Passed" badge that says nothing about whether the product was ever run.
@@ -775,7 +775,7 @@ function renderProjects(){
     '<td><span class="badge badge-'+rtCls+'" title="'+esc(rt&&rt.reason?rt.reason:'No production runtime acceptance run has been recorded for this project.')+'">'+esc(rtLabel)+'</span></td>'+
     '<td style="font-size:10px">'+(url?'<a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(url.slice(url.indexOf('://')+3))+'</a>':'<span style="color:var(--text2)">—</span>')+'</td>'+
     '<td><span class="badge badge-'+(fd==='READY'?'g':'r')+'">'+esc(fd)+'</span></td>'+
-    '<td style="font-size:11px">'+(total?done+'/'+total:'—')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
+    '<td style="font-size:11px">'+(authoritativeTaskSummary?(total?done+'/'+total:'0/0'):'<span class="badge badge-y" title="Authoritative task count is temporarily unavailable; opening Details will show the current D1 task list.">SYNC…</span>')+'</td><td style="display:flex;gap:4px;flex-wrap:wrap">';
     h+='<button class="btn btn-a btn-s proj-detail" data-pid="'+p.id+'">📄 Details</button>';
     h+='<button class="btn btn-g btn-s dl-btn" data-pid="'+p.id+'">📥</button>';
     // A class, not an inline window.open(): /api/preview-app is founder-protected and a new tab cannot send the key header, so this button used to open a 401 page. The injected live layer (DASHBOARD_LIVE_SCRIPT) handles .pv-btn with the key attached.
