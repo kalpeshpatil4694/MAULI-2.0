@@ -192,6 +192,6 @@ export default {
       await pruneEvents(env).catch(() => null);
       await pruneOldResults(env).catch(() => null);
     };
-    if (ctx?.waitUntil) ctx.waitUntil(run()); else await run();
+    await run();
   }
 };
