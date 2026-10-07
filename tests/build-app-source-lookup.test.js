@@ -27,19 +27,23 @@ test('the repository ships a push-triggered workflow for the build branches', ()
   assert.match(buildWorkflow, /java-version:\s*17/);
 });
 
-test('the HTTP path hydrates before serving instead of racing background hydration', () => {
+test('the HTTP init path can await hydration when a hydration-enabled route needs it', () => {
   // initOnce() used to kick hydration off with ctx.waitUntil and return immediately,
   // so the first requests of a cold isolate ran against an empty store. That is how
   // /api/build-app answered "No code artifact found for this project" for projects
   // whose files were already in D1, and how /api/build-status answered a false 404.
-  const initOnce = /async function initOnce\(env, ctx\) \{[\s\S]*?\n\}/.exec(index)?.[0] ?? '';
+  const initOnce = /async function initOnce\(env, ctx, \{ hydrate = true \} = \) \{[\s\S]*?\n\}/.exec(index)?.[0] ?? '';
   assert.ok(initOnce, 'initOnce must exist');
   assert.match(initOnce, /await store\.hydrateOnce\(\)/, 'initOnce must await hydration');
   assert.doesNotMatch(initOnce, /ctx\.waitUntil\(hydration\)/, 'hydration must not be left in the background');
 });
 
-test('the worker light path also hydrates before answering', () => {
-  assert.match(worker, /if \(!store\.hydrated\) await store\.hydrateOnce\(\)/);
+test('the worker light HTTP path does not hydrate the full store before answering', () => {
+  // Full HTTP hydration was deliberately removed from the Worker entrypoint because
+  // dashboard polling/cold isolates were consuming the D1 rows_read budget. The
+  // application layer owns hydration only for routes that explicitly need it.
+  assert.match(worker, /Request hydration is handled by the application layer/);
+  assert.doesNotMatch(worker, /if \(!store\.hydrated\) await store\.hydrateOnce\(\)/);
 });
 
 test('build-app resolves project code from the authoritative artifact list', () => {
