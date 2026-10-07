@@ -62,5 +62,5 @@ test('L1 dashboard homepage serves static HTML and the worker injects the live b
   // wiring here: the live lifecycle bridge is appended to the homepage (and /dashboard).
   const entrySource = readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
   assert.match(entrySource, /injectDashboardLive\(response\)/, 'response passes through the live bridge injector');
-  assert.match(entrySource, /url\.pathname === "\/" \|\| url\.pathname === "\/dashboard"/, 'homepage is eligible for injection and never blocks on hydration');
+  assert.match(entrySource, /url\.pathname === ['\"]\/['\"] \|\| url\.pathname === ['\"]\/dashboard['\"]/, 'homepage is eligible for injection and never blocks on hydration');
 });
