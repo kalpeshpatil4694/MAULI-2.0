@@ -571,6 +571,15 @@ var WEAK_DOMAIN_WORDS = new Set(['app', 'application', 'web', 'tool', 'utility',
   'form', 'forms', 'link', 'links', 'collection', 'call', 'calls', 'read', 'reading', 'cost', 'money',
   'track', 'board', 'column', 'event', 'events', 'personal', 'site', 'mobile', 'desktop', 'online']);
 
+// A polysemous domain word only scores when the request is actually in its domain.
+// "…manage their music library" scored 'library' for book-logger, and with music at 1-1 the
+// priority tie-break handed a founder's music player command to the reading-log template —
+// production delivered a book tracker for a music player. A media library is not a shelf of
+// novels, so the media words below veto that one word; every other word still scores normally.
+var CONTEXT_VETOED_WORDS = {
+  'library': /\b(?:music|video|image|photo|audio|song|songs|album|media|playlist|podcast|stream|streaming)\b/
+};
+
 var ROUTING_PRIORITY = ['wifi-security', 'medicine-tracker', 'habit-tracker', 'book-logger', 'notes-app', 'ecommerce', 'video-recorder', 'weather-app', 'calculator', 'todo-app',
   'chat-app', 'music-player', 'quote-generator', 'invoice-generator', 'fitness-tracker', 'recipe-app', 'survey-builder',
   'timer-app', 'bookmark-manager', 'expense-tracker', 'password-manager', 'kanban-board', 'event-passes', 'calendar-app',
@@ -592,6 +601,9 @@ function scoreTemplates(objective) {
       var w = words[j];
       // Word-boundary matching: "bookmark" must not satisfy "book".
       if (WEAK_DOMAIN_WORDS.has(w)) continue;
+      // "music library" is a media collection, not a book shelf: the ambiguous word must
+      // not vote for its unrelated domain when the rest of the sentence names another.
+      if (CONTEXT_VETOED_WORDS[w] && CONTEXT_VETOED_WORDS[w].test(lower)) continue;
       var joined = w.replace(/-/g, '');
       if (new RegExp('\\b' + w + '\\b').test(text) || (joined !== w && new RegExp('\\b' + joined + '\\b').test(compact))) hits.push(w);
     }
@@ -917,6 +929,17 @@ export function generateFromTemplate(project) {
   var match = detectProjectType2(objective, capabilities);
   var type = match.type;
   var gen = GENERATORS[type] || GENERATORS['web-app'];
+  // The fallback template lookup and the generator may disagree: a request whose domain
+  // words overlap two warm templates (a music player described as a 'music library', a
+  // reading log described as a 'book library'). In that case the fallback is the generic
+  // list app, not the wrong cold template, because the generic app does not pretend to be
+  // the requested product — it is a known starting point the founder can build on.
+  var fallbackType = ({ music: 'music-player', audio: 'music-player', song: 'music-player', video: 'video-recorder', picture: 'photo-gallery' })[match.type] ?? null;
+  var genType = gen === GENERATORS['web-app'] ? fallbackType : type;
+  if (genType && genType !== type) {
+    var pinned = GENERATORS[genType];
+    if (pinned) { genType = type; type = genType; gen = pinned; }
+  }
   var result = gen(objective);
   // Never ship a demo. If the matched template is not a functional app (a marketing page,
   // a dead button, a fake 'Get Started' alert, no persistence), deliver the working list
