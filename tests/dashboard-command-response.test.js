@@ -3,13 +3,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const worker = fs.readFileSync(new URL('../src/worker.js', import.meta.url), 'utf8');
+// The command response envelope moved with the endpoint. Assert against the module that owns
+// it, and against the worker's delegation, so neither half can change unnoticed.
+const endpoint = fs.readFileSync(new URL('../src/command-endpoint.js', import.meta.url), 'utf8');
 const dashboard = fs.readFileSync(new URL('../src/dashboard.js', import.meta.url), 'utf8');
 const liveBridge = fs.readFileSync(new URL('../src/dashboard-live.js', import.meta.url), 'utf8');
 
 test('founder command response keeps dashboard-compatible top-level result', () => {
-  assert.match(worker, /const responseData\s*=\s*\{/);
-  assert.match(worker, /data:\s*responseData/);
-  assert.match(worker, /\.\.\.responseData/);
+  assert.match(endpoint, /const responseData\s*=\s*\{/);
+  assert.match(endpoint, /data:\s*responseData/);
+  assert.match(endpoint, /\.\.\.responseData/);
+  assert.match(worker, /handleFounderCommand\(request, env, ctx\)/, 'the worker must serve the real endpoint');
   // The contract is that the dashboard unwraps `result` off the envelope. What it used to
   // DO with that envelope — stringify it into the founder's view — was the thing this file
   // used to pin, and is now covered by tests/dashboard-command-outcome.test.js. Assert the

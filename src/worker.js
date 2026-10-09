@@ -8,13 +8,10 @@ import { ensureSchema, pruneEvents, pruneOldResults, boundedD1 } from './db.js';
 import { dedupeAgents, runMaintenance } from './maintenance.js';
 import { store } from './store.js';
 import { ensureBuiltinTools } from './tools.js';
-import { PLATFORMS, normalizePlatform, resolvePlatform } from './platforms.js';
 import { seedAgents } from './agents.js';
 import { schedulerTick } from './scheduler.js';
-import { queueCommand } from './orchestrator.js';
-import { saveCommandResult } from './result-recorder.js';
-import { json, now, fail } from './core.js';
-import { requireFounder, checkRateLimit } from './auth.js';
+import { now } from './core.js';
+import { handleFounderCommand } from './command-endpoint.js';
 import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
 
 let _workerInit = false; let _lastHydrateTime = 0; const HYDRATE_COOLDOWN = 300000; // 5 min cooldown to prevent D1 row exhaustion
@@ -53,10 +50,6 @@ async function hydrate(env, { scheduler = false } = {}) {
   _workerInit = true; _lastHydrateTime = Date.now();
 }
 
-function isIsolatedTestEnv(env) {
-  return env?.SKIP_RESULT_PERSISTENCE === true || env?.SKIP_RESULT_PERSISTENCE === 'true' || env?.MAULI_TEST_MODE === true || env?.MAULI_TEST_MODE === 'true';
-}
-
 function injectDashboardLive(response) {
   const type = response.headers.get('content-type') || '';
   if (!type.includes('text/html')) return response;
@@ -75,56 +68,13 @@ export default {
     // Request hydration is handled by the application layer so read endpoints can stay cheap.
     // Founder commands are queued immediately. Execution is owned by the persistent scheduler,
     // so a long build can never turn into a false 60-second timeout response.
+    //
+    // The endpoint itself lives in src/command-endpoint.js so it can be exercised under Node:
+    // this module cannot be imported there (it re-exports the Durable Object, which pulls in
+    // `cloudflare:workers`), and the suite therefore used to test src/index.js's synchronous
+    // look-alike instead of the handler that runs here.
     if (request.method === 'POST' && url.pathname === '/api/command') {
-      const limit = checkRateLimit(request);
-      if (!limit.ok) return fail(limit.error, limit.status, { retryAfter: limit.retryAfter });
-      const auth = requireFounder(request, env);
-      if (!auth.ok) return fail(auth.error, auth.status);
-      const body = await json(request);
-      if (!body.command) return fail('Founder command is required', 400);
-      // This handler, not the one in index.js, is what a founder's command actually hits.
-      // An unbuildable target is reported rather than quietly swapped for another one: a
-      // founder who asked for Android must never be handed a web build that reports success.
-      if (body.platform !== undefined && body.platform !== null && body.platform !== '' && !normalizePlatform(body.platform)) {
-        return fail(`Unsupported platform: ${body.platform}. Supported: ${PLATFORMS.map(p => p.id).join(', ')}`, 400);
-      }
-      const target = resolvePlatform(body.platform, body.command);
-
-      try {
-        // Hand over what the founder actually sent, not the value already resolved from it.
-        // Passing the resolved id back in made queueCommand re-resolve it and report
-        // source:'explicit' for a command that named no platform at all.
-        const queued = await queueCommand(body.command, env, { platform: body.platform });
-        const payload = {
-          runId: queued.runId,
-          command: body.command,
-          platform: target.platform,
-          generatedAt: now(),
-          result: queued
-        };
-        const saved = isIsolatedTestEnv(env)
-          ? { saved: true, skipped: true, testMode: true }
-          : await saveCommandResult(payload, env).catch(() => ({ saved: false }));
-
-        if (queued.status === 'queued' && ctx?.waitUntil) {
-          // ctx.waitUntil only extends the invocation 30 s past the response (Cloudflare
-          // limit), so the drain gets a 20 s budget: tasks that do not fit stay queued
-          // and the cron scheduler finishes them instead of being cancelled mid-run.
-          ctx.waitUntil(schedulerTick(env, { trigger: 'founder-command', runId: queued.runId, projectId: queued.project?.id, budgetMs: 20_000 }).catch(error => {
-            store.addEvent('command.scheduler_error', { runId: queued.runId, error: error?.message || 'Scheduler error', at: now() });
-          }));
-        }
-
-        const responseData = {
-          result: { ...queued, status: queued.status, execution: 'scheduler' },
-          runId: queued.runId,
-          resultFile: saved
-        };
-        return Response.json({ ok: true, data: responseData, ...responseData }, { status: 202 });
-      } catch (error) {
-        const result = { status: 'error', error: error?.message || 'Command queue failed', command: body.command };
-        return Response.json({ ok: false, data: { result }, result }, { status: 500 });
-      }
+      return handleFounderCommand(request, env, ctx);
     }
 
     // Approval processing: after index.js processes the approval and queues tasks,
