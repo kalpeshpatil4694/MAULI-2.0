@@ -18,7 +18,18 @@ function projectStateFromTasks(project) {
   // delivery was refused read as finished while the founder had nothing to download.
   if (tasks.every(settledTask) && qa.length > 0 && qa.every(t => settledTask(t) && t.verificationId))
     return project?.finalDeliveryId ? 'completed' : 'active';
-  if (tasks.some(t => ['working','running','assigned','verifying'].includes(t.state))) return 'active';
+  // 'queued' belongs here: a task waiting for a slot is runnable work, and leaving it out
+  // let a project whose only task was queued fall through to its stored 'planning' label
+  // even though the scheduler could claim it on the next tick.
+  if (tasks.some(t => ['working','running','assigned','verifying','queued'].includes(t.state))) return 'active';
+  // A project whose entire remaining workload is parked has stopped progressing. Deriving
+  // the state from "any task is blocked" alone reported 'active' forever on a project where
+  // nothing could run — a live spinner over dead work. When EVERY unfinished task is
+  // blocked (which already means nothing is runnable: a queued/assigned/working/verifying
+  // task would not be blocked), the project is 'blocked' and can show which reason holds it.
+  // One runnable task alongside a blocked one is still active work.
+  const unfinished = tasks.filter(t => !settledTask(t));
+  if (unfinished.length && unfinished.every(t => t.state === 'blocked')) return 'blocked';
   if (tasks.some(t => t.state === 'blocked')) return 'active';
   if (nonQa.length && nonQa.every(settledTask) && qa.some(t => !settledTask(t))) return 'active';
   if (tasks.every(settledTask)) return project?.finalDeliveryId ? 'completed' : 'active';

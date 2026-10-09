@@ -721,6 +721,11 @@ export default { async fetch(request, env, ctx) { try {
     const completedCount=tasks.filter(t=>t.state==='completed').length;
     const failedCount=tasks.filter(t=>t.state==='failed').length;
     const runningCount=tasks.filter(t=>['working','assigned'].includes(t.state)).length;
+    // Blocked and cancelled work is not runnable, so it must not be counted as pending
+    // backlog: a project whose only remaining tasks were parked reported runnable pending
+    // work that could never be claimed. Pending is the queued backlog only.
+    const blockedCount=tasks.filter(t=>t.state==='blocked').length;
+    const cancelledCount=tasks.filter(t=>t.state==='cancelled').length;
     const started=project.commandStartedAt||project.startedAt||project.commandReceivedAt||project.createdAt; const end=project.commandCompletedAt||project.completedAt||project.failedAt; const totalTimeMs=started?Math.max(0,Date.parse(end||now())-Date.parse(started)):0; // One source of truth for estimates: enrichProjectTiming clamps them, so this cannot
     // disagree with /api/project-progress or resurrect a poisoned stored estimate.
     const timingSummary=enrichProjectTiming(project,tasks); const estimatedDurationMs=timingSummary.estimatedDurationMs; const remainingDurationMs=timingSummary.remainingMs; const fmt=ms=>{const sec=Math.round(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;return h?h+'h '+m+'m '+s+'s':m?m+'m '+s+'s':s+'s';};
@@ -728,7 +733,7 @@ export default { async fetch(request, env, ctx) { try {
     // Point 16: the founder must never see a bare "QA Passed". The runtime verdict, its
     // tested-at stamp, the deployment/API/database/auth/journey statuses, the critical
     // pass/fail counts and the exact blocking reason ride on the detail payload.
-    productionRuntime:runtimeAcceptanceSummary(project,{env}),runtimeDeployment:normalizeDeployment(project.runtimeDeployment??null),summary:{totalTasks:tasks.length,completedTasks:completedCount,failedTasks:failedCount,runningTasks:runningCount,pendingTasks:tasks.length-completedCount-failedCount-runningCount,progressPct:tasks.length>0?Math.round((completedCount/tasks.length)*100):0,totalTimeMs,totalTimeFormatted:totalTimeMs>0?fmt(totalTimeMs):'In progress',estimatedDurationMs,estimatedDurationFormatted:fmt(estimatedDurationMs),remainingDurationMs,remainingDurationFormatted:fmt(remainingDurationMs),commandReceivedAt:project.commandReceivedAt||project.createdAt,commandStartedAt:started,commandCompletedAt:end,createdAt:project.createdAt,completedAt:project.completedAt||null,failedAt:project.failedAt||null,state:project.state,errors:tasks.filter(t=>t.error).map(t=>({task:t.title,error:t.error,at:t.updatedAt})),fixes:tasks.filter(t=>t.attempts>1).map(t=>({task:t.title,attempts:t.attempts,at:t.updatedAt}))}};
+    productionRuntime:runtimeAcceptanceSummary(project,{env}),runtimeDeployment:normalizeDeployment(project.runtimeDeployment??null),summary:{totalTasks:tasks.length,completedTasks:completedCount,failedTasks:failedCount,runningTasks:runningCount,pendingTasks:tasks.filter(t=>t.state==='queued').length,blockedTasks:blockedCount,cancelledTasks:cancelledCount,progressPct:tasks.length>0?Math.round((completedCount/tasks.length)*100):0,totalTimeMs,totalTimeFormatted:totalTimeMs>0?fmt(totalTimeMs):'In progress',estimatedDurationMs,estimatedDurationFormatted:fmt(estimatedDurationMs),remainingDurationMs,remainingDurationFormatted:fmt(remainingDurationMs),commandReceivedAt:project.commandReceivedAt||project.createdAt,commandStartedAt:started,commandCompletedAt:end,createdAt:project.createdAt,completedAt:project.completedAt||null,failedAt:project.failedAt||null,state:project.state,errors:tasks.filter(t=>t.error).map(t=>({task:t.title,error:t.error,at:t.updatedAt})),fixes:tasks.filter(t=>t.attempts>1).map(t=>({task:t.title,attempts:t.attempts,at:t.updatedAt}))}};
     return ok({detail});
   }
   // Documentation API
