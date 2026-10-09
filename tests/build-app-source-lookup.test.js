@@ -32,7 +32,7 @@ test('the HTTP init path can await hydration when a hydration-enabled route need
   // so the first requests of a cold isolate ran against an empty store. That is how
   // /api/build-app answered "No code artifact found for this project" for projects
   // whose files were already in D1, and how /api/build-status answered a false 404.
-  const initOnce = /async function initOnce\(env, ctx, \{ hydrate = true \} = \) \{[\s\S]*?\n\}/.exec(index)?.[0] ?? '';
+  const initOnce = /async function initOnce\(env, ctx, \{ hydrate = true \} = \{\}\) \{[\s\S]*?\n\}/.exec(index)?.[0] ?? '';
   assert.ok(initOnce, 'initOnce must exist');
   assert.match(initOnce, /await store\.hydrateOnce\(\)/, 'initOnce must await hydration');
   assert.doesNotMatch(initOnce, /ctx\.waitUntil\(hydration\)/, 'hydration must not be left in the background');
