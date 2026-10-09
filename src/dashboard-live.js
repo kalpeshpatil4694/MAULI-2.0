@@ -159,7 +159,9 @@ export const DASHBOARD_LIVE_SCRIPT = String.raw`<script>
       if(p.blockedReason)txt+='DELIVERY STATUS: BLOCKED — '+p.blockedReason+'\n';
       txt+='\n';
       txt+='PROGRESS: '+s.completedTasks+'/'+s.totalTasks+' tasks ('+s.progressPct+'%)\n';
-      txt+='Completed: '+s.completedTasks+' | Running: '+s.runningTasks+' | Failed: '+s.failedTasks+' | Pending: '+s.pendingTasks+'\n\n';
+      // Pending is the runnable backlog only; parked work is reported separately so a
+      // blocked project does not read as if it had tasks waiting to be claimed.
+      txt+='Completed: '+s.completedTasks+' | Running: '+s.runningTasks+' | Failed: '+s.failedTasks+' | Pending: '+s.pendingTasks+' | Blocked: '+(s.blockedTasks||0)+'\n\n';
       if(s.errors&&s.errors.length>0){txt+='ERRORS:\n';for(const e of s.errors)txt+='  - '+e.task+': '+e.error+'\n';txt+='\n';}
       if(s.fixes&&s.fixes.length>0){txt+='RETRIES:\n';for(const f of s.fixes)txt+='  - '+f.task+': '+f.attempts+' attempts\n';txt+='\n';}
       txt+='TASKS:\n';

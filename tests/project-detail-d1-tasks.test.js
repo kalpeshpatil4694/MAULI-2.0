@@ -93,3 +93,39 @@ test('project progress counts tasks recovered from D1, not the empty isolate cac
   assert.equal(progress.status, 'in_progress');
   assert.ok(progress.currentTask, 'the live task must be named');
 });
+
+// Project Details used to compute pendingTasks by subtraction (total - completed - failed -
+// running), so blocked and cancelled tasks landed in the runnable-pending bucket. A project
+// whose only remaining tasks were parked therefore advertised a backlog it could never claim,
+// and the number disagreed with the authoritative projectTaskSummary the Projects table uses.
+test('blocked and cancelled tasks are not reported as pending backlog', async () => {
+  __resetD1TaskCache();
+  const suffix = TAIL();
+  const pid = `project_pending_${suffix}`;
+  const project = { id: pid, name: 'Pending contract', objective: 'Build', state: 'active', requirements: ['x'], createdAt: new Date().toISOString() };
+  const tasks = [
+    { id: `c1_${suffix}`, projectId: pid, title: 'Done', state: 'completed', dependsOn: [], sequence: 1 },
+    { id: `q1_${suffix}`, projectId: pid, title: 'Queued', state: 'queued', dependsOn: [], sequence: 2 },
+    { id: `b1_${suffix}`, projectId: pid, title: 'Blocked one', state: 'blocked', dependsOn: [], sequence: 3 },
+    { id: `b2_${suffix}`, projectId: pid, title: 'Blocked two', state: 'blocked', dependsOn: [], sequence: 4 },
+    { id: `x1_${suffix}`, projectId: pid, title: 'Cancelled', state: 'cancelled', dependsOn: [], sequence: 5 },
+  ];
+  const env = fakeD1({ projects: [project], tasks });
+
+  store.configure(env);
+  store.data = new Map();
+  store.events = [];
+  store.hydrated = true;
+  store.put('projects', project);
+
+  const res = await app.fetch(new Request(`https://mauli.test/api/projects/${pid}/detail`), env, { waitUntil() {} });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  const detail = body.detail ?? body.data.detail;
+  assert.equal(detail.summary.totalTasks, 5);
+  assert.equal(detail.summary.completedTasks, 1);
+  assert.equal(detail.summary.runningTasks, 0);
+  assert.equal(detail.summary.pendingTasks, 1, 'only the queued task is runnable backlog');
+  assert.equal(detail.summary.blockedTasks, 2);
+  assert.equal(detail.summary.cancelledTasks, 1);
+});
