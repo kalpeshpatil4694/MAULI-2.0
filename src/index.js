@@ -5,7 +5,6 @@ import { seedAgents, listAgents, dedupeAgentList } from './agents.js';
 import { listProjects } from './projects.js';
 import { listTasks } from './tasks.js';
 import { listApprovals, decideApproval } from './governance.js';
-import { planCommand, resumeApprovedCommand } from './orchestrator.js';
 import { PLATFORMS, DEFAULT_PLATFORM, normalizePlatform, resolvePlatform, platformLabel, platformIcon, describePlatform } from './platforms.js';
 import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, getArtifactDurable, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
@@ -15,7 +14,7 @@ import { recoverStuckProjects } from './maintenance.js';
 import { recoverRunningExecutions } from './execution.js';
 import { requireFounder, checkRateLimit, checkCommandRateLimit, getRateLimitStats, founderAuthStatus } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
-import { diagnoseResultPersistence, saveCommandResult, listCommandResults, getCommandResult } from './result-recorder.js';
+import { diagnoseResultPersistence, listCommandResults, getCommandResult } from './result-recorder.js';
 import { dashboardHTML } from './dashboard.js';
 import { sendMessage, getMessages, acknowledgeMessage, respondToMessage, requestReview, handoffTask, broadcastAlert, getCollaborationStats } from './agent-communication.js';
 import { getAgentSkillTree, getAgentCollaborationStats, getSystemLearningStats, getBestAgentForTask } from './agent-learning.js';
@@ -41,7 +40,6 @@ import { DEPLOYMENT_STATUS, normalizeDeployment } from './generated-deployment.j
 import { isRuntimeAcceptanceReport, describeStoredRuntimeAcceptance } from './production-runtime.js';
 
 function artifactJson(artifact) { return artifact ? ok({ artifact }) : fail('Artifact not found',404); }
-function isIsolatedTestEnv(env) { return env?.SKIP_RESULT_PERSISTENCE === true || env?.SKIP_RESULT_PERSISTENCE === 'true' || env?.MAULI_TEST_MODE === true || env?.MAULI_TEST_MODE === 'true'; }
 
 // store.list() is a hydrated, row-capped cache. On a cold isolate the artifacts
 // table is only partially loaded, so a project whose code really exists in D1
@@ -864,13 +862,15 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/artifacts'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');const taskId=url.searchParams.get('taskId');const artifacts=projectId?listProjectArtifacts(projectId):taskId?listTaskArtifacts(taskId):store.list('artifacts');return ok({artifacts});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')&&url.pathname.endsWith('/download')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const artifactId=parts[parts.length-2];const artifact=await getArtifactDurable(artifactId,env);if(!artifact)return fail('Artifact not found',404);const safeName=String(artifact.projectId).replace(/[^a-zA-Z0-9_-]/g,'_');let files=collectProjectFiles(artifact.projectId,artifact,store);if(!files.length){const tasks=store.list('tasks').filter(t=>t.projectId===artifact.projectId);const summary=[];summary.push({path:'README.md',content:`# MAULI 2.0 — Project Delivery\\n\\n## Project\\n- **ID:** ${artifact.projectId}\\n- **Type:** ${artifact.type}\\n- **Delivered:** ${new Date().toISOString()}\\n\\n## Tasks (${tasks.length})\\n${tasks.map(t=>`- [${t.state}] ${t.title}${t.assignedAgentId?' (Agent: '+t.assignedAgentId+')':''}`).join('\\n')}\\n`});summary.push({path:'project-data.json',content:JSON.stringify({projectId:artifact.projectId,type:artifact.type,content:artifact.content,metadata:artifact.metadata},null,2)});files=summary;}const zip=createZip(files);return new Response(zip,{status:200,headers:{'content-type':'application/zip','content-disposition':`attachment; filename="mauli-${safeName}.zip"`,'cache-control':'private, max-age=300'}});}
   if(request.method==='GET'&&url.pathname.startsWith('/api/artifacts/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return artifactJson(await getArtifactDurable(url.pathname.split('/').pop(),env));}
-  if(request.method==='POST'&&url.pathname==='/api/command'){const limit=checkCommandRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const body=await json(request);const cmdValidation=validateString(body.command,'command',{minLength:1,maxLength:2000});if(!cmdValidation.ok)return fail(cmdValidation.error,400);
-  // The founder picks the target platform with the command, so the product is built for it
-  // from the start. An unrecognised platform is rejected rather than silently replaced: a
-  // founder who asked for Android must never be handed a web build that reports success.
-  if(body.platform!==undefined&&body.platform!==null&&body.platform!==''&&!normalizePlatform(body.platform))return fail(`Unsupported platform: ${body.platform}. Supported: ${PLATFORMS.map(p=>p.id).join(', ')}`,400);
-  const target=resolvePlatform(body.platform,body.command);
-  const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const isolatedTest=isIsolatedTestEnv(env);let result;try{result=await Promise.race([planCommand(body.command,env,{platform:target.platform}),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),60000))]);}catch(e){return ok({result:{status:'error',error:e.message,command:body.command}});}const persistedPayload={command:body.command,platform:target.platform,generatedAt:now(),result};const saved=isolatedTest?{saved:true,skipped:true,testMode:true}:await saveCommandResult(persistedPayload,env).catch(()=>({saved:false}));return ok({result,resultFile:saved},201);}
+  // POST /api/command is deliberately NOT handled here.
+  //
+  // It is owned by the production entry point: src/worker.js → src/command-endpoint.js, which
+  // queues the command and hands execution to the persistent scheduler. A synchronous duplicate
+  // used to live here and was a trap: worker.js intercepts this path before delegating, so this
+  // route never ran in production, yet the test suite drove it and verified a different program
+  // — 201 instead of 202, an inline run with a 60-second timeout instead of a durable queue, a
+  // different rate-limit scope, and no scheduler hand-off. One implementation, in one module,
+  // is the point. Do not re-add this route.
   if(request.method==='POST'&&url.pathname.startsWith('/api/approvals/')){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const approvalId=url.pathname.split('/').pop();const body=await json(request);const pending=store.get('approvals',approvalId);if(!pending)return fail('Approval not found',404);
     // A proper approval opens two gates at once: the approval row becomes 'approved', AND the
     // project + its live tasks are re-queued so the scheduler actually begins the chain.

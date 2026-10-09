@@ -62,8 +62,11 @@ test('dashboard polling is read-only and never triggers execution', () => {
   assert.doesNotMatch(worker, /state\.scheduler_error/, 'no poll-triggered scheduler error path');
   assert.doesNotMatch(worker, /project\.detail_scheduler_error/, 'no detail-poll scheduler error path');
 
-  // The only scheduler triggers left are explicit, founder-initiated actions.
-  const triggers = [...worker.matchAll(/trigger: '([a-z-]+)'/g)].map((m) => m[1]).sort();
+  // The only scheduler triggers left are explicit, founder-initiated actions. The command
+  // trigger lives in the endpoint module the worker delegates to, so both HTTP entry modules
+  // are scanned: moving this code must not be a way to smuggle in a polling trigger.
+  const entrySources = [worker, read('src/command-endpoint.js')];
+  const triggers = entrySources.flatMap((src) => [...src.matchAll(/trigger: '([a-z-]+)'/g)].map((m) => m[1])).sort();
   assert.deepEqual(triggers, ['approval-granted', 'chat-message', 'founder-command'],
     `execution must only start from explicit actions, found: ${triggers.join(', ')}`);
 
