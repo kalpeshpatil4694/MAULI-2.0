@@ -51,9 +51,41 @@ export function buildFinalDelivery(project,{enforceGates=false,env=null}={}) {
   const founderRequirement=String(project.founderCommand??objective??'');
   if(founderRequirement&&mergedFiles.length){
     const founderCoverage=evaluateRequirementCoverage([founderRequirement],mergedFiles)[0];
+    // MISSING is the clear case: the app contains none of the founder's requirement words.
+    // A template that merely echoes the request into its heading is a different failure: the
+    // page repeats the founder's words so prose evidence is present, but no behaviour in the
+    // app's ids, labels or script implements the command. Reject that echo case, but allow
+    // prose-only evidence that genuinely labels the product (a habit app whose heading says
+    // 'Habit tracker' for the request 'Build a personal habit tracker') — that is a real
+    // product label, not the command restated.
     if(founderCoverage&&founderCoverage.status==='MISSING'){
       throw new Error(`Delivery blocked: the app does not implement "${founderRequirement.slice(0,80)}" (no evidence for it in the generated code)`);
     }
+    if(founderCoverage&&founderCoverage.proseOnly===true&&isFullEcho(founderRequirement,mergedFiles)){
+      throw new Error(`Delivery blocked: the app echoes the request instead of implementing it ("${founderRequirement.slice(0,80)}") — the page contains the founder\u2019s own words but no behaviour that satisfies them`);
+    }
+  }
+  // A full echo: every significant word of the founder's request is present in the page's
+  // visible prose. That is a heading that restates the command, not an app that does it.
+  function significantWords(text){
+    const stoplist=new Set(['with','that','from','this','will','must','should','make','build','create','using','able','user']);
+    return String(text||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').split(/\s+/).filter(w=>w.length>=4&&!stoplist.has(w));
+  }
+  function proseText(files){
+    const list=files.filter(f=>f&&typeof f.path==='string'&&typeof f.content==='string')
+      .filter(f=>!/^(package\.json|\.seed\.json|build\.json)$/i.test(f.path))
+      .filter(f=>!/\.(json|lock|ya?ml|toml)$/i.test(f.path));
+    return String(list.map(f=>f.content).join('\n'))
+      .replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ')
+      .replace(/<head[\s\S]*?<\/head>/gi,' ').replace(/<title[\s\S]*?<\/title>/gi,' ')
+      .replace(/<!--[\s\S]*?-->/g,' ').replace(/<[^>]+>/g,' ')
+      .replace(/&middot;|&amp;|&lt;|&gt;|&nbsp;/g,' ');
+  }
+  function isFullEcho(req,files){
+    if(!(req&&files&&files.length))return false;
+    const words=significantWords(req); if(!words.length)return false;
+    const prose=proseText(files).toLowerCase();
+    return words.every(w=>prose.includes(w));
   }
   const unmatched=codeArtifacts.filter(a=>a.metadata?.generatedBy==='app-templates'&&a.metadata?.templateMatched===false);
   if(unmatched.length){
