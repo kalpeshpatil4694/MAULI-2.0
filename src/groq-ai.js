@@ -135,7 +135,13 @@ async function groqComplete(env, key, model, messages, options = {}) {
       throw new Error(`Groq rejected the API key (HTTP ${response.status}); check GROQ_API_KEY`);
     }
     if (response.status === 429) {
-      throw new Error('Groq rate limit reached (HTTP 429); falling back to deterministic templates');
+      // Free-tier token budgets (`TPM`) reset per minute, so the wait the caller needs is
+      // minute-scale, not second-scale: surface the provider's own Retry-After so the retry
+      // sleep in the executor can land INSIDE the next window instead of re-429ing forever.
+      const retryAfterSec = Number(response.headers.get('retry-after')) ||
+        (Number(response.headers.get('retry-after-ms')) > 0 ? Number(response.headers.get('retry-after-ms')) / 1000 : 0);
+      const when = Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? `; retry after ~${Math.ceil(retryAfterSec)}s` : '';
+      throw new Error(`Groq rate limit reached (HTTP 429)${when}; falling back to deterministic templates`);
     }
     throw new Error(`Groq request failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
   }

@@ -140,6 +140,62 @@ const AI_UNAVAILABLE_WARNING =
 const PER_FILE_REPAIR_ROUNDS = 1;
 const PER_FILE_MAX_TOKENS = 4000;
 
+// Rate-limited free-tier providers (Groq above all) answer a BURST of rapid per-file requests
+// with 429 — measured live, only the first of three fast per-file calls got through, the
+// other two failed in ~0.3s each, the errors were swallowed, and the app was declared "not
+// generated". Three defences now: a minimum gap between consecutive requests (a real
+// completion already takes longer, so it costs nothing there — the gap only bites when a
+// provider is failing fast), bounded retries with exponential backoff on transient failures,
+// and every failure REASON recorded instead of swallowed.
+const PER_FILE_MAX_ATTEMPTS = 4;                // one try + up to 3 retries
+const PER_FILE_BACKOFF_BASE_MS = 2000;          // exponential: ~2s, ~4s, ~8s (jittered)
+// `MAULI_PER_FILE_PACING_MS` overrides the gap; the test suite runs its instant fake model
+// with 0 so the suite stays fast.
+const PER_FILE_PACING_MS = 3000;
+// A call that hung this long before failing cannot be retried cheaply: every retry restarts
+// a full 40s timeout, so four attempts could park one file for minutes.
+const PER_FILE_RETRY_MAX_ATTEMPT_MS = 15_000;
+
+const sleep = (ms) => new Promise((resolve) => {
+  const wait = Number.isFinite(ms) && ms > 0 ? ms : 0;
+  setTimeout(resolve, wait);
+});
+// 60–100% of the step, so concurrent generation runs do not stampede the same rate-limit slot.
+function jitteredBackoff(attempt) {
+  return Math.round(PER_FILE_BACKOFF_BASE_MS * 2 ** attempt * (1 - Math.random() * 0.4));
+}
+// A rate limit is a different animal from a server hiccup. Groq's free tier is 30 RPM but
+// only ~8,000 TOKENS per minute: one per-file completion eats nearly that whole window, so a
+// second-scale retry lands in the same penalty window and 429s forever. The wait for a rate
+// limit is therefore minute-scale — the provider's own Retry-When-Available header when it
+// sends one, else a growing 15/30/45s ladder; server hiccups keep the fast jittered ladder.
+function backoffMs(kind, attempt, message) {
+  if (kind !== 'rate-limit') return jitteredBackoff(attempt);
+  const retryAfterSec = Number((message.match(/retry after ~?(\d+)s/) ?? [])[1]);
+  const wait = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+    ? Math.min(retryAfterSec + 2, 60)
+    : [15, 30, 45][Math.min(attempt - 1, 2)];
+  return Math.round(wait * 1000);
+}
+function pacingMs(env) {
+  const override = Number(env?.MAULI_PER_FILE_PACING_MS ??
+    (typeof process !== 'undefined' ? (process.env ?? {}).MAULI_PER_FILE_PACING_MS : undefined));
+  return Number.isFinite(override) && override >= 0 ? override : PER_FILE_PACING_MS;
+}
+// The provider chain reports failures in prose, not status codes, so the kind is matched from
+// the message. Order matters: the chain folds "Workers AI exhausted" AND "Groq 429" into one
+// message, and the RECOVERABLE part (the rate limit) must win. `quota` and `auth` are
+// deliberately NOT retriable — a daily ceiling does not lift in seconds — and neither is a
+// hung call (a retry restarts a full 40s wait); rate limits and server hiccups are.
+function classifyModelCallError(message) {
+  if (/rate limit|too many requests|http 429/i.test(message)) return { kind: 'rate-limit', retriable: true };
+  if (/http 5\d\d|overloaded|service unavailable|bad gateway|temporar|internal error/i.test(message)) return { kind: 'server', retriable: true };
+  if (/rejected the api key|api key|http 401|http 403/i.test(message)) return { kind: 'auth', retriable: false };
+  if (/daily free allocation|allocation exhausted|neurons/i.test(message)) return { kind: 'quota', retriable: false };
+  if (/deadline|timed ?out|timeout/i.test(message)) return { kind: 'timeout', retriable: false };
+  return { kind: 'other', retriable: false };
+}
+
 function repairInstruction(violationCodes) {
   const lines = {
     'no-persistence': 'The app never stores data. In the handler that adds or changes data, call localStorage.setItem with the full updated state, and load it back with localStorage.getItem on startup so it survives a refresh.',
@@ -303,6 +359,37 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
   // code, and the model answered them inconsistently (empty {} manifests included).
   const assemble = () => ensureReadme(ensurePackageJson([...collected.values()], objective), objective);
 
+  // A minimum gap between consecutive model requests, measured from the previous request's
+  // START: a completion that already took longer than the gap costs no extra wait at all —
+  // spacing only matters when a provider fails fast (a 429 answers in tenths of a second).
+  // The gap adapts: the run starts at the configured pacing, and every rate limit pushes the
+  // gap out so the FOLLOWING requests spread across fresh minute windows instead of piling
+  // back into the spent one.
+  const basePacing = pacingMs(runtimeEnv);
+  let pacingExtraMs = 0;
+  let lastCallStartedAt = 0;
+  async function awaitGap() {
+    if (!lastCallStartedAt) return;
+    const gap = basePacing + pacingExtraMs;
+    if (gap === 0) return;
+    const wait = gap - (Date.now() - lastCallStartedAt);
+    if (wait > 0) await sleep(wait);
+  }
+  const escalatePacingForRateLimits = () => {
+    if (pacingExtraMs < 60_000) pacingExtraMs = Math.min(pacingExtraMs + 10_000, 60_000);
+  };
+
+  // Every failure ends up here with a REASON, never as a silent null: the demo/audit output,
+  // the probe and the artifact metadata all carry these entries.
+  const perFileErrors = [];
+  const recordFailure = (path, got) => {
+    perFileErrors.push({
+      path,
+      attempts: got?.attempts ?? 0,
+      reason: String(got?.error ?? 'unknown').slice(0, 240),
+    });
+  };
+
   async function request(path, spec, { context = '', repair = '' } = {}) {
     const ask = 'Write ' + path + ' for this product.\n\n' + spec +
       (context ? '\n\nThe app\u2019s other files are:\n' + context : '') +
@@ -310,17 +397,40 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
       '\n\nProduct: ' + objective +
       '\nAcceptance criteria: ' + JSON.stringify(acceptance) +
       '\n\nOutput ONLY the raw contents of ' + path + '. No markdown fence, no explanation, no JSON wrapper, no other file.';
-    try {
-      const raw = await withTimeout(code(runtimeEnv, [
-        { role: 'system', content: system },
-        { role: 'user', content: ask },
-      ], { maxTokens: PER_FILE_MAX_TOKENS }), AI_ATTEMPT_TIMEOUT_MS);
-      const content = unwrapFileContent(path, raw).trim();
-      // A file that came back empty, or as prose/envelope instead of the file, is not a
-      // file. Refusing it here is what keeps a half-written app from being registered as
-      // the product.
-      return looksLikeFileSource(path, content) ? content : null;
-    } catch (e) { return null; }
+    let attempts = 0;
+    let lastReason = 'unknown failure';
+    while (attempts < PER_FILE_MAX_ATTEMPTS) {
+      attempts += 1;
+      await awaitGap();
+      lastCallStartedAt = Date.now();
+      const started = lastCallStartedAt;
+      try {
+        const raw = await withTimeout(code(runtimeEnv, [
+          { role: 'system', content: system },
+          { role: 'user', content: ask },
+        ], { maxTokens: PER_FILE_MAX_TOKENS }), AI_ATTEMPT_TIMEOUT_MS);
+        const content = unwrapFileContent(path, raw).trim();
+        // A file that came back empty, or as prose/envelope instead of the file, is not a
+        // file. Refusing it here is what keeps a half-written app from being registered as
+        // the product.
+        if (looksLikeFileSource(path, content)) return { content, attempts };
+        lastReason = `unusable answer for ${path}: the model did not return the file's source${content ? ` (received ${String(content).length} chars of something else)` : ''}`;
+      } catch (e) {
+        const message = text(e).replace(/\r?\n/g, ' ');
+        const verdict = classifyModelCallError(message);
+        lastReason = `${verdict.kind}: ${message.slice(0, 180)}`;
+        // Retry only bounded failures that failed FAST — a call that hung for a long time,
+        // an exhausted quota or a bad key will not answer differently on the next attempt.
+        const elapsed = Date.now() - started;
+        if (verdict.retriable && attempts < PER_FILE_MAX_ATTEMPTS && elapsed <= PER_FILE_RETRY_MAX_ATTEMPT_MS) {
+          await sleep(backoffMs(verdict.kind, attempts - 1, message));
+          continue;
+        }
+        if (verdict.kind === 'rate-limit') escalatePacingForRateLimits();
+      }
+      break;
+    }
+    return { content: null, attempts, error: lastReason };
   }
 
   for (const [path, spec] of plan) {
@@ -328,12 +438,20 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
     // turns per-file generation from independent guesses into one coherent app.
     const context = [...collected.values()]
       .map(f => '// file: ' + f.path + '\n' + f.content).join('\n\n');
-    const content = await request(path, spec, { context });
-    if (content) collected.set(path, { path, content });
-    else missing.push(path);
+    const got = await request(path, spec, { context });
+    if (got?.content) collected.set(path, { path, content: got.content });
+    else {
+      missing.push(path);
+      recordFailure(path, got);
+    }
   }
-  if (!collected.size) return { files: null, error: `per-file generation produced nothing (${missing.join('; ') || 'no files requested'})` };
-
+  if (!collected.size) {
+    return {
+      files: null,
+      perFileErrors,
+      error: `per-file generation produced nothing (${missing.join('; ') || 'no files requested'})${perFileErrors.length ? ' — ' + perFileErrorSummary(perFileErrors) : ''}`,
+    };
+  }
   let files = assemble();
   let quality = analyse(files);
   let repaired = 0;
@@ -349,8 +467,9 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
     for (const [path, spec] of plan) {
       const context = [...collected.values()].filter(f => f.path !== path)
         .map(f => '// file: ' + f.path + '\n' + f.content).join('\n\n');
-      const content = await request(path, spec, { context, repair });
-      if (content) { collected.set(path, { path, content }); changed = true; }
+      const got = await request(path, spec, { context, repair });
+      if (got?.content) { collected.set(path, { path, content: got.content }); changed = true; }
+      else recordFailure(path, got);
     }
     if (!changed) break;
     repaired += 1;
@@ -359,9 +478,16 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
   }
 
   // The same structural bar the single-request path was held to, so a per-file app that is
-  // missing its HTML is refused exactly as a truncated one was.
-  if (invalid(files, task)) return { files: null, error: `per-file output is incomplete (${missing.join('; ') || 'missing required files'})` };
-  return { files, quality, missing, repaired, strategy: 'file-by-file' };
+  // missing its HTML is refused exactly as a truncated one was — now with the REASONS the
+  // missing files failed, so the audit output names the cause instead of counting files.
+  if (invalid(files, task)) {
+    return {
+      files: null,
+      perFileErrors,
+      error: `per-file output is incomplete (${missing.join('; ') || 'missing required files'})${perFileErrors.length ? ' — ' + perFileErrorSummary(perFileErrors) : ''}`,
+    };
+  }
+  return { files, quality, missing, repaired, strategy: 'file-by-file', perFileErrors };
 }
 
 /**
@@ -376,7 +502,14 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
  */
 async function generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task }) {
   return generateFileByFile({ runtimeEnv, systemPrompt, objective, acceptance, task })
-    .catch(error => ({ files: null, error: text(error) }));
+    .catch(error => ({ files: null, error: text(error), perFileErrors: [] }));
+}
+
+/** One line per failed file, for the audit output, the probe and the artifact metadata. */
+function perFileErrorSummary(perFileErrors) {
+  return (perFileErrors ?? []).slice(-8)
+    .map(e => `${e.path} failed ${e.attempts}×: ${e.reason}`)
+    .join('; ');
 }
 
 function withTimeout(promise, ms) {
@@ -460,6 +593,9 @@ export async function probeAiGeneration(objective, { env, acceptance = [], inclu
       available: true, generated: passed, attempt: 1, strategy: 'file-by-file', repaired: result.repaired ?? 0,
       fidelity: { passed: result.quality?.passed ?? null, score: result.quality?.score ?? null, violations },
       fileCount: result.files.length,
+      // How many files needed a retry, and WHY anything failed — the probe must name causes,
+      // not just count files.
+      perFileErrors: result.perFileErrors ?? [],
       files: includeContent
         ? result.files.map(f => ({ path: f.path, bytes: String(f.content ?? '').length, content: String(f.content ?? '') }))
         : result.files.map(f => ({ path: f.path, bytes: String(f.content ?? '').length })),
@@ -471,7 +607,12 @@ export async function probeAiGeneration(objective, { env, acceptance = [], inclu
       error: passed ? undefined : 'functional fidelity failed: ' + (violations.join(', ') || 'unknown'),
     };
   }
-  return { available: true, generated: false, attempt: 1, strategy: 'file-by-file', error: text(result?.error ?? 'generation produced no usable files').slice(0, 400), model: env?.MAULI_CODE_MODEL ?? null };
+  return {
+    available: true, generated: false, attempt: 1, strategy: 'file-by-file',
+    perFileErrors: result?.perFileErrors ?? [],
+    error: text(result?.error ?? 'generation produced no usable files').slice(0, 400),
+    model: env?.MAULI_CODE_MODEL ?? null,
+  };
 }
 
 /**
@@ -584,8 +725,11 @@ export async function generateFunctionalArtifact({ task, env, agentId }) {
   // the gate found (Detect → Diagnose → Fix → Retest). If the assembled app still cannot pass
   // the gate we fall back to templates so the task completes inside its lease instead of dying
   // when the invocation window expires.
-  let { files, parsed, quality, error, strategy } = await generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task });
+  let { files, parsed, quality, error, strategy, perFileErrors } = await generateWithRepair({ runtimeEnv, systemPrompt, objective, acceptance, task });
   lastError = error ?? '';
+  // Even a returning result can carry per-file failure reasons (retries exhausted on some
+  // files); never let those vanish again — they go into the message and the metadata.
+  if (!lastError && perFileErrors?.length) lastError = 'per-file failures: ' + perFileErrorSummary(perFileErrors);
 
   // If AI produced code that ALSO passed the fidelity gate, ship it. When even the repair
   // could not pass, the AI output is a demo by the founder's own definition — it must not
@@ -612,16 +756,18 @@ export async function generateFunctionalArtifact({ task, env, agentId }) {
     const notes = Array.isArray(parsed?.notes) ? parsed.notes.map(text).filter(Boolean).slice(0, 20) : [];
     const artifact = registerArtifact({
       projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
-      content: { summary: text(parsed?.summary || 'AI-generated implementation for ' + objective), files, tests, notes },
-      metadata: {
-        generatedBy: 'functional-code-executor', aiGenerated: true, fileCount: files.length, taskType: webTask ? 'web-ui' : 'backend',
-        // How the code actually arrived. 'file-by-file' means the single-request answer was
-        // unusable and each file was asked for on its own — recorded because the two paths
-        // have very different cost and reliability profiles, and an operator needs to tell
-        // them apart when judging whether generation is working.
-        strategy: strategy ?? 'file-by-file',
-        fidelity: quality ? { passed: quality.passed, score: quality.score, violations: quality.violations.map(v => v.code) } : null
-      }
+      content: { summary: text(parsed?.summary || 'AI-generated implementation for ' + objective), files, tests, notes },        metadata: {
+          generatedBy: 'functional-code-executor', aiGenerated: true, fileCount: files.length, taskType: webTask ? 'web-ui' : 'backend',
+          // How the code actually arrived. 'file-by-file' means the single-request answer was
+          // unusable and each file was asked for on its own — recorded because the two paths
+          // have very different cost and reliability profiles, and an operator needs to tell
+          // them apart when judging whether generation is working.
+          strategy: strategy ?? 'file-by-file',
+          fidelity: quality ? { passed: quality.passed, score: quality.score, violations: quality.violations.map(v => v.code) } : null,
+          // Retries that were needed on the way to this success are recorded too: silent
+          // recoveries hide the flakiness an operator must still know about.
+          ...(perFileErrors?.length ? { perFileErrors: perFileErrors.slice(0, 10) } : {})
+        }
     });
     return { type: 'code', artifactId: artifact.id, summary: artifact.content.summary, files, tests, notes, acceptance };
   }
@@ -641,11 +787,16 @@ export async function generateFunctionalArtifact({ task, env, agentId }) {
         content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), 'Template fallback used', TEMPLATE_FALLBACK_WARNING] },
         metadata: {
           generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length,
-          aiFailed: true, aiError: lastError, templateMatched: templateResult.templateMatched === true,
+          // WHY the AI path failed, file by file — the reason list that used to be swallowed
+          // by `catch (e) { return null; }` now travels with the fallback artifact.
+          aiFailed: true,
+          aiError: perFileErrors?.length ? `${lastError || 'generation produced no usable files'} — per-file failures: ${perFileErrorSummary(perFileErrors)}` : lastError,
+          templateMatched: templateResult.templateMatched === true,
           // Explicit, machine-readable provenance. Every consumer (delivery manifest,
           // dashboard, audit) can now say "this is a template" without inferring it from
           // the absence of an aiGenerated flag.
-          aiGenerated: false, templateFallback: true, founderWarning: TEMPLATE_FALLBACK_WARNING
+          aiGenerated: false, templateFallback: true, founderWarning: TEMPLATE_FALLBACK_WARNING,
+          ...(perFileErrors?.length ? { perFileErrors: perFileErrors.slice(0, 10) } : {})
         }
       });
       return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), TEMPLATE_FALLBACK_WARNING], acceptance };
