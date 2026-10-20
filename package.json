@@ -8,11 +8,11 @@
     "deploy": "wrangler deploy",
     "check": "node scripts/check-syntax.mjs",
     "test:dashboard": "node scripts/dashboard-key-check.mjs",
-    "test": "node --test",
+    "test": "MAULI_PER_FILE_PACING_MS=0 node --test",
     "test:routes": "node scripts/dryrun-durable-routes.mjs",
     "test:runtime": "node scripts/verify-generated-app.mjs --self-test",
     "verify:runtime": "node scripts/production-runtime.mjs --self-test",
-    "verify:corefeature": "node --test tests/core-feature-e2e.test.js",
+    "verify:corefeature": "MAULI_PER_FILE_PACING_MS=0 node --test tests/core-feature-e2e.test.js",
     "verify:deployment": "node --test tests/generated-deployment-identity.test.js tests/production-runtime-acceptance.test.js tests/core-feature-e2e.test.js",
     "executor:deploy": "node scripts/deploy-executor.mjs",
     "executor:runtime": "node scripts/runtime-executor-server.mjs",
@@ -24,7 +24,7 @@
     "verify:app": "node scripts/verify-generated-app.mjs --verify",
     "measure:groq": "node scripts/measure-groq-generation.mjs",
     "test:security": "node --test tests/founder-auth.test.js tests/tool-security.test.js test/security-governance.test.js tests/d1-write-budget.test.js tests/d1-monotonic-writes.test.js",
-    "self-test": "node --test test/*.test.js"
+    "self-test": "MAULI_PER_FILE_PACING_MS=0 node --test test/*.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

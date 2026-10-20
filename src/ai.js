@@ -145,9 +145,14 @@ export async function generateAI(env, messages, options = {}) {
       return await groqGenerate(env, messages, options);
     } catch (groqError) {
       noteGroqFailure(env, groqError);
-      // Report the provider the caller actually selected first — Workers AI — since that is
-      // the allowance the founder will act on. The Groq failure is recorded as an event.
-      throw error;
+      // The caller still gets the FIRST provider's failure (the Workers AI allowance the
+      // founder acts on), but the reason must not stop there: per-file generation needs to
+      // know why the fallback failed too — a Groq rate limit is retriable with backoff, a
+      // bad key or an empty quota is not. The original message is kept first (callers already
+      // match on it) and the fallback reason is folded in so both are visible in one place.
+      const fallbackReason = String(groqError?.message ?? groqError ?? '').replace(/\r?\n/g, ' ').slice(0, 200);
+      if (!fallbackReason.trim()) throw error;
+      throw new Error(`${error?.message ?? 'Workers AI failed'} — Groq fallback also failed: ${fallbackReason}`);
     }
   }
 }
