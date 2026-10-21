@@ -10,9 +10,10 @@ import { store } from '../src/store.js';
 
 const TAIL = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-function fakeD1({ projects = [], tasks = [] } = {}) {
+function fakeD1({ projects = [], tasks = [], failTypes = [] } = {}) {
   const norm = (sql) => sql.replace(/\s+/g, ' ').trim();
-  const rowsFor = (type) => (type === 'projects' ? projects : type === 'tasks' ? tasks : []).map((v) => ({ data: JSON.stringify(v) }));
+  const valuesFor = (type) => (type === 'projects' ? projects : type === 'tasks' ? tasks : []);
+  const rowsFor = (type) => valuesFor(type).map((v) => ({ data: JSON.stringify(v) }));
   return {
     DB: {
       prepare(rawSql) {
@@ -22,12 +23,25 @@ function fakeD1({ projects = [], tasks = [] } = {}) {
           async all() {
             const sql = norm(rawSql);
             if (/^SELECT data FROM entities WHERE type = \?/.test(sql)) {
+              // failTypes simulates one per-type scan dying while bounded reads keep
+              // answering — the production case is the daily D1 rows_read limit, where
+              // the full hydration sweep fails but single-row and LIMIT queries work.
+              if (failTypes.includes(args[0])) throw new Error(`simulated D1 read failure for ${args[0]}`);
               const rows = rowsFor(args[0]);
               return { results: rows, meta: { rows_read: rows.length } };
             }
             return { results: [], meta: { rows_read: 0 } };
           },
-          async first() { return null; },
+          // d1Get reads one entity straight from D1: the direct fallback that must answer
+          // for a project whose isolate never hydrated.
+          async first() {
+            const sql = norm(rawSql);
+            if (/^SELECT data FROM entities WHERE type = \? AND id = \? LIMIT 1$/.test(sql)) {
+              const match = valuesFor(args[0]).find((v) => v?.id === args[1]);
+              return match ? { data: JSON.stringify(match) } : null;
+            }
+            return null;
+          },
           async run() { return { meta: { rows_written: 0 } }; },
         };
         return stmt;
@@ -128,4 +142,45 @@ test('blocked and cancelled tasks are not reported as pending backlog', async ()
   assert.equal(detail.summary.pendingTasks, 1, 'only the queued task is runnable backlog');
   assert.equal(detail.summary.blockedTasks, 2);
   assert.equal(detail.summary.cancelledTasks, 1);
+});
+
+// The production bug behind "Error: Project not found" on the deployed dashboard: a fresh
+// isolate serves the dashboard load and its /api/state polling first (light paths, which
+// deliberately skip hydration), so initOnce marked the isolate initialized but cold. Every
+// later /api/projects/:id/detail on that isolate fell back to the empty in-memory store and
+// answered 404 — while the Projects table kept listing the very same project from D1.
+test('project detail answers for a D1 project on an isolate that never hydrated', async () => {
+  __resetD1TaskCache();
+  const suffix = TAIL();
+  const pid = `project_cold_${suffix}`;
+  const project = { id: pid, name: 'Cold isolate project', objective: 'Build', state: 'active', requirements: ['x'], createdAt: new Date().toISOString() };
+  const tasks = [
+    { id: `k1_${suffix}`, projectId: pid, title: 'Plan', state: 'completed', dependsOn: [], requiredCapabilities: ['planning'], executor: 'internal.plan', sequence: 1, createdAt: new Date().toISOString() },
+    { id: `k2_${suffix}`, projectId: pid, title: 'Implement backend', state: 'assigned', dependsOn: [], requiredCapabilities: ['backend'], executor: 'internal.code', sequence: 2, createdAt: new Date().toISOString() },
+  ];
+  // Hydration itself fails (the agents + projects scans die — the daily rows_read limit),
+  // while the bounded per-project reads keep working, exactly as in production.
+  const env = fakeD1({ projects: [project], tasks, failTypes: ['agents', 'projects'] });
+
+  store.configure(env);
+  store.data = new Map();
+  store.events = [];
+  store.hydrated = false; // cold isolate
+
+  // The dashboard load / 5 s poll hits a light path first and must stay store-free.
+  const stateRes = await app.fetch(new Request('https://mauli.test/api/state'), env, { waitUntil() {} });
+  assert.equal(stateRes.status, 200);
+  assert.equal(store.hydrated, false, 'light paths must not hydrate the store');
+
+  // The founder clicks 📄 Details. The project must be answered for from D1 even though
+  // this isolate could not hydrate — a false "Project not found" hides real work.
+  const res = await app.fetch(new Request(`https://mauli.test/api/projects/${pid}/detail`), env, { waitUntil() {} });
+  assert.equal(res.status, 200, 'a project that exists in D1 must never answer 404 from a cold isolate');
+  const body = await res.json();
+  const detail = body.detail ?? body.data.detail;
+  assert.equal(detail.project.id, pid);
+  assert.equal(detail.tasks.length, 2, 'tasks come from the bounded D1 read, not the empty isolate cache');
+  assert.equal(detail.summary.totalTasks, 2);
+  assert.equal(detail.summary.completedTasks, 1);
+  assert.equal(detail.summary.runningTasks, 1);
 });

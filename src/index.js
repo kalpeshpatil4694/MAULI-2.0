@@ -71,20 +71,28 @@ async function findBuild(buildId, env) {
 // Lazy initialization — only run once per Worker lifetime
 let _initialized = false;
 let _toolsReady = false;
+// A hydration that failed (e.g. the daily D1 rows_read limit) is retried only after a
+// cooldown, so a broken D1 is not re-read in full on every founder click.
+const HYDRATE_RETRY_COOLDOWN_MS = 30_000;
+let _hydrateFailedAt = 0;
 async function initOnce(env, ctx, { hydrate = true } = {}) {
-  if (_initialized) return;
-  _initialized = true;
-  try { await ensureSchema(env); } catch(_) {} // DDL may fail if D1 limit exceeded — non-fatal
-  store.configure(env);
-  // Hydrate before serving. This used to be fire-and-forget through ctx.waitUntil,
-  // which left the first requests of every cold isolate running against an empty
-  // store: /api/build-status returned a false 404 for a build that existed, and
-  // /api/build-app claimed a project had "no code artifact" when its files were
-  // already in D1. Reading a row-capped cache while another isolate wrote the row
-  // is the whole defect. Cost is unchanged (the same tables were read either way)
-  // and hydrateOnce() is single-flight, so only the first request pays for it.
-  if (hydrate && !store.hydrated) {
-    await store.hydrateOnce().catch(()=>{});
+  if (!_initialized) {
+    _initialized = true;
+    try { await ensureSchema(env); } catch(_) {} // DDL may fail if D1 limit exceeded — non-fatal
+    store.configure(env);
+  }
+  // Hydration is attempted whenever a request that needs it arrives — not only on the
+  // request that happens to initialize the isolate. Hydrating before serving used to be
+  // fire-and-forget through ctx.waitUntil (false 404s for builds that existed), and the
+  // fix for that gated hydration behind this one-time init: a fresh isolate whose FIRST
+  // request was a light path (/ or /api/state, which deliberately skip hydration) then
+  // stayed unhydrated for its whole lifetime, so /api/projects/:id/detail fell back to
+  // the empty in-memory store and answered "Project not found" for projects the
+  // dashboard had just listed from D1. hydrateOnce() is single-flight and resolves
+  // immediately once hydrated, so the cost is still at most one full read per isolate.
+  if (hydrate && !store.hydrated && hasD1(env) && (!_hydrateFailedAt || (Date.now() - _hydrateFailedAt) >= HYDRATE_RETRY_COOLDOWN_MS)) {
+    const succeeded = await store.hydrateOnce().catch(() => false);
+    _hydrateFailedAt = (succeeded || store.hydrated) ? 0 : Date.now();
   }
 }
 // Bounded, cached snapshot used only until a cold isolate finishes hydrating.
@@ -800,9 +808,16 @@ export default { async fetch(request, env, ctx) { try {
     const parts=url.pathname.split('/');const pid=parts[3];
     // One bounded tasks read feeds both the project state and this project's task list, so
     // the detail screen can never disagree with /api/project-progress about what exists.
-    const d1Tasks=store.hydrated?await d1TasksFresh(env):null;
+    // The in-memory store is a per-isolate cache: this click can land on an isolate that
+    // never hydrated (a light-path / or /api/state request initialized it first) or whose
+    // hydration failed. So read this project's tasks from D1 whenever D1 is bound, and
+    // never answer "Project not found" for a project that is really in D1 — the same
+    // direct-read fallback findBuild and projectCodeArtifacts already use.
+    const d1Tasks=(store.hydrated||hasD1(env))?await d1TasksFresh(env):null;
     const allProjects=hasD1(env)&&store.hydrated?await d1List(env,'projects',{existingTasks:d1Tasks??undefined}):listProjects();
-    const project=allProjects.find(p=>p.id===pid)||listProjects().find(p=>p.id===pid)||store.get('projects',pid);if(!project)return fail('Project not found',404);
+    let project=allProjects.find(p=>p.id===pid)||listProjects().find(p=>p.id===pid)||store.get('projects',pid);
+    if(!project&&hasD1(env))project=await d1Get(env,'projects',pid);
+    if(!project)return fail('Project not found',404);
     const tasks=d1Tasks?d1Tasks.filter(t=>t.projectId===pid):store.list('tasks').filter(t=>t.projectId===pid);
     const artifacts=store.list('artifacts').filter(a=>a.projectId===pid);
     const events=store.recentEvents().filter(e=>e.payload?.projectId===pid);
