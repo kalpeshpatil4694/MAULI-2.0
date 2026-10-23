@@ -148,6 +148,39 @@ export async function stageProject(files, { root }) {
   return written;
 }
 
+/** Every D1 database on the account, in ONE call (the list is needed both to reuse a database
+ * and to know whether a free slot exists at all). */
+async function listAccountDatabases(root) {
+  const listed = await run(wranglerCommand(), ['d1', 'list', '--json'], { cwd: root });
+  if (listed.code !== 0) return { ok: false, databases: [], message: redact(listed.stderr || listed.stdout) };
+  try {
+    const parsed = JSON.parse(listed.stdout || '[]');
+    const rows = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.result) ? parsed.result : []);
+    return {
+      ok: true,
+      databases: rows
+        .map((row) => ({ id: row?.uuid ?? row?.database_id ?? null, name: row?.name ?? null, createdAt: row?.created_at ?? null }))
+        .filter((row) => row.name)
+    };
+  } catch (_) {
+    return { ok: false, databases: [], message: 'wrangler d1 list did not return JSON: ' + redact(listed.stdout) };
+  }
+}
+
+/** Delete superseded databases, one by one, never failing the deploy for a cleanup problem. */
+async function reclaimSupersededDatabases(root, stale) {
+  const removed = [];
+  for (const entry of Array.isArray(stale) ? stale : []) {
+    if (!entry?.name) continue;
+    const deleted = await run(wranglerCommand(), ['d1', 'delete', entry.name, '-y'], { cwd: root });
+    if (deleted.code === 0) { removed.push(entry.name); continue; }
+    if (process.env.MAULI_DEPLOY_VERBOSE !== '0') {
+      console.error(`[deploy-executor] could not delete superseded database ${entry.name}: ${redact(deleted.stderr || deleted.stdout)}`);
+    }
+  }
+  return removed;
+}
+
 /**
  * Provision (or find) the D1 database the generated wrangler config declares, and write its
  * id back. A generated project that declares a database it does not have fails on its first
@@ -157,22 +190,37 @@ export async function stageProject(files, { root }) {
  * the same product again is normal — after a repair, or on the next CI run — and "a database
  * with that name already exists" is not a product failure, it is this function having no
  * memory. Reusing also keeps a repaired deployment pointed at the same data, which is what
- * a redeploy means.
+ * a redeploy means. The one thing it will not do is take the account's LAST free slot for
+ * granted: see the account budget below.
  */
-async function provisionDatabase(root, databaseName) {
-  const listed = await run(wranglerCommand(), ['d1', 'list', '--json'], { cwd: root });
-  let existingId = null;
-  if (listed.code === 0) {
-    try {
-      const list = JSON.parse(listed.stdout);
-      const hit = (Array.isArray(list) ? list : []).find((d) => d?.name === databaseName);
-      existingId = hit?.uuid ?? hit?.database_id ?? null;
-    } catch (_) { existingId = null; }
-  }
-  let databaseId = existingId;
+export async function provisionDatabase(root, databaseName, { databases = null } = {}) {
+  const listed = Array.isArray(databases) ? { ok: true, databases } : await listAccountDatabases(root);
+  if (!listed.ok) return { ok: false, message: listed.message || 'the account\'s D1 databases could not be listed' };
+  const existing = listed.databases.find((d) => d.name === databaseName);
+  let databaseId = existing?.id ?? null;
+  let reclaimed = [];
   if (!databaseId) {
+    let known = listed.databases;
+    // A create needs a free account slot. The account cap is the one limit here that never
+    // resets, so reclaim this project's superseded schema versions BEFORE creating rather
+    // than failing the deploy with Cloudflare's opaque limit error.
+    if (known.length >= D1_ACCOUNT_DATABASE_LIMIT) {
+      reclaimed = await reclaimSupersededDatabases(root, supersededProjectDatabases(known, databaseName, { currentCreatedAt: new Date().toISOString() }));
+      known = known.filter((entry) => !reclaimed.includes(entry.name));
+    }
+    if (known.length >= D1_ACCOUNT_DATABASE_LIMIT) {
+      return {
+        ok: false,
+        quota: true,
+        message: `the Cloudflare account already uses ${known.length} of its ${D1_ACCOUNT_DATABASE_LIMIT} D1 databases, so there is no slot for this project's database. Delete an unused generated-* database (node scripts/d1-database-hygiene.mjs --prune) or raise the account's database limit.`
+      };
+    }
     const created = await run(wranglerCommand(), ['d1', 'create', databaseName], { cwd: root });
-    if (created.code !== 0) return { ok: false, message: redact(created.stderr || created.stdout) };
+    if (created.code !== 0) {
+      const message = redact(created.stderr || created.stdout);
+      const quota = /maximum number of databases|too many databases|database limit|quota|limit exceeded/i.test(message);
+      return { ok: false, quota, message };
+    }
     databaseId = /database_id\s*=\s*"?([0-9a-f-]{32,})"?/i.exec(`${created.stdout}\n${created.stderr}`)?.[1]
       ?? /"database_id"\s*:\s*"([0-9a-f-]{32,})"/i.exec(created.stdout)?.[1]
       ?? null;
@@ -180,9 +228,9 @@ async function provisionDatabase(root, databaseName) {
   }
   const configPath = join(root, 'wrangler.jsonc');
   const config = await readFile(configPath, 'utf8').catch(() => null);
-  if (config === null) return { ok: true, databaseId, reused: Boolean(existingId) };
+  if (config === null) return { ok: true, databaseId, reused: Boolean(existing), reclaimed };
   await writeFile(configPath, config.replace(/("database_id"\s*:\s*)"[^"]*"/i, `$1"${databaseId}"`), 'utf8');
-  return { ok: true, databaseId, reused: Boolean(existingId) };
+  return { ok: true, databaseId, reused: Boolean(existing), reclaimed };
 }
 
 /**
@@ -204,6 +252,86 @@ export async function schemaHashSuffix(root) {
   const parts = [];
   for (const name of names) parts.push(await readFile(join(dir, name), 'utf8'));
   return `-${createHash('sha256').update(parts.join('\n')).digest('hex').slice(0, 10)}`;
+}
+
+// ── Account-level D1 database budget ────────────────────────────────────────────────
+// Cloudflare's free plan allows 10 D1 databases per ACCOUNT, and unlike rows_written that
+// ceiling does NOT reset. Naming each project's database after its schema hash is right (a
+// changed migration needs a database whose tables match the deployed Worker), but nothing ever
+// removed the database the previous schema version used: every revision of every project kept
+// its own database forever. The account therefore reached 9/10 with a single product deployed,
+// and the next deploy would have failed on Cloudflare's "maximum number of databases" error,
+// reported as a generic deployment defect the founder could do nothing about.
+//
+// The executor owns that account-level resource now: one database per project (its current
+// schema), the superseded ones reclaimed when a slot is needed and after a successful deploy,
+// and an explicit quota failure that names the limit instead of a mystery 502.
+export const D1_ACCOUNT_DATABASE_LIMIT = (() => {
+  const configured = Number(process.env.MAULI_D1_DATABASE_LIMIT);
+  return Number.isFinite(configured) && configured > 0 ? configured : 10;
+})();
+
+const VERSIONED_DB_RE = /^(.*)-[0-9a-f]{10}$/i;
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * The other databases belonging to the SAME project — its previous schema versions.
+ *
+ * Matched on `<base>-<10 hex>`, not on a bare prefix: project ids are prefixes of one another
+ * ("shop" and "shop-2"), and a prefix match would delete a DIFFERENT founder's database. The
+ * hash is always exactly ten hex characters, so this is unambiguous.
+ */
+export function supersededProjectDatabases(databases, currentName, { currentCreatedAt = null } = {}) {
+  const name = String(currentName ?? '').trim();
+  const match = VERSIONED_DB_RE.exec(name);
+  if (!match) return [];
+  const pattern = new RegExp(`^${escapeRegExp(match[1])}-[0-9a-f]{10}$`, 'i');
+  // Only databases OLDER than the one this deployment uses. Re-deploying an earlier code
+  // revision is a rollback, and its schema hash differs from the newer database created after
+  // it — deleting that newer database would throw away the data of a version the operator can
+  // still roll forward to. Age is the only ordering the account exposes, and it is enough.
+  const ceiling = currentCreatedAt ? Date.parse(currentCreatedAt) : NaN;
+  return (Array.isArray(databases) ? databases : []).filter((entry) => {
+    const candidate = String(entry?.name ?? '');
+    if (!candidate || candidate === name || !pattern.test(candidate)) return false;
+    if (!Number.isFinite(ceiling)) return true;
+    // Wrangler's JSON list writes `created_at`; listAccountDatabases normalises it to
+    // `createdAt`. Read both — an unreadable date must not silently become "old enough".
+    const created = Date.parse(entry?.createdAt ?? entry?.created_at ?? '');
+    return Number.isFinite(created) && created < ceiling;
+  });
+}
+
+/**
+ * Plan the cleanup of a whole account's generated-* databases: for each project keep ONE
+ * (the newest schema version, or an explicitly protected one) and mark the rest stale.
+ * Databases that are not generated per-project (the control plane's own) are never touched.
+ */
+export function planDatabaseHygiene(databases, { keep = [] } = {}) {
+  const protectedNames = new Set((Array.isArray(keep) ? keep : []).map(String));
+  const groups = new Map();
+  for (const entry of Array.isArray(databases) ? databases : []) {
+    const name = String(entry?.name ?? '');
+    const match = VERSIONED_DB_RE.exec(name);
+    if (!match) continue;
+    if (!groups.has(match[1])) groups.set(match[1], []);
+    groups.get(match[1]).push({
+      name,
+      id: entry?.id ?? entry?.uuid ?? null,
+      createdAt: entry?.createdAt ?? entry?.created_at ?? null
+    });
+  }
+  const plan = [];
+  for (const [project, entries] of groups) {
+    const sorted = [...entries].sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
+    const kept = sorted.find((entry) => protectedNames.has(entry.name))?.name ?? sorted[0].name;
+    const stale = entries.filter((entry) => entry.name !== kept);
+    if (stale.length) plan.push({ project, kept, stale });
+  }
+  return { groups: plan, total: (Array.isArray(databases) ? databases : []).length, limit: D1_ACCOUNT_DATABASE_LIMIT };
 }
 
 /**
@@ -352,9 +480,17 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
     if (needsDb) {
       const db = await provisionDatabase(root, dbName);
       if (!db.ok) {
-        return { deployment: { ...base, status: 'FAILED', url: null, deploymentId: null, errorCategory: categorize(db.message, ''), errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}` } };
+        return {
+          deployment: {
+            ...base, status: 'FAILED', url: null, deploymentId: null,
+            // A full account is a QUOTA failure, not a build or deployment defect: the founder
+            // cannot fix it by changing their product, only by freeing a database slot.
+            errorCategory: db.quota ? 'quota' : categorize(db.message, ''),
+            errorMessage: `the generated project's D1 database could not be provisioned: ${db.message}`
+          }
+        };
       }
-      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: database ${dbName} ${db.reused ? 'reused' : 'created'}`);
+      if (process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: database ${dbName} ${db.reused ? 'reused' : 'created'}${db.reclaimed?.length ? ` (reclaimed ${db.reclaimed.join(', ')})` : ''}`);
     }
     // A newly provisioned remote D1 is empty. Generated Workers also create their schema
     // defensively on first request, but production acceptance must not depend on request-time
@@ -418,6 +554,17 @@ export async function deployGeneratedProject({ projectId = null, files = [], art
             environment: result.environment ?? environment
           }
         };
+      }
+    }
+    // The deploy is live on the new database, so every earlier schema version of THIS project
+    // is now unbound dead weight on a fixed-size account. Reclaim it here (not before the
+    // deploy: until the new version answers, the old database is still the live one's).
+    if (needsDb && dbName && process.env.MAULI_KEEP_SUPERSEDED_DATABASES !== '1') {
+      const fresh = await listAccountDatabases(root).catch(() => ({ ok: false, databases: [] }));
+      if (fresh.ok) {
+        const current = fresh.databases.find((entry) => entry.name === dbName);
+        const removed = await reclaimSupersededDatabases(root, supersededProjectDatabases(fresh.databases, dbName, { currentCreatedAt: current?.createdAt ?? new Date().toISOString() }));
+        if (removed.length && process.env.MAULI_DEPLOY_VERBOSE !== '0') console.error(`[deploy-executor] ${safe}: reclaimed superseded databases ${removed.join(', ')}`);
       }
     }
     return {
