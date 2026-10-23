@@ -15,6 +15,7 @@
     "verify:corefeature": "MAULI_PER_FILE_PACING_MS=0 node --test tests/core-feature-e2e.test.js",
     "verify:deployment": "node --test tests/generated-deployment-identity.test.js tests/production-runtime-acceptance.test.js tests/core-feature-e2e.test.js",
     "executor:deploy": "node scripts/deploy-executor.mjs",
+    "db:hygiene": "node scripts/d1-database-hygiene.mjs",
     "executor:runtime": "node scripts/runtime-executor-server.mjs",
     "sweep:runtime": "node scripts/accept-runtime.mjs",
     "accept:runtime": "node scripts/accept-runtime.mjs",
