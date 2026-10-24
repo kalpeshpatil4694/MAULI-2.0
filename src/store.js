@@ -75,7 +75,12 @@ function comparable(value) {
 }
 
 export class MemoryStore {
-  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this.hydrateErrors=[]; this.hydrateFailures=[]; this._hydrating=null; this.versions=new Map(); this.syncWatermarks=new Map(); this._syncing=null; }
+  constructor() { this.data=new Map(); this.events=[]; this.env=null; this.hydrated=false; this.pendingWrites=new Set(); this.persistenceErrors=[]; this.hydrateErrors=[]; this.hydrateFailures=[]; this._hydrating=null; this.versions=new Map(); this.syncWatermarks=new Map(); this._syncing=null; this.complete=new Map(); }
+  // True when this isolate's copy of `type` is the WHOLE table, not the row-capped slice
+  // hydration loads. Counters derived from a capped slice are wrong (300/738 tasks), which is
+  // why per-project task counts used to hit D1 on every dashboard poll. When the table fit in
+  // the cap the same numbers can be derived from memory for free.
+  isComplete(type) { return this.hydrated && this.complete.get(type) === true; }
   // Single-flight hydration: concurrent callers (worker light paths and the HTTP init
   // path) share one in-flight promise instead of each re-reading every D1 table.
   hydrateOnce() {
@@ -221,6 +226,8 @@ export class MemoryStore {
       // write from this isolate is still protected by the compare-and-set.
       for(const item of rows)if(item?.id&&item.updatedAt)this.versions.set(`${type}/${item.id}`,item.updatedAt);
       if(type==='tasks')taskRows.push(...rows);
+      // A page that filled its limit may have stopped short of the whole table.
+      this.complete.set(type, rows.length < (limits[type] ?? Infinity));
     }
     try{this.events=await d1Events(this.env);}
     catch(error){this.noteHydrateFailure('events',error);failed.add('events');}
@@ -299,7 +306,10 @@ export class MemoryStore {
     };
     try {
       const [projects, tasks, agents, approvals, runs, verifications, artifacts] = await Promise.all([
-        d1List(this.env, 'projects', { limit: 100 }),
+        // No `existingTasks`: d1List would otherwise read the WHOLE tasks table just to
+        // derive each project's state. The scheduler keeps the project's own state here and
+        // reads the runnable tasks separately, so that extra scan bought nothing.
+        d1List(this.env, 'projects', { limit: 100, existingTasks: [] }),
         d1ListByJsonState(this.env, 'tasks', ['queued','assigned','working','verifying','blocked'], { limit: 500, order: 'ASC' }),
         d1List(this.env, 'agents', { limit: 100 }),
         d1ListByJsonState(this.env, 'approvals', ['pending','approved'], { limit: 100, order: 'ASC' }),
@@ -315,6 +325,9 @@ export class MemoryStore {
       await load('verifications', verifications);
       await load('artifacts', artifacts);
       this.hydrateFailures=[];
+      // The scheduler bootstrap only loads runnable/stuck tasks and live runs, so none of
+      // these tables can be treated as the complete set by an aggregate reader.
+      this.complete=new Map([['projects', projects.length<100]]);
       this.hydrated=true;
       return true;
     } catch (error) {

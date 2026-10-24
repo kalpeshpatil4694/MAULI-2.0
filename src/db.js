@@ -72,7 +72,7 @@ export async function ensureSchema(env) {
   return true;
 }
 
-function projectStateFromTasks(project, tasks) {
+export function projectStateFromTasks(project, tasks) {
   // State shown to the founder must describe real work, not merely an old project flag.
   // An approval gate is explicit; queued/working work is active; failed or blocked work
   // with nothing pending is terminal. This prevents frozen projects from appearing active.

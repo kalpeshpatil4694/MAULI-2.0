@@ -167,14 +167,15 @@ test('output that is only a demo is rejected before it can be registered as an a
   store.put('projects', { id: pid, name: 'P', objective: 'Build an expense tracker web app', requirements: ['Track expenses'], state: 'active' });
   const task = addTaskToProject(pid, { title: 'Build an expense tracker web app', description: 'Build an expense tracker web app', requiredCapabilities: ['frontend'], acceptance: [{ field: 'type', equals: 'code' }], executor: 'internal.code' });
 
-  const result = await getExecutor('internal.code').handler({ task, env, agentId: 'agent-test-frontend' });
-  const artifact = store.get('artifacts', result.artifactId);
-  // The executor may fall back to a working template, but it must never register the demo
-  // as if it were the requested product.
-  assert.notEqual(artifact.metadata.generatedBy, 'functional-code-executor',
-    'a demo must not be registered as the generated application');
-  assert.equal(analyzeGeneratedApp(result.files, { objective: 'Build an expense tracker web app' }).passed, true,
-    'whatever is delivered must pass the fidelity gate');
+  // A demo is refused outright now: there is no template behind it to fall back to, so the
+  // executor fails with the reason instead of registering something the founder did not ask for.
+  await assert.rejects(
+    () => getExecutor('internal.code').handler({ task, env, agentId: 'agent-test-frontend' }),
+    /Code generation failed/
+  );
+  const artifacts = store.list('artifacts').filter(a => a.taskId === task.id);
+  assert.equal(artifacts.length, 0,
+    'neither the demo nor a substitute may be registered as the generated application');
 });
 
 // Production showed three "Pipeline gate: build" tasks for one project. Concurrent

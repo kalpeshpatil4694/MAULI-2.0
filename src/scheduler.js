@@ -18,9 +18,12 @@ const LEASE_MS=90_000,DEFAULT_MAX_ATTEMPTS=3;
 // The per-project execution lock is renewed while the body runs, so a body that never
 // returns held the project for the whole lease — every later tick answered
 // 'coordinator-busy' and the project sat in 'active' with nothing running. The body is
-// therefore bounded as well as the individual task, and the bound is deliberately shorter
-// than the 120s lease so the lock is released before it can expire on its own.
-const DEFAULT_PROJECT_BUDGET_MS=75_000;
+// therefore bounded as well as the individual task. That bound must be LARGER than one
+// task's own budget: a measured app generation takes 76-156s while the old 75s bound cut
+// every generation off mid-call on every single tick (the run finished in the background
+// with its lock already released, and the next tick could start a second competing
+// generation of the same project). 190s covers one full task budget with a small margin.
+const DEFAULT_PROJECT_BUDGET_MS=190_000;
 function projectBudgetMs(env={},context={}){
   const candidates=[context.projectBudgetMs,env?.MAULI_PROJECT_BUDGET_MS,DEFAULT_PROJECT_BUDGET_MS];
   for(const candidate of candidates){const n=Number(candidate);if(Number.isFinite(n)&&n>0)return n;}
@@ -34,6 +37,18 @@ const STUCK_STATES=new Set(['working','assigned','verifying']);
 const MAX_INFRA_RECOVERIES=8;
 const ORPHAN_GRACE_MS=15_000;
 const PROJECTS_PER_TICK=40;
+// Executors that make model calls (and take tens of seconds to minutes). They must not be
+// STARTED from a hand-off tick that runs inside ctx.waitUntil: Cloudflare ends that
+// invocation 30s after the response, so the generation is killed mid-call, recovered as a
+// stale run, charged against the task's infra-recovery budget, and repeated from scratch by
+// the next cron tick. Generation belongs to the cron tick, which has a real budget.
+const LONG_EXECUTORS=new Set(['internal.code','internal.native','internal.pdf']);
+// A task that is runnable with its dependencies complete, was offered to the scheduler in a
+// real tick, and STILL could not be claimed (no capable agent, a lost write) is not pending
+// work. Nothing recovered it: it has no run to be stale, it is not 'blocked', so
+// finalizeCommand counted it as pending and the project read 'active' forever — measured
+// live as 0/14 tasks after 15 hours. Past this window it is an honest failure with a reason.
+const STALLED_RUNNABLE_MS=15*60*1000;
 // Cron (no drain target) advances up to 6 runnable tasks per project per tick so the
 // */5 schedule still delivers a full chain in a couple of ticks.
 const CRON_TASKS_PER_PROJECT=6;
@@ -265,6 +280,8 @@ export async function schedulerTick(env={},context={}){
   }
   const results=[];
   const drainProject=context?.projectId??null;
+  // A founder-command/chat hand-off runs inside ctx.waitUntil (30s after the response).
+  const handoff=context?.skipLongExecutors===true;
   const overBudget=()=>budgetMs>0&&Date.now()-startedAt>=budgetMs;
   // A blind slice(0, 40) of an insertion-ordered list silently starved every project past
   // the fortieth once the account held 80+ projects: a freshly queued command whose project
@@ -297,17 +314,24 @@ export async function schedulerTick(env={},context={}){
       const tasks=projectTasks.filter(t=>RUNNABLE.has(t.state)&&dependenciesReady(t)).sort((a,b)=>Number(a.sequence??0)-Number(b.sequence??0));
       const fullChain=drainProject===projectId;
       const taskLimit=fullChain?8:CRON_TASKS_PER_PROJECT;
+      // See LONG_EXECUTORS: a 30s hand-off window cannot finish a generation, so it must not
+      // begin one. Planning and review tasks still run here, so the project visibly starts.
+      const runnable=handoff?tasks.filter(t=>!LONG_EXECUTORS.has(t.executor)):tasks;
       let ran=0;
       // A bounded batch instead of a single lane: independent tasks whose agents differ now
       // run together. `overBudget()` is still checked per task, so the project budget caps the
       // whole batch exactly as it capped the serial loop.
-      const batch=tasks.slice(0,taskLimit);
+      const batch=runnable.slice(0,taskLimit);
       const skipped=[];
+      // Only a task the scheduler actually OFFERED and could not claim counts as stalled.
+      // A task skipped merely because this tick ran out of budget is still ordinary queued
+      // work and must never be failed by the stall pass.
+      const unclaimable=[];
       await mapWithConcurrency(batch,agentConcurrency(env,context),async(task)=>{
         if(overBudget()){skipped.push(task);return;}
         const outcome=await runTask(task.id,env,context);
         results.push(outcome);ran++;
-        if(outcome?.status==='not-runnable')skipped.push(task);
+        if(outcome?.status==='not-runnable'){skipped.push(task);unclaimable.push(task);}
       });
       // A task skipped only because a sibling in the same batch held its agent for a moment is
       // not a failure — retry it sequentially now that the batch has released its agents, so
@@ -318,7 +342,42 @@ export async function schedulerTick(env={},context={}){
         results.push(outcome);
         if(outcome?.status!=='not-runnable')ran++;
       }
-      const final=await finalizeCommand(projectId,env,projectTasks).catch(()=>null);
+      // Offered in this tick and still unclaimed after the stall window: no execution can
+      // ever start it, so it must fail rather than keep the project looking alive.
+      for(const task of unclaimable){
+        const current=store.get('tasks',task.id);
+        if(!current||!RUNNABLE.has(current.state))continue;
+        const touched=Date.parse(current.updatedAt??current.claimedAt??current.createdAt??0);
+        if(!Number.isFinite(touched)||Date.now()-touched<STALLED_RUNNABLE_MS)continue;
+        const failure=await failTask(current.id,`Task could not be claimed for ${Math.round(STALLED_RUNNABLE_MS/60000)} minutes with its dependencies complete; no execution was ever started.`);
+        if(failure){results.push({status:'failed',taskId:current.id,reason:'unclaimable'});store.addEvent('scheduler.task_stalled',{projectId,taskId:current.id,at:now()});}
+      }
+      // The delivery gate chain is sequential: a gate only becomes runnable when the previous
+      // one completes. Advancing one gate per minute-long cron tick made the tail of every
+      // project take most of ten minutes AFTER the code already existed. Planning, review and
+      // gate tasks are cheap evaluations, so they are chained inside this tick — bounded by
+      // the same budget, and never starting a model-calling executor here (it was offered
+      // above, with its own budget).
+      for(let round=0;round<3&&!overBudget();round++){
+        const ready=(byProject.get(projectId)??[])
+          .map(t=>store.get('tasks',t.id)??t)
+          .filter(t=>RUNNABLE.has(t.state)&&dependenciesReady(t)&&!LONG_EXECUTORS.has(t.executor))
+          .sort((a,b)=>Number(a.sequence??0)-Number(b.sequence??0));
+        if(!ready.length)break;
+        let progressed=0;
+        for(const task of ready){
+          if(overBudget())break;
+          const outcome=await runTask(task.id,env,context);
+          results.push(outcome);
+          if(outcome?.status!=='not-runnable')progressed++;
+        }
+        if(!progressed)break;
+      }
+      // Re-read rather than reuse the pre-tick snapshot: the tasks above just changed state,
+      // and a finalize verdict computed from the old rows either missed the completion or
+      // counted finished work as pending for another tick.
+      const freshTasks=store.list('tasks').filter(t=>t.projectId===projectId);
+      const final=await finalizeCommand(projectId,env,freshTasks).catch(()=>null);
       if(final)results.push({status:final.status,runId:final.runId,projectId});
       return{status:'processed',projectId,ran};
     })(),projectBudgetMs(env,context),`project ${projectId} execution`).catch(error=>{

@@ -2,7 +2,6 @@ import { code } from './ai.js';
 import { groqConfigured } from './groq-ai.js';
 import { registerArtifact } from './artifacts.js';
 import { registerExecutor, grantExecutor } from './executor-registry.js';
-import { generateFromTemplate } from './app-templates.js';
 import { analyzeGeneratedApp } from './generated-app-quality.js';
 import { generateFullStackApp } from './fullstack-codegen.js';
 import { store } from './store.js';
@@ -110,18 +109,19 @@ function ensureReadme(files, objective) {
 
 const DEFAULT_CODE_MODEL_FALLBACK = '@cf/qwen/qwen3-30b-a3b-fp8';
 
-// The answer the founder must never have to guess at. A template artifact is a working app,
-// so from the outside it is indistinguishable from the requested product — which is how a
-// generic habit tracker reached a founder who asked for a call recorder. Delivery already
-// REFUSES an unmatched template, but a matched one still ships, and then the only honest
-// thing is to say plainly what it is.
-export const TEMPLATE_FALLBACK_WARNING =
-  'This is a MAULI template, not your app. The model could not write code for this request, ' +
-  'so you are looking at a generic starting point: the layout and interactions work, but they ' +
-  'are not built for what you asked for. Nothing here was generated from your command.';
-const AI_UNAVAILABLE_WARNING =
-  'This is a placeholder, not your app. No language model was reachable when this project was ' +
-  'generated, so only an empty shell was produced.';
+// A ready-made template is no longer an acceptable answer to a founder's command.
+//
+// It used to be the outer net: when the model could not write the app, a generic template was
+// registered as the product. Every template is a pre-written page, so what a founder received
+// was a working app for a DIFFERENT request (a habit tracker for a call recorder), or a
+// placeholder shell — neither is the product they asked for, and both hid that generation had
+// failed. The executor now either produces the requested app with the model (per-file, then
+// repaired, or compiled from the founder's own specification) or fails with the real reason so
+// the task is retried / reported. Nothing pre-written is ever shipped as the deliverable.
+const NO_MODEL_REASON =
+  'No language model is reachable, so the app cannot be generated: bind Workers AI or set '
+  + 'GROQ_API_KEY on the Worker (Settings → Variables). MAULI no longer substitutes a '
+  + 'ready-made template for the product you asked for.';
 
 // Per-file generation is the PRIMARY path, not a fallback.
 //
@@ -136,7 +136,8 @@ const AI_UNAVAILABLE_WARNING =
 // fidelity gate runs on the assembled app, and when it fails the behaviour files are asked
 // for again with the gate's exact findings, each given the other files' current source so the
 // markup's handlers and the code that defines them cannot drift apart. Bounded so a
-// persistently bad model cannot spin forever; the template fallback remains the outer net.
+// persistently bad model cannot spin forever. There is no template net behind it: a generation
+// that still cannot pass the gate fails with its reason and the task retries.
 const PER_FILE_REPAIR_ROUNDS = 1;
 const PER_FILE_MAX_TOKENS = 4000;
 
@@ -266,6 +267,15 @@ function looksLikeFileSource(path, content) {
   if (/\.html?$/i.test(path)) return /<!DOCTYPE|<html|<body|<div/i.test(body);
   if (/\.css$/i.test(path)) return /\{[^}]*:[^}]*\}/.test(body);
   if (/\.json$/i.test(path)) { try { return typeof JSON.parse(body) === 'object'; } catch { return false; } }
+  if (/\.(js|mjs|cjs|jsx|ts|tsx)$/i.test(path)) {
+    // A refusal is not a JavaScript file. The old check only demanded 20 characters, so
+    // "Sorry, I cannot write code for that." (36 chars) was accepted as www/app.js — the app
+    // shipped a sentence as its behaviour file, every handler was missing, and the answer was
+    // never sent to the configured fallback. Real source has code structure; prose does not.
+    if (/^(sorry|i cannot|i can't|i\u2019m unable|unfortunately)/i.test(body)) return false;
+    const hasCode = /\b(function|const|let|var|class|import|export|document|window|addEventListener|querySelector|localStorage|fetch|require)\b|=>/.test(body);
+    return body.length >= 40 && hasCode;
+  }
   return true;
 }
 
@@ -399,6 +409,18 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
       '\n\nOutput ONLY the raw contents of ' + path + '. No markdown fence, no explanation, no JSON wrapper, no other file.';
     let attempts = 0;
     let lastReason = 'unknown failure';
+    // Which provider this file's NEXT attempt is sent to; null means "use the configured
+    // chain". A provider that answers but does not return the file (prose, a JSON envelope,
+    // a truncated snippet) was retried on the same provider until the file was lost, while a
+    // configured Groq key sat unused — that is the "the key is set but nothing uses it"
+    // symptom. The next attempt asks the fallback explicitly.
+    let provider = null;
+    const usingGroq = () => (provider ?? runtimeEnv?.MAULI_AI_PROVIDER ?? 'cloudflare') === 'groq';
+    const fallBackToGroq = () => {
+      if (usingGroq() || !groqConfigured(runtimeEnv)) return false;
+      provider = 'groq';
+      return true;
+    };
     while (attempts < PER_FILE_MAX_ATTEMPTS) {
       attempts += 1;
       await awaitGap();
@@ -408,13 +430,14 @@ async function generateFileByFile({ runtimeEnv, systemPrompt, objective, accepta
         const raw = await withTimeout(code(runtimeEnv, [
           { role: 'system', content: system },
           { role: 'user', content: ask },
-        ], { maxTokens: PER_FILE_MAX_TOKENS }), AI_ATTEMPT_TIMEOUT_MS);
+        ], provider ? { maxTokens: PER_FILE_MAX_TOKENS, provider } : { maxTokens: PER_FILE_MAX_TOKENS }), AI_ATTEMPT_TIMEOUT_MS);
         const content = unwrapFileContent(path, raw).trim();
         // A file that came back empty, or as prose/envelope instead of the file, is not a
         // file. Refusing it here is what keeps a half-written app from being registered as
         // the product.
         if (looksLikeFileSource(path, content)) return { content, attempts };
         lastReason = `unusable answer for ${path}: the model did not return the file's source${content ? ` (received ${String(content).length} chars of something else)` : ''}`;
+        if (fallBackToGroq()) { lastReason += ' — retrying with the configured Groq fallback'; continue; }
       } catch (e) {
         const message = text(e).replace(/\r?\n/g, ' ');
         const verdict = classifyModelCallError(message);
@@ -677,43 +700,12 @@ export async function generateFunctionalArtifact({ task, env, agentId }) {
   // deterministic architecture/templates directly. A Groq-only environment is different: it
   // still has a live model provider, so it must reach the generation path below.
   if (!runtimeEnv?.AI?.run && !groqConfigured(runtimeEnv)) {
+    // The selected architecture is generated from the founder's specification, not from a
+    // ready-made template, so it is still a real answer to the command.
     const architectural = generateFromArchitecture({ task, agentId, objective, acceptance });
     if (architectural?.error) throw new Error(architectural.error);
     if (architectural?.artifactId) return architectural;
-    const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
-    if (templateResult.files?.length > 0) {
-      // A template emits a single index.html. Shipped like that, the project has no
-      // package.json, so the build flow (which requires www/index.html + package.json)
-      // cannot turn it into an APK and the founder gets a download that does nothing.
-      // The fallback must be as deliverable as the real thing.
-      templateResult.files = ensurePackageJson(templateResult.files, objective);
-      const artifact = registerArtifact({
-        projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
-        content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), TEMPLATE_FALLBACK_WARNING] },
-        metadata: {
-          generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length,
-          templateMatched: templateResult.templateMatched === true,
-          // No model was reachable at all, so this template is even further from the founder's
-          // command than the AI-failed fallback. It must say so rather than pass as the app.
-          aiGenerated: false, templateFallback: true, founderWarning: TEMPLATE_FALLBACK_WARNING
-        }
-      });
-      return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), TEMPLATE_FALLBACK_WARNING], acceptance };
-    }
-    // Generate a basic functional app instead of just a README stub
-    const stubFiles = [
-      { path: 'www/index.html', content: '<!DOCTYPE html><html><head><title>' + objective.slice(0,60) + '</title><link rel="stylesheet" href="styles.css"></head><body><div class="container"><h1>' + objective.slice(0,80) + '</h1><p>Generated by MAULI 2.0</p><div id="app"></div></div><script src="app.js"></script></body></html>' },
-      { path: 'www/app.js', content: 'document.getElementById("app").innerHTML="<p>App placeholder — AI generation unavailable.</p>";' },
-      { path: 'www/styles.css', content: '*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui;background:#0b1120;color:#e8ecf4;min-height:100vh;display:flex;justify-content:center;padding:40px}.container{max-width:600px;text-align:center}h1{font-size:1.5rem;margin-bottom:12px;color:#00d4ff}' },
-      { path: 'package.json', content: '{}' },
-      { path: 'README.md', content: '# ' + objective + '\n\nGenerated by MAULI 2.0. AI binding unavailable — template fallback used.' }
-    ];
-    const artifact = registerArtifact({
-      projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
-      content: { summary: 'Basic placeholder for: ' + objective, files: stubFiles, tests: [], notes: ['AI binding unavailable — minimal template used', AI_UNAVAILABLE_WARNING] },
-      metadata: { generatedBy: 'functional-code-executor', stub: true, fileCount: stubFiles.length, aiGenerated: false, templateFallback: true, founderWarning: AI_UNAVAILABLE_WARNING }
-    });
-    return { type: 'code', artifactId: artifact.id, summary: artifact.content.summary, files: stubFiles, tests: [], notes: ['AI binding unavailable', AI_UNAVAILABLE_WARNING], acceptance };
+    throw new Error(NO_MODEL_REASON);
   }
 
   // Try AI generation with improved prompts
@@ -733,8 +725,8 @@ export async function generateFunctionalArtifact({ task, env, agentId }) {
 
   // If AI produced code that ALSO passed the fidelity gate, ship it. When even the repair
   // could not pass, the AI output is a demo by the founder's own definition — it must not
-  // be registered as the requested product. Fall through to the deterministic template,
-  // which is itself fidelity-gated, and record why the AI output was refused.
+  // be registered as the requested product. Fall through to the specification-derived build,
+  // and if that cannot answer either, fail with the recorded reason.
   if (files && quality && !quality.passed) {
     lastError = 'functional fidelity failed: ' + quality.violations.map(v => v.code).join(', ');
   }
@@ -778,35 +770,17 @@ export async function generateFunctionalArtifact({ task, env, agentId }) {
   if (architectural?.error) throw new Error(architectural.error);
   if (architectural?.artifactId) {
     return { ...architectural, notes: [...(architectural.notes ?? []), `Model output refused (${lastError || 'unusable'}); built from the founder's specification instead`] };
-  }    const templateResult = generateFromTemplate({ objective, capabilities: task.requiredCapabilities || [] });
-    if (templateResult.files?.length > 0) {
-      // Same requirement as the branch above: a fallback project still has to be installable.
-      templateResult.files = ensurePackageJson(templateResult.files, objective);
-      const artifact = registerArtifact({
-        projectId: task.projectId, taskId: task.id, agentId, type: 'code-workspace',
-        content: { summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), 'Template fallback used', TEMPLATE_FALLBACK_WARNING] },
-        metadata: {
-          generatedBy: 'app-templates', template: templateResult.projectType, fileCount: templateResult.files.length,
-          // WHY the AI path failed, file by file — the reason list that used to be swallowed
-          // by `catch (e) { return null; }` now travels with the fallback artifact.
-          aiFailed: true,
-          aiError: perFileErrors?.length ? `${lastError || 'generation produced no usable files'} — per-file failures: ${perFileErrorSummary(perFileErrors)}` : lastError,
-          templateMatched: templateResult.templateMatched === true,
-          // Explicit, machine-readable provenance. Every consumer (delivery manifest,
-          // dashboard, audit) can now say "this is a template" without inferring it from
-          // the absence of an aiGenerated flag.
-          aiGenerated: false, templateFallback: true, founderWarning: TEMPLATE_FALLBACK_WARNING,
-          ...(perFileErrors?.length ? { perFileErrors: perFileErrors.slice(0, 10) } : {})
-        }
-      });
-      return { type: 'code', artifactId: artifact.id, summary: templateResult.summary, files: templateResult.files, tests: templateResult.tests || [], notes: [...(templateResult.notes || []), TEMPLATE_FALLBACK_WARNING], acceptance };
-    }
-
-  throw new Error('Code generation failed: AI returned invalid code and no template matched.');
+  }
+  // Nothing pre-written ships. The real reason travels so the task retry asks the model
+  // again (and the founder/dashboard can see why) instead of quietly delivering a template.
+  const detail = perFileErrors?.length
+    ? `${lastError || 'the model produced no usable files'} — per-file failures: ${perFileErrorSummary(perFileErrors)}`
+    : (lastError || 'the model produced no usable files');
+  throw new Error(`Code generation failed: ${detail}. No ready-made template is substituted; the model is asked again on the next attempt.`);
 }
 
 registerExecutor('internal.code', generateFunctionalArtifact, {
-  description: 'Generates real functional source code using AI with template fallback',
+  description: 'Generates the requested app with the model (per-file + repair, or from the founder specification); never substitutes a ready-made template',
   risk: 'low', scope: 'internal', capabilities: ['coding', 'software-development']
 });
 grantExecutor('internal.code', 'internal');

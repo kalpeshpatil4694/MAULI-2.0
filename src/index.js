@@ -1,6 +1,6 @@
 import { ok, fail, json, now, validateString, validateId, sanitize, corsHeaders } from './core.js';
 import { store } from './store.js';
-import { d1QuotaSnapshot, d1ReadQuotaSnapshot, d1WriteSourcesSnapshot, d1WriteBlockedSnapshot, recordD1Read } from './d1-quota.js';
+import { d1QuotaSnapshot, d1ReadQuotaSnapshot, d1WriteSourcesSnapshot, d1WriteBlockedSnapshot, recordD1Read, accountBudget, optionalReadAllowed } from './d1-quota.js';
 import { seedAgents, listAgents, dedupeAgentList } from './agents.js';
 import { listProjects } from './projects.js';
 import { listTasks } from './tasks.js';
@@ -9,7 +9,7 @@ import { PLATFORMS, DEFAULT_PLATFORM, normalizePlatform, resolvePlatform, platfo
 import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, getArtifactDurable, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { collectProjectFiles, createZip } from './zip.js';
-import { ensureSchema, hasD1, d1List, d1Get, d1Events, claimBuildVersion, getBuildVersion, getUsageReport, cleanupD1 } from './db.js';
+import { ensureSchema, hasD1, d1List, d1Get, d1Events, claimBuildVersion, getBuildVersion, getUsageReport, cleanupD1, projectStateFromTasks } from './db.js';
 import { recoverStuckProjects } from './maintenance.js';
 import { recoverRunningExecutions } from './execution.js';
 import { requireFounder, checkRateLimit, checkCommandRateLimit, getRateLimitStats, founderAuthStatus } from './auth.js';
@@ -91,8 +91,16 @@ async function initOnce(env, ctx, { hydrate = true } = {}) {
   // dashboard had just listed from D1. hydrateOnce() is single-flight and resolves
   // immediately once hydrated, so the cost is still at most one full read per isolate.
   if (hydrate && !store.hydrated && hasD1(env) && (!_hydrateFailedAt || (Date.now() - _hydrateFailedAt) >= HYDRATE_RETRY_COOLDOWN_MS)) {
-    const succeeded = await store.hydrateOnce().catch(() => false);
-    _hydrateFailedAt = (succeeded || store.hydrated) ? 0 : Date.now();
+    // A full hydration is ~3K rows. That is cheap once, but it must not be the read that
+    // pushes the account past its daily allowance: past the guard the isolate keeps serving
+    // the bounded D1 snapshot (light paths) and the per-project reads, which need far fewer
+    // rows than the whole historical store.
+    if (!(await optionalReadAllowed(env))) {
+      _hydrateFailedAt = Date.now();
+    } else {
+      const succeeded = await store.hydrateOnce().catch(() => false);
+      _hydrateFailedAt = (succeeded || store.hydrated) ? 0 : Date.now();
+    }
   }
 }
 // Bounded, cached snapshot used only until a cold isolate finishes hydrating.
@@ -135,18 +143,25 @@ function compactStateItem(item, type) {
 // True row counts per entity type. The state lists are deliberately capped (100/300/100)
 // so counting them would report "300 tasks / 100 artifacts" forever while the real numbers
 // are 738/429. One index-backed GROUP BY, reached only on a cold isolate and only once per
-// 5 s snapshot cache. Returns null when D1 is unavailable so the caller can omit totals.
-const STATE_TOTALS_TTL = 15000;
+// 60 s window. Returns null when D1 is unavailable so the caller can omit totals.
+const STATE_TOTALS_TTL = 60000;
 let _stateTotals = null; let _stateTotalsTime = 0;
 // Cached so the true counts are identical on every isolate and on both the hydrated and
 // cold-isolate paths. Before this, the hydrated path summed the row-capped in-memory lists
 // (projects/tasks/artifacts) while the cold path used the D1 COUNT — two isolates answering
 // the same dashboard refresh reported different numbers, which is exactly the "values change
-// when I refresh" report. The 15s TTL keeps the read budget bounded (one GROUP BY per window).
+// when I refresh" report. The 60s TTL keeps the read budget bounded (one GROUP BY per window).
 async function safeTypeCounts(env, fresh = false) {
   if (!hasD1(env)) return _stateTotals;
   const nowMs = Date.now();
   if (!fresh && _stateTotals && (nowMs - _stateTotalsTime) < STATE_TOTALS_TTL) return _stateTotals;
+  // A hydrated isolate already holds all three tables (they fit inside the hydration caps),
+  // so its own counts are exact and cost no D1 read at all.
+  if (store.isComplete('projects') && store.isComplete('tasks') && store.isComplete('artifacts')) {
+    const local = { projects: store.list('projects').length, tasks: store.list('tasks').length, artifacts: store.list('artifacts').length };
+    _stateTotals = local; _stateTotalsTime = nowMs;
+    return local;
+  }
   try {
     const rows = await env.DB.prepare("SELECT type, COUNT(*) AS cnt FROM entities WHERE type IN ('projects','tasks','artifacts') GROUP BY type").all();
     const out = { projects: 0, tasks: 0, artifacts: 0 };
@@ -203,70 +218,97 @@ function newestProjectsFirst(list, n) {
 // screens now read tasks from D1 behind a short cache (also merging any missing rows back
 // into the store so the scheduler sees work written by other isolates). The cache keeps the
 // live card's 5 s poll cheap: at most one bounded tasks read per window.
-const D1_TASK_CACHE_TTL = 20000;
-const _d1TaskCache = { at: 0, rows: null };
-async function d1TasksFresh(env) {
-  if (!hasD1(env)) return null;
-  if (Array.isArray(_d1TaskCache.rows) && (Date.now() - _d1TaskCache.at) < D1_TASK_CACHE_TTL) return _d1TaskCache.rows;
+// One project's tasks, read through the (type, projectId) expression index. The 5 s live poll
+// used to load EVERY task row (up to 1500) to answer for one project, which on its own could
+// spend the whole 5M/day account read allowance in a couple of hours of an open dashboard.
+// Indexed per-project reads cost that project's own rows (a dozen), and a per-project cache
+// keeps a flapping screen from re-reading on every refresh.
+const D1_PROJECT_TASK_CACHE_TTL = 15000;
+const _d1ProjectTaskCache = new Map();
+async function d1ProjectTasks(env, projectId) {
+  if (!hasD1(env) || !projectId) return null;
+  const cachedRow = _d1ProjectTaskCache.get(projectId);
+  if (cachedRow && (Date.now() - cachedRow.at) < D1_PROJECT_TASK_CACHE_TTL) return cachedRow.rows;
   try {
-    const rows = await d1List(env, 'tasks', { limit: 1500 });
-    _d1TaskCache.rows = rows; _d1TaskCache.at = Date.now();
+    const result = await env.DB.prepare("SELECT data FROM entities WHERE type = ? AND json_extract(data, '$.projectId') = ? ORDER BY updated_at DESC LIMIT ?")
+      .bind('tasks', String(projectId), 500).all();
+    recordD1Read(env, Number(result?.meta?.rows_read) || 0);
+    const rows = (result.results ?? []).map(row => JSON.parse(row.data)).filter(task => task && task.projectId === projectId);
+    _d1ProjectTaskCache.set(projectId, { at: Date.now(), rows });
+    // Merge only rows this isolate does not already hold, so a fresher in-memory copy is
+    // never overwritten by this read.
     const bucket = store.data.get('tasks') ?? new Map();
     for (const t of rows) if (t?.id && !bucket.has(t.id)) bucket.set(t.id, t);
     if (bucket.size) store.data.set('tasks', bucket);
     return rows;
-  } catch (_) { return _d1TaskCache.rows; }
+  } catch (_) { return cachedRow?.rows ?? null; }
 }
 // Test hook: the cache is module-level by design, so tests that swap the D1 double need a
 // way to force a cold read.
-export function __resetD1TaskCache() { _d1TaskCache.at = 0; _d1TaskCache.rows = null; }
+export function __resetD1TaskCache() { _d1ProjectTaskCache.clear(); }
 
 // Authoritative per-project task counters for the Projects table. The dashboard row list is
 // intentionally capped, so deriving 1/15 from the visible task sample is wrong whenever a
-// project's older tasks fall outside that cap. The expression index above makes these
-// correlated counts proportional to the project's own tasks instead of scanning every task row.
-const PROJECT_TASK_SUMMARY_TTL = 5000;
+// project's older tasks fall outside that cap. The counts therefore come from the whole tasks
+// table: this isolate's hydrated copy when it holds all of it, otherwise one grouped read.
+// Counters only move when a task changes state, so a 60 s TTL is indistinguishable on screen
+// while cutting dashboard read traffic by 12x compared with the old 5 s window.
+const PROJECT_TASK_SUMMARY_TTL = 60000;
 const _projectTaskSummaryCache = { at: 0, map: null, key: '' };
+function summarizeTaskRows(tasks, ids = null) {
+  const wanted = Array.isArray(ids) ? new Set(ids) : null;
+  const map = new Map();
+  if (wanted) for (const id of wanted) map.set(id, { total:0, completed:0, failed:0, running:0, pending:0, blocked:0 });
+  for (const task of Array.isArray(tasks) ? tasks : []) {
+    const projectId = task?.projectId;
+    if (!projectId || (wanted && !wanted.has(projectId))) continue;
+    const summary = map.get(projectId) ?? { total:0, completed:0, failed:0, running:0, pending:0, blocked:0 };
+    summary.total++;
+    if (task.state === 'completed') summary.completed++;
+    if (task.state === 'failed') summary.failed++;
+    if (['working','assigned','verifying','running'].includes(task.state)) summary.running++;
+    if (['queued','assigned'].includes(task.state)) summary.pending++;
+    if (task.state === 'blocked') summary.blocked++;
+    map.set(projectId, summary);
+  }
+  return map;
+}
 export async function projectTaskSummary(env, projects) {
   if (!Array.isArray(projects) || !projects.length) return new Map();
-  if (!hasD1(env)) {
-    const ids = [...new Set(projects.map(p => p?.id).filter(Boolean))];
-    const map = new Map(ids.map(id => [id,{total:0,completed:0,failed:0,running:0,pending:0,blocked:0}]));
-    for (const task of store.list('tasks')) {
-      const summary = map.get(task?.projectId); if (!summary) continue;
-      summary.total++;
-      if (task.state === 'completed') summary.completed++;
-      if (task.state === 'failed') summary.failed++;
-      if (['working','assigned','verifying','running'].includes(task.state)) summary.running++;
-      if (['queued','assigned'].includes(task.state)) summary.pending++;
-      if (task.state === 'blocked') summary.blocked++;
-    }
-    return map;
-  }
-  const ids = [...new Set(projects.map(p => p?.id).filter(Boolean))];
+  const projectIds = [...new Set(projects.map(p => p?.id).filter(Boolean))];
+  // Memory-first: when hydration loaded the entire tasks table the same authoritative counts
+  // can be derived locally with no D1 read at all. This is the path a warm dashboard takes.
+  if (!hasD1(env) || store.isComplete('tasks')) return summarizeTaskRows(store.list('tasks'), projectIds);
+  const ids = projectIds;
   const key = ids.join('|');
   const nowMs = Date.now();
-  if (_projectTaskSummaryCache.map && _projectTaskSummaryCache.key === key && nowMs - _projectTaskSummaryCache.at < PROJECT_TASK_SUMMARY_TTL) {
-    return _projectTaskSummaryCache.map;
+  const cached = _projectTaskSummaryCache.map && _projectTaskSummaryCache.key === key && nowMs - _projectTaskSummaryCache.at < PROJECT_TASK_SUMMARY_TTL
+    ? _projectTaskSummaryCache.map : null;
+  if (cached) return cached;
+  // The 5 s dashboard poll used to cost SIX correlated COUNT(*) subqueries per project row,
+  // each scanning that project's tasks: measured against a 74-project / ~1.5K-task account a
+  // single active command burned ~1M rows_read, and 5M/day is the whole account allowance.
+  // One grouped pass over the tasks table answers every project at once, and this isolate's
+  // hydration already holds the whole table whenever it fit in the cap.
+  if (!(await optionalReadAllowed(env))) {
+    return summarizeTaskRows(store.list('tasks'), ids);
   }
   try {
-    const placeholders = ids.map(() => '?').join(',');
-    const sql = `SELECT p.id AS project_id,
-      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id) AS total,
-      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state')='completed') AS completed,
-      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state')='failed') AS failed,
-      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state') IN ('working','assigned','verifying','running')) AS running,
-      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state') IN ('queued','assigned')) AS pending,
-      (SELECT COUNT(*) FROM entities t WHERE t.type='tasks' AND json_extract(t.data,'$.projectId')=p.id AND json_extract(t.data,'$.state')='blocked') AS blocked
-      FROM entities p WHERE p.type='projects' AND p.id IN (${placeholders})`;
-    const result = await env.DB.prepare(sql).bind(...ids).all();
+    const sql = `SELECT COALESCE(json_extract(data,'$.projectId'),'') AS project_id, COALESCE(json_extract(data,'$.state'),'') AS state, COUNT(*) AS cnt
+      FROM entities WHERE type='tasks' GROUP BY project_id, state`;
+    const result = await env.DB.prepare(sql).all();
     recordD1Read(env, Number(result?.meta?.rows_read) || 0);
-    const map = new Map();
-    for (const row of result.results ?? []) map.set(row.project_id, {
-      total:Number(row.total)||0, completed:Number(row.completed)||0, failed:Number(row.failed)||0,
-      running:Number(row.running)||0, pending:Number(row.pending)||0, blocked:Number(row.blocked)||0
-    });
-    for (const id of ids) if (!map.has(id)) map.set(id,{total:0,completed:0,failed:0,running:0,pending:0,blocked:0});
+    const map = new Map(ids.map(id => [id,{total:0,completed:0,failed:0,running:0,pending:0,blocked:0}]));
+    for (const row of result.results ?? []) {
+      const summary = map.get(row.project_id); if (!summary) continue;
+      const count = Number(row.cnt) || 0;
+      summary.total += count;
+      if (row.state === 'completed') summary.completed += count;
+      if (row.state === 'failed') summary.failed += count;
+      if (['working','assigned','verifying','running'].includes(row.state)) summary.running += count;
+      if (['queued','assigned'].includes(row.state)) summary.pending += count;
+      if (row.state === 'blocked') summary.blocked += count;
+    }
     _projectTaskSummaryCache.at=nowMs; _projectTaskSummaryCache.map=map; _projectTaskSummaryCache.key=key;
     return map;
   } catch (error) {
@@ -349,6 +391,13 @@ async function safeD1List(env, type, opts) {
 async function stateSnapshot(env) {
   const nowMs = Date.now();
   if (_stateSnapshot && (nowMs - _stateSnapshotTime) < STATE_SNAPSHOT_TTL) return _stateSnapshot;
+  // A cold isolate serves every dashboard poll from this snapshot (~630 rows). Left unguarded,
+  // an open dashboard on a 5 s poll could spend most of the account's daily reads by itself.
+  // Past the guard the last good snapshot keeps the screen alive instead.
+  if (_lastGoodSnapshot && !(await optionalReadAllowed(env))) {
+    _stateSnapshot = _lastGoodSnapshot; _stateSnapshotTime = nowMs;
+    return { ..._lastGoodSnapshot, cachedSnapshot: true, degraded: false };
+  }
   // Keep the cold-isolate snapshot deliberately small: 5M D1 rows_read/day is an account limit.
   // The limits mirror the warm in-memory caps (100/300/100) so the counters read the same
   // before and after hydration instead of visibly jumping. The 5s cache keeps the cost
@@ -535,10 +584,14 @@ export default { async fetch(request, env, ctx) { try {
     // to see that the secret arrived, and the model in use; only presence and a non-secret
     // default are reported — the key itself never leaves the Worker.
     const groqReady=groqConfigured(env);
-    const generationPath=(env?.AI&&aiAvailable)?'workers-ai':(groqReady?'groq':'deterministic-templates');
+    // There is no ready-made template to fall back to any more, so an environment with no
+    // working provider cannot deliver a product at all — say that instead of implying that
+    // a deterministic template will answer.
+    const generationPath=(env?.AI&&aiAvailable)?'workers-ai':(groqReady?'groq':'no-model');
     return ok({service:'mauli2.0',// An account-level D1 write ceiling is not "healthy": every write is being rejected,
     // so nothing can progress and the founder needs to see that rather than a stall.
-    status:blocked?'degraded':(env?.AI&&!aiAvailable?'degraded':'healthy'),degraded:Boolean(blocked)||Boolean(env?.AI&&!aiAvailable),degradedReason:blocked?'d1-write-limit':(env?.AI&&!aiAvailable?(aiStatus?.exhausted?'workers-ai-allowance-exhausted':'workers-ai-unavailable'):null),persistence:hasD1(env),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),aiAvailable,aiReason:aiStatus?.reason??null,aiSince:aiStatus?.at??null,groqConfigured:groqReady,groqModel:groqReady?groqModel(env):null,generationPath,recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,stateReads:stateDiagnostics(),time:now()});}
+    status:blocked?'degraded':(env?.AI&&!aiAvailable?'degraded':'healthy'),degraded:Boolean(blocked)||Boolean(env?.AI&&!aiAvailable),degradedReason:blocked?'d1-write-limit':(env?.AI&&!aiAvailable?(aiStatus?.exhausted?'workers-ai-allowance-exhausted':'workers-ai-unavailable'):null),persistence:hasD1(env),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),aiAvailable,aiReason:aiStatus?.reason??null,aiSince:aiStatus?.at??null,groqConfigured:groqReady,groqModel:groqReady?groqModel(env):null,generationPath,recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,// Account-wide daily usage (shared across isolates), the meter Cloudflare actually enforces.
+    d1AccountBudget:await accountBudget(env),stateReads:stateDiagnostics(),time:now()});}
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   // The Integrations page used to render six hardcoded cards that always said "Configured" /
   // "Connected" / "Bound" / "Deployed" and never asked the Worker anything — so an unset
@@ -571,7 +624,7 @@ export default { async fetch(request, env, ctx) { try {
       {id:'groq',name:'Groq',icon:'⚡',category:'LLM',hint:'Fallback LLM that keeps generation working when Workers AI is out of allowance. Set GROQ_API_KEY in Cloudflare → Workers → Settings → Variables.',
         ok:groqReady,status:groqReady?'connected':'missing',
         statusLabel:groqReady?'Configured':'No key',
-        detail:groqReady?'A key is set, so '+groqModel(env)+' serves the workers-ai → groq → templates chain':'No key set — generation falls back to deterministic templates'},
+        detail:groqReady?'A key is set, so '+groqModel(env)+' answers whenever Workers AI cannot':'No key set — with Workers AI unavailable nothing can be generated, and no template substitutes for it'},
       {id:'do',name:'Durable Objects',icon:'🧱',category:'Runtime',hint:'Used for project execution and live channels.',
         ok:Boolean(env?.MAULI_PROJECT_EXECUTOR),status:env?.MAULI_PROJECT_EXECUTOR?'connected':'missing',
         statusLabel:env?.MAULI_PROJECT_EXECUTOR?'Bound':'Not bound',
@@ -708,7 +761,7 @@ export default { async fetch(request, env, ctx) { try {
   if(request.method==='GET'&&url.pathname==='/api/live-status'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);return ok({status:getLiveStatus()});}
   if(request.method==='GET'&&url.pathname==='/api/activity'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const projectId=url.searchParams.get('projectId');const agentId=url.searchParams.get('agentId');const limit=parseInt(url.searchParams.get('limit')||'50');return ok({activities:getActivityFeed({limit,projectId,agentId})});}
   if(request.method==='POST'&&url.pathname==='/api/activity'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const activity=recordActivity(body);return ok({activity});}
-  if(request.method==='GET'&&url.pathname.startsWith('/api/project-progress/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const pid=parts[parts.length-1];if(store.hydrated)await d1TasksFresh(env);    return ok({progress:{...getProjectProgress(pid),productionRuntime:runtimeAcceptanceSummary(pid)}});}
+  if(request.method==='GET'&&url.pathname.startsWith('/api/project-progress/')){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parts=url.pathname.split('/');const pid=parts[parts.length-1];await d1ProjectTasks(env,pid);return ok({progress:{...getProjectProgress(pid),productionRuntime:runtimeAcceptanceSummary(pid)}});}
   // Sub-Agent API
   if(request.method==='POST'&&url.pathname==='/api/sub-agents'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await request.json();const sub=createSubAgent(body);return ok({subAgent:sub});}
   if(request.method==='GET'&&url.pathname==='/api/sub-agents'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const parentId=url.searchParams.get('parentId');if(!parentId)return fail('parentId required',400);return ok({subAgents:getSubAgents(parentId)});}
@@ -813,12 +866,14 @@ export default { async fetch(request, env, ctx) { try {
     // hydration failed. So read this project's tasks from D1 whenever D1 is bound, and
     // never answer "Project not found" for a project that is really in D1 — the same
     // direct-read fallback findBuild and projectCodeArtifacts already use.
-    const d1Tasks=(store.hydrated||hasD1(env))?await d1TasksFresh(env):null;
-    const allProjects=hasD1(env)&&store.hydrated?await d1List(env,'projects',{existingTasks:d1Tasks??undefined}):listProjects();
-    let project=allProjects.find(p=>p.id===pid)||listProjects().find(p=>p.id===pid)||store.get('projects',pid);
+    // This screen is about ONE project: read that project's tasks through the projectId index
+    // instead of loading every task row (and every project row) just to filter them here.
+    const d1Tasks=hasD1(env)?await d1ProjectTasks(env,pid):null;
+    let project=store.get('projects',pid)??listProjects().find(p=>p.id===pid)??null;
     if(!project&&hasD1(env))project=await d1Get(env,'projects',pid);
     if(!project)return fail('Project not found',404);
-    const tasks=d1Tasks?d1Tasks.filter(t=>t.projectId===pid):store.list('tasks').filter(t=>t.projectId===pid);
+    const tasks=d1Tasks??store.list('tasks').filter(t=>t.projectId===pid);
+    project={...project,state:projectStateFromTasks(project,tasks)};
     const artifacts=store.list('artifacts').filter(a=>a.projectId===pid);
     const events=store.recentEvents().filter(e=>e.payload?.projectId===pid);
     const approvals=store.list('approvals').filter(a=>a.projectId===pid);

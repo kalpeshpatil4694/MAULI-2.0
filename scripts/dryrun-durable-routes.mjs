@@ -9,6 +9,11 @@ import { store } from '../src/store.js';
 import { queueCommand } from '../src/orchestrator.js';
 import { schedulerTick } from '../src/scheduler.js';
 import { collectProjectFiles } from '../src/zip.js';
+// Generation has no template net any more: offline there is no Workers AI binding, so this
+// dry run supplies a deterministic model that answers the per-file requests with real source.
+// Without it the command correctly fails to generate, and this route check would be measuring
+// the absence of a model instead of the delivery routes.
+import { fakeModelEnv } from '../tests/helpers/fake-model.mjs';
 
 store.configure(null);
 store.data = new Map();
@@ -16,10 +21,10 @@ store.events = [];
 store.hydrated = false;
 
 const app = (await import('../src/index.js')).default;
-const ENV = { MAULI_TEST_MODE: true };
+const ENV = fakeModelEnv({ MAULI_TEST_MODE: true, MAULI_PER_FILE_PACING_MS: '0' });
 const ctx = { waitUntil() {} };
 
-const queued = await queueCommand('Build a simple calculator web app', {});
+const queued = await queueCommand('Build a simple calculator web app', ENV);
 const projectId = queued.project.id;
 if (queued.status === 'awaiting_approval') {
   const a = store.get('approvals', queued.approval.id);
@@ -28,7 +33,7 @@ if (queued.status === 'awaiting_approval') {
   if (p) store.put('projects', { ...p, state: 'queued', id: p.id });
 }
 for (let i = 0; i < 90; i++) {
-  await schedulerTick({}, { projectId, budgetMs: 0 });
+  await schedulerTick(ENV, { projectId, budgetMs: 0 });
   const p = store.get('projects', projectId);
   if (p && ['completed', 'failed', 'cancelled'].includes(p.state)) break;
   const past = new Date(Date.now() - 20000).toISOString();
@@ -62,21 +67,19 @@ const artRes = await get(`/api/artifacts?projectId=${projectId}`);
 const artifacts = (await artRes.json()).data?.artifacts ?? [];
 const code = artifacts.filter(a => a.type === 'code-workspace');
 const delivery = artifacts.filter(a => a.type === 'final-delivery');
-check(artRes.ok && code.length > 0, 'AI code artifact listed', `${code.length} code-workspace`);
+check(artRes.ok && code.length > 0, 'code artifact listed', `${code.length} code-workspace`);
 check(delivery.length > 0, 'final delivery recorded', delivery[0]?.id ?? 'none');
 
 // ---- 3. which generator produced it ----------------------------------------
 const generatedBy = [...new Set(code.map(a => a.metadata?.generatedBy))];
 console.log(`         generatedBy: ${JSON.stringify(generatedBy)}`);
-// Offline there is no Workers AI binding, so the template fallback is the CORRECT outcome
-// here and its absence would be the bug. Saying so keeps a green run honest instead of
-// pretending this environment proves the AI path — that is what /api/ai/code-probe and a
-// live POST /api/command are for.
-if (generatedBy.includes('functional-code-executor')) {
-  check(true, 'produced by the AI path, not the template fallback', JSON.stringify(generatedBy));
-} else {
-  console.log('  SKIP  produced by the AI path  — no AI binding offline; verified live via /api/ai/code-probe');
-}
+// The delivered app must come from the model path the executor runs (per-file, repaired).
+// A template artifact here would mean a ready-made app was shipped as the product, which is
+// exactly what this pass removed — so it is a failure, not a fallback.
+check(generatedBy.includes('functional-code-executor') && generatedBy.every(name => name !== 'app-templates'),
+  'produced by the AI path, never a ready-made template', JSON.stringify(generatedBy));
+check(!artifacts.some(a => a.metadata?.templateFallback === true),
+  'no artifact is marked as a template fallback');
 
 // ---- 4. the download the founder clicks -------------------------------------
 const target = delivery[0] ?? code[0];

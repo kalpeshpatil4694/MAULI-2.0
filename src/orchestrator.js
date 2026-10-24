@@ -19,27 +19,37 @@ import { selectArchitecture } from './architecture.js';
 import './pdf-executor.js';
 import './native-code-executor.js';
 
-const ORDER = { research:10, 'product-planning':20, backend:30, database:40, frontend:50, native:55, pdf:58, security:60, testing:70 };
+const ORDER = { research:10, 'product-planning':20, backend:30, frontend:50, native:55, pdf:58, database:65, security:70, testing:75 };
+// Only the tasks that WRITE the product may run the code generator. 'database' and
+// 'security' used to share the internal.code executor, which generates a whole application:
+// one founder command therefore paid for three or four full AI app generations (web UI,
+// "database" and "security" each produced another competing artifact — three to six minutes
+// of model calls, and a merged artifact whose files came from whichever generation landed
+// first). Persistence is written by the app's own generating task and security is judged by
+// the security gate, so both are verifications of the produced code, not new products.
 const SPECS = [
   ['research','Research and validate requirements',['research','analysis'],'internal.plan'],
   ['product-planning','Define product and architecture plan',['product-planning','planning'],'internal.plan'],
   ['backend','Implement backend code and API',['backend','api'],'internal.code'],
-  ['database','Implement database and persistence schema',['database','schema','sql'],'internal.code'],
   ['frontend','Implement frontend code and user experience',['frontend','ui'],'internal.code'],
+  // Created after the generating tasks because addTasks() resolves dependencies from the
+  // tasks it has already made: a review placed before its generator lost the edge entirely.
+  ['database','Implement database and persistence schema',['database','schema','sql'],'internal.verify-code'],
   ['native','Implement native platform code',['mobile','android','ios','desktop','native','flutter'],'internal.native'],
   ['pdf','Generate PDF document',['pdf','document','report','invoice'],'internal.pdf'],
-  ['security','Perform security review',['security','audit'],'internal.code'],
+  ['security','Perform security review',['security','audit'],'internal.verify-code'],
   ['testing','Create testing and verification plan',['testing','verification'],'internal.plan']
 ];
 const DEPENDENCIES = {
   research: [],
   'product-planning': ['research'],
   backend: ['product-planning'],
-  database: ['product-planning'],
+  // Reviews judge the generated code, so they follow it instead of racing it.
+  database: ['frontend','backend'],
   frontend: ['product-planning','backend'],
   native: ['product-planning'],
   pdf: ['product-planning'],
-  security: ['product-planning'],
+  security: ['frontend','backend'],
   testing: ['product-planning']
 };
 
@@ -118,7 +128,7 @@ function ensureExecutablePlan(command,plan,platform,structured=null){
   return {...plan,objective:plan?.objective??text,capabilities:[...capabilities],requirements};
 }
 
-function addTasks(project,plan,objective,risk){const specs=makeSpecs(plan,objective);const made=[];const byKey=new Map();for(const spec of specs){const tools=spec.executor==='internal.plan'?[]:toolsForTask({requiredCapabilities:spec.requiredCapabilities},{scope:'internal',maxRisk:'read'});const selected=findAgent(spec,tools);const dependencies=(DEPENDENCIES[spec.key]??[]).map(key=>byKey.get(key)?.id).filter(Boolean);const task=addTaskToProject(project.id,{title:spec.title,description:spec.description,requiredCapabilities:spec.requiredCapabilities,risk,acceptance:[{field:'type',equals:spec.executor==='internal.code'?'code':'plan'}],assignedAgentId:selected?.id??null,toolNames:tools,maxAttempts:spec.maxAttempts,executor:spec.executor,sequence:spec.sequence,dependsOn:dependencies});if(task){const entry={task,selectedAgent:selected,toolNames:tools};made.push(entry);byKey.set(spec.key,task);}}const qa=finalQA(project,made.map(x=>x.task));if(qa)made.push({task:qa,selectedAgent:qa.assignedAgentId?store.get('agents',qa.assignedAgentId):null,toolNames:[]});return made;}
+function addTasks(project,plan,objective,risk){const specs=makeSpecs(plan,objective);const made=[];const byKey=new Map();for(const spec of specs){const tools=(spec.executor==='internal.plan'||spec.executor==='internal.verify-code')?[]:toolsForTask({requiredCapabilities:spec.requiredCapabilities},{scope:'internal',maxRisk:'read'});const selected=findAgent(spec,tools);const dependencies=(DEPENDENCIES[spec.key]??[]).map(key=>byKey.get(key)?.id).filter(Boolean);const task=addTaskToProject(project.id,{title:spec.title,description:spec.description,requiredCapabilities:spec.requiredCapabilities,risk,acceptance:[{field:'type',equals:spec.executor==='internal.code'?'code':spec.executor==='internal.verify-code'?'verification':'plan'}],assignedAgentId:selected?.id??null,toolNames:tools,maxAttempts:spec.maxAttempts,executor:spec.executor,sequence:spec.sequence,dependsOn:dependencies});if(task){const entry={task,selectedAgent:selected,toolNames:tools};made.push(entry);byKey.set(spec.key,task);}}const qa=finalQA(project,made.map(x=>x.task));if(qa)made.push({task:qa,selectedAgent:qa.assignedAgentId?store.get('agents',qa.assignedAgentId):null,toolNames:[]});return made;}
 function makeSpecs(plan,objective){const caps=plan?.capabilities??[],req=plan?.requirements??[];const filtered=SPECS.filter(s=>caps.includes(s[0])||s[2].some(c=>caps.includes(c)));const list=filtered.length?filtered:SPECS;return list.map((s,i)=>({key:s[0],title:req[i]?`${s[1]}: ${req[i]}`:s[1],description:objective,requiredCapabilities:s[2],maxAttempts:3,executor:s[3],sequence:ORDER[s[0]]??100+i}));}
 function planAgent(){seedAgents();let a=selectAgents(['product-planning','planning'],null,{requiredTools:['planning.execute'],requireAllTools:true})[0]??store.list('agents').find(a=>a.name==='Planning Agent');if(!a)return registerAgent({name:'Planning Agent',role:'Planner',department:'Planning',capabilities:['product-planning','planning'],tools:['planning.execute']});return updateAgent(a.id,{state:'available',currentTaskId:null,heartbeatAt:now(),capabilities:[...new Set([...(a.capabilities??[]),'product-planning','planning'])],tools:[...new Set([...(a.tools??[]),'planning.execute'])]});}
 function findAgent(spec,tools){if(spec.key==='product-planning'||spec.key==='planning')return planAgent();return selectAgents(spec.requiredCapabilities,null,{requiredTools:tools,requireAllTools:true})[0]??selectAgents(spec.requiredCapabilities,null,{requireAllTools:false})[0]??store.list('agents').find(a=>spec.requiredCapabilities.every(c=>(a.capabilities??[]).includes(c)))??null;}

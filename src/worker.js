@@ -90,7 +90,9 @@ export default {
         // old call site read `body?.note` from the wrong scope — a ReferenceError that the
         // surrounding .catch(() => null) swallowed, so the project stayed parked.
         const decided = store.get('approvals', approvalId);
-        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId, projectId: decided?.projectId, budgetMs: 20_000 }).catch(error => {
+        // skipLongExecutors: this tick runs in the 30s post-response window, which cannot
+        // finish a model generation — cron starts it with a real budget instead.
+        ctx.waitUntil(schedulerTick(env, { trigger: 'approval-granted', approvalId, projectId: decided?.projectId, budgetMs: 20_000, skipLongExecutors: true }).catch(error => {
           store.addEvent('approval.scheduler_error', { approvalId, error: error?.message || 'Scheduler error after approval', at: now() });
         }));
       }
@@ -103,7 +105,7 @@ export default {
       const response = await app.fetch(request, env, ctx);
       if (response.ok && ctx?.waitUntil) {
         // Trigger scheduler in background - it picks up any newly queued projects/tasks
-        ctx.waitUntil(schedulerTick(env, { trigger: 'chat-message', budgetMs: 20_000 }).catch(error => {
+        ctx.waitUntil(schedulerTick(env, { trigger: 'chat-message', budgetMs: 20_000, skipLongExecutors: true }).catch(error => {
           store.addEvent('chat.scheduler_error', { error: error?.message || 'Scheduler error after chat', at: now() });
         }));
       }

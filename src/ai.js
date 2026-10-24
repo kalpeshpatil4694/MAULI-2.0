@@ -98,7 +98,7 @@ export function noteAiFailure(env, error) {
   const message = String(error?.message ?? error ?? '');
   const exhausted = /daily free allocation|neurons|Paid plan|exceeded/i.test(message);
   const reason = exhausted
-    ? 'Workers AI daily free allocation exhausted (4006). Generation falls back to the verified templates until the allowance resets or the Workers plan is upgraded.'
+    ? 'Workers AI daily free allocation exhausted (4006). Generation fails with this reason until the allowance resets, the Workers plan is upgraded, or a Groq key is configured — no ready-made template is substituted.'
     : message.slice(0, 200);
   try {
     store.put('ai_status', {
@@ -126,21 +126,56 @@ export function noteGroqFailure(env, error) {
   } catch (_) { /* never let diagnostics mask the real error */ }
 }
 
+// A provider that has ALREADY failed this account must not be tried first on every later
+// call. Workers AI's free allowance is a daily ceiling that does not reset inside a run, so a
+// generation after it is spent paid for a doomed Workers AI attempt before the configured
+// Groq key was ever reached — and because the per-file deadline wraps the WHOLE chain, that
+// doomed attempt regularly consumed the budget the fallback needed. The verdict noteAiFailure
+// records is therefore read here: while it is recent, the working fallback goes first. It
+// expires so a recovered allowance is used again instead of Groq being preferred forever.
+const PROVIDER_DOWN_TTL_MS = 10 * 60 * 1000;
+export function workersAiDegraded(env, at = Date.now()) {
+  try {
+    const status = store.get('ai_status', 'workers-ai');
+    if (!status || status.available !== false) return false;
+    const since = Date.parse(status.at ?? '');
+    return !Number.isFinite(since) || at - since < PROVIDER_DOWN_TTL_MS;
+  } catch (_) { return false; }
+}
+
 // Groq is the fallback provider behind Workers AI. The chain the product promises is
-// Workers AI → Groq → deterministic templates: the templates live in the code executor, so
-// this function's job is to try Cloudflare, then Groq, and only then let the failure through
-// for the executor's template fallback to catch. An explicit `options.provider` still wins —
+// Workers AI → Groq → an honest failure: this function's job is to try Cloudflare, then Groq,
+// and only then let the failure through with its reason. The executor no longer substitutes a
+// ready-made template for the product, so a real error is what the founder sees. An explicit
+// `options.provider` still wins —
 // a caller who names groq gets groq, and a caller who names an unknown provider is refused.
 export async function generateAI(env, messages, options = {}) {
   const provider = getProvider(env, options);
   if (provider === 'groq') return groqGenerate(env, messages, options);
   if (provider !== 'cloudflare') throw new Error(`Unsupported AI provider: ${provider}`);
+  // The primary is on record as exhausted/unavailable: go straight to the key the founder
+  // configured instead of spending the call's deadline on a provider that cannot answer.
+  let preferredGroqError = null;
+  if (groqConfigured(env) && workersAiDegraded(env)) {
+    try {
+      return await groqGenerate(env, messages, options);
+    } catch (groqError) {
+      noteGroqFailure(env, groqError);
+      preferredGroqError = groqError;
+    }
+  }
   try {
     return await cloudflareGenerate(env, messages, options);
   } catch (error) {
     // A missing key is a configuration state, not an outage: stay silent and let the
-    // original Workers AI error (quota / binding) reach the template fallback.
+    // original Workers AI error (quota / binding) reach the caller with its reason.
     if (!groqConfigured(env)) throw error;
+    // Groq was already tried first in this call; retrying it here would double the latency
+    // for a failure that is already recorded.
+    if (preferredGroqError) {
+      const fallbackReason = String(preferredGroqError?.message ?? preferredGroqError ?? '').replace(/\r?\n/g, ' ').slice(0, 200);
+      throw new Error(`${error?.message ?? 'Workers AI failed'} — Groq fallback also failed: ${fallbackReason}`);
+    }
     try {
       return await groqGenerate(env, messages, options);
     } catch (groqError) {

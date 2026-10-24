@@ -42,16 +42,23 @@ test('L1 task ordering: planner produces a valid dependency DAG, not a fixed ser
 
   assert.deepEqual(planning.dependsOn, [research.id], 'planning must follow research');
   assert.deepEqual(backend.dependsOn, [planning.id], 'backend must follow product planning');
-  assert.deepEqual(database.dependsOn, [planning.id], 'database may proceed independently after product planning');
   assert.deepEqual(frontend.dependsOn, [planning.id, backend.id], 'frontend must wait for planning and backend');
-  assert.deepEqual(security.dependsOn, [planning.id], 'security review must not be serially blocked by backend');
+  // Persistence and security are REVIEWS of the generated code, not further products to
+  // generate — they used to share the internal.code executor and each paid for another full
+  // AI app generation, which is why one command took minutes and produced competing
+  // artifacts. They therefore follow the code that already exists rather than racing it.
+  assert.deepEqual(database.dependsOn, [frontend.id, backend.id], 'persistence review must follow the generated code');
+  assert.deepEqual(security.dependsOn, [frontend.id, backend.id], 'security review must follow the generated code');
+  assert.equal(database.executor, 'internal.verify-code', 'persistence must not generate a second app');
+  assert.equal(security.executor, 'internal.verify-code', 'security must not generate a second app');
   assert.deepEqual(testing.dependsOn, [planning.id], 'testing plan must not be serially blocked by implementation');
 
-  // The planner must preserve real parallelism: database/security/testing are
-  // not allowed to depend on the previous implementation task merely because
-  // they appear later in the UI ordering.
-  assert.equal((database.dependsOn ?? []).includes(backend.id), false);
-  assert.equal((security.dependsOn ?? []).includes(backend.id), false);
+  // Only the tasks that WRITE the product run the code generator.
+  const generators = tasks.filter(task => task.executor === 'internal.code').map(task => task.title);
+  assert.deepEqual(generators.sort(), [backend.title, frontend.title].sort(),
+    `exactly one generating task per produced surface, got: ${generators.join(', ')}`);
+
+  // The planner must still preserve real parallelism where it is safe.
   assert.equal((testing.dependsOn ?? []).includes(backend.id), false);
 
   // Final QA is the only project-wide gate and depends on every implementation

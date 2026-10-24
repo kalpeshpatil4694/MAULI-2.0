@@ -9,14 +9,14 @@
 //  1. an app is generated one file per request (no doomed whole-app attempts first);
 //  2. a per-file answer that is the whole-app envelope is refused rather than stored as
 //     source, which is the failure mode the fix could otherwise have introduced;
-//  3. a per-file app that arrives as a static shell is REPAIRED against the fidelity gate,
-//     and one that cannot be repaired falls back to a template rather than shipping a demo;
-//  4. a template fallback says, in words, that it is a template and not the founder's app.
+//  3. a per-file app that arrives as a static shell is REPAIRED against the fidelity gate;
+//  4. an app that cannot be generated is REFUSED with the real reason — no ready-made
+//     template is ever substituted for the founder's product.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { store } from '../src/store.js';
 import { seedAgents } from '../src/agents.js';
-import { generateFunctionalArtifact, TEMPLATE_FALLBACK_WARNING } from '../src/functional-code-executor.js';
+import { generateFunctionalArtifact } from '../src/functional-code-executor.js';
 
 const TAIL = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -155,19 +155,26 @@ test('a per-file app that arrives as a static shell is repaired against the fide
   assert.ok(repairCalls.length >= 1, 'the gate failure must trigger a repair request');
 });
 
-test('a per-file app that cannot be repaired falls back to a template, never ships a demo', async () => {
+// The founder asked for the ready-made template path to be GONE. A model answer that cannot
+// pass the fidelity gate is a failed generation, not a product: shipping a pre-written app
+// under the founder's project name is what delivered a habit tracker for a call recorder.
+// The executor now refuses with the reason (which the task retry and the dashboard show)
+// instead of registering a template as the deliverable.
+test('a per-file app that cannot be repaired is refused with its reason, never replaced by a template', async () => {
   store.configure(null);
   store.data = new Map();
   store.hydrated = true;
   seedAgents();
   const calls = [];
-  const { taskId } = webTask(TAIL());
+  const { taskId, pid } = webTask(TAIL());
 
-  const result = await generateFunctionalArtifact({ task: store.get('tasks', taskId), env: repairingEnv(calls, { alwaysBad: true }) });
-
-  const artifact = store.get('artifacts', result.artifactId);
-  assert.equal(artifact.metadata.aiGenerated, false, 'a demo must never be registered as AI code');
-  assert.equal(artifact.metadata.templateFallback, true, 'the deterministic template is the honest fallback');
+  await assert.rejects(
+    () => generateFunctionalArtifact({ task: store.get('tasks', taskId), env: repairingEnv(calls, { alwaysBad: true }) }),
+    (error) => /Code generation failed/.test(error.message) && /template/i.test(error.message),
+    'an ungated app must fail with a reason that names the missing product'
+  );
+  const artifacts = store.list('artifacts').filter(a => a.projectId === pid);
+  assert.equal(artifacts.length, 0, 'nothing pre-written may be registered as the product');
 });
 
 test('a per-file answer that is the whole-app envelope is refused, not written as source', async () => {
@@ -181,14 +188,13 @@ test('a per-file answer that is the whole-app envelope is refused, not written a
   const env = { AI: { async run() { return { response: envelope }; } } };
   const { taskId } = webTask(TAIL());
 
-  const result = await generateFunctionalArtifact({ task: store.get('tasks', taskId), env });
-
-  const artifact = store.get('artifacts', result.artifactId);
-  assert.ok(artifact, 'something is still registered rather than an exception');
-  const js = artifact.content.files.find(f => f.path === 'www/app.js');
-  if (js) assert.ok(!/^\s*\{/.test(js.content), 'a JSON envelope must never be stored as app.js');
-  // It fell through to the deterministic template, and it says so.
-  assert.equal(artifact.metadata.aiGenerated, false);
+  await assert.rejects(
+    () => generateFunctionalArtifact({ task: store.get('tasks', taskId), env }),
+    /Code generation failed/,
+    'an answer that is not source must never become the product'
+  );
+  const artifacts = store.list('artifacts').filter(a => a.metadata?.aiGenerated === true || a.metadata?.templateFallback === true);
+  assert.equal(artifacts.length, 0, 'no envelope-as-source and no template was registered');
 });
 
 // The files are generated in a fixed, deliberate order: the BEHAVIOUR file first, then the
@@ -216,24 +222,20 @@ test('the markup is generated against the behaviour file, not independently of i
   assert.ok(htmlRequest.includes('function add()'), 'the JS source itself, not just its name, is in context');
 });
 
-test('a template fallback states plainly that it is a template, not the founder app', async () => {
+// With no model at all there is nothing to generate from. A placeholder shell used to be
+// registered here; now the failure names the missing provider so the founder can fix the
+// configuration instead of receiving an empty app that looks finished.
+test('with no model configured the executor names the missing provider and ships nothing', async () => {
   store.configure(null);
   store.data = new Map();
   store.hydrated = true;
   seedAgents();
-  // No AI binding and no Groq key: there is no model at all, so the executor takes the
-  // fallback branch. Whatever the founder gets must say what it is.
-  const { taskId } = webTask(TAIL());
+  const { taskId, pid } = webTask(TAIL());
 
-  const result = await generateFunctionalArtifact({ task: store.get('tasks', taskId), env: {} });
-
-  const artifact = store.get('artifacts', result.artifactId);
-  assert.ok(artifact.metadata.templateFallback === true || artifact.metadata.stub === true,
-    'a fallback artifact must be marked as a fallback');
-  assert.equal(artifact.metadata.founderWarning, TEMPLATE_FALLBACK_WARNING);
-  assert.match(artifact.metadata.founderWarning, /not your app/i);
-  assert.ok(artifact.content.notes.join(' ').includes('not your app'),
-    'the warning must be in the artifact notes the founder reads');
-  assert.ok((result.notes ?? []).some(n => /not your app/i.test(n)),
-    'the task result must carry the warning too, not only the artifact');
+  await assert.rejects(
+    () => generateFunctionalArtifact({ task: store.get('tasks', taskId), env: {} }),
+    (error) => /GROQ_API_KEY/.test(error.message) && /no longer substitutes a ready-made template/i.test(error.message)
+  );
+  assert.equal(store.list('artifacts').filter(a => a.projectId === pid).length, 0,
+    'a placeholder must not be registered as the product');
 });

@@ -55,9 +55,11 @@ export async function handleFounderCommand(request, env, ctx) {
 
     if (queued.status === 'queued' && ctx?.waitUntil) {
       // ctx.waitUntil only extends the invocation 30 s past the response (Cloudflare limit),
-      // so the drain gets a 20 s budget: tasks that do not fit stay queued and the cron
-      // scheduler finishes them instead of being cancelled mid-run.
-      ctx.waitUntil(schedulerTick(env, { trigger: 'founder-command', runId: queued.runId, projectId: queued.project?.id, budgetMs: 20_000 }).catch(error => {
+      // so the drain gets a 20 s budget AND is not allowed to start a long executor: a model
+      // generation started here is killed mid-call by the 30 s wall, recovered as a stale
+      // run, and repeated from scratch by the next cron tick. Planning/review run now;
+      // generation is started by cron, which has a real budget.
+      ctx.waitUntil(schedulerTick(env, { trigger: 'founder-command', runId: queued.runId, projectId: queued.project?.id, budgetMs: 20_000, skipLongExecutors: true }).catch(error => {
         store.addEvent('command.scheduler_error', { runId: queued.runId, error: error?.message || 'Scheduler error', at: now() });
       }));
     }

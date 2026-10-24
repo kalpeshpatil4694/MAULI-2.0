@@ -12,8 +12,11 @@ import { queueCommand } from '../src/orchestrator.js';
 import { schedulerTick } from '../src/scheduler.js';
 import { approveProject } from '../src/governance.js';
 import { recoverStuckProjects } from '../src/maintenance.js';
+import { fakeModelEnv } from './helpers/fake-model.mjs';
 
-const ENV = { MAULI_FOUNDER_KEY: 'test-founder-key', MAULI_TEST_MODE: true };
+// Generation has no template net any more, so a command that must reach a delivery needs a
+// model that actually answers its per-file requests.
+const ENV = fakeModelEnv({ MAULI_FOUNDER_KEY: 'test-founder-key', MAULI_TEST_MODE: true, MAULI_PER_FILE_PACING_MS: '0' });
 const FOUNDER_HEADERS = { 'x-mauli-founder': 'test-founder-key', 'content-type': 'application/json' };
 
 function resetStore() {
@@ -54,7 +57,7 @@ function passTime(projectId, seconds = 20) {
 
 async function driveToCompletion(projectId, maxTicks = 80) {
   for (let i = 0; i < maxTicks; i++) {
-    await schedulerTick({}, { projectId, budgetMs: 0 });
+    await schedulerTick(ENV, { projectId, budgetMs: 0 });
     const project = store.get('projects', projectId);
     if (project && ['completed', 'failed', 'cancelled'].includes(project.state)) return project;
     passTime(projectId);
@@ -64,7 +67,7 @@ async function driveToCompletion(projectId, maxTicks = 80) {
 
 test('an internal build command queues without a founder approval gate', async () => {
   resetStore();
-  const queued = await queueCommand('Build a simple to-do list web app', {});
+  const queued = await queueCommand('Build a simple to-do list web app', ENV);
   assert.equal(queued.status, 'queued', 'internal autonomous builds must not stop at founder approval');
   const projectId = queued.project.id;
 
@@ -75,7 +78,7 @@ test('an internal build command queues without a founder approval gate', async (
 
 test('an internal autonomous command runs its whole task chain to a final delivery', async () => {
   resetStore();
-  const queued = await queueCommand('Build a notes web app', {});
+  const queued = await queueCommand('Build a notes web app', ENV);
   assert.equal(queued.status, 'queued');
   const projectId = queued.project.id;
 

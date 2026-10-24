@@ -41,7 +41,12 @@ export function createProject({ name, objective, founderCommand = '', requiremen
 export function addTaskToProject(projectId, taskInput) {
   const project = store.get('projects', projectId); if (!project) return null;
   const task = createTask({ ...taskInput, projectId });
-  store.put('projects', { ...project, state: 'active', startedAt:project.startedAt||now(), estimatedDurationMs:estimateProjectDuration(store.list('tasks').filter(t=>t.projectId===project.id)), id: project.id });
+  // A command creates ~13 tasks, and rewriting the project row for each one spent 13
+  // rows_written to say the same thing. The first task already flips the project to 'active';
+  // later ones only refresh the estimate, which the run's own progress row can carry.
+  if (project.state !== 'active' || !project.startedAt) {
+    store.put('projects', { ...project, state: 'active', startedAt:project.startedAt||now(), estimatedDurationMs:estimateProjectDuration(store.list('tasks').filter(t=>t.projectId===project.id)), id: project.id });
+  }
   return assignTask(task.id);
 }
 
