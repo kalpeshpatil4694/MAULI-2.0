@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { planCommand } from '../src/orchestrator.js';
 import { store } from '../src/store.js';
 import { seedAgents } from '../src/agents.js';
+import { sourceFor, objectiveOf } from './helpers/fake-model.mjs';
 
 function functionalResponse() {
   return JSON.stringify({
@@ -25,7 +26,16 @@ test('executive orchestrator completes a multi-task founder command end-to-end',
   const env = {
     AI: {
       async run(_model, request) {
-        const system = request?.find(message => message.role === 'system')?.content ?? '';
+        const messages = Array.isArray(request) ? request : (request?.messages ?? []);
+        const system = messages.find(message => message.role === 'system')?.content ?? '';
+        const user = messages.map(message => String(message?.content ?? '')).join('\n');
+        // The executor generates ONE file per request and refuses a whole-app envelope, so a
+        // fixture that only ever returns the envelope cannot produce a product.
+        const marker = 'Output ONLY the raw contents of ';
+        if (user.includes(marker)) {
+          const path = (user.slice(user.indexOf(marker) + marker.length).match(/^(\S+)/) ?? [])[1];
+          return { response: sourceFor(String(path ?? '').replace(/[.,;:]+$/, ''), objectiveOf(user)) };
+        }
         if (system.includes('Functional Application Engineer')) return { response: functionalResponse() };
         return { response: JSON.stringify({ objective:'Create a validated product plan', requirements:['research requirements','design frontend','security verification'], capabilities:['research','frontend','security'], risks:[], acceptanceCriteria:['Execution plan generated'] }) };
       }

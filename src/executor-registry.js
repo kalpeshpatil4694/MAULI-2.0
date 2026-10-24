@@ -1,4 +1,4 @@
-import { listTaskArtifacts } from './artifacts.js';
+import { listTaskArtifacts, listProjectArtifacts } from './artifacts.js';
 
 const handlers = new Map();
 const permissions = new Map();
@@ -54,7 +54,13 @@ registerExecutor('internal.plan', async ({ task, callTool }) => {
 grantExecutor('internal.plan', 'internal');
 
 registerExecutor('internal.verify-code', async ({ task }) => {
-  const artifacts = listTaskArtifacts(task?.id);
+  // A review task (persistence/schema, security) produces no code of its own: the code it
+  // judges is the one the project's generating task wrote. Looking only at THIS task's
+  // artifacts made every review fail with "artifact_present: false" even though the app had
+  // already been generated, so the review task failed its own acceptance and took the
+  // project down with it. The task's own artifacts still win when it has any.
+  const own = listTaskArtifacts(task?.id);
+  const artifacts = own.length ? own : listProjectArtifacts(task?.projectId);
   const codeArtifacts = artifacts.filter(a => a.type === 'code-workspace');
   const checks = [
     { name: 'artifact_present', passed: codeArtifacts.length > 0 },
@@ -71,6 +77,8 @@ registerExecutor('internal.verify-code', async ({ task }) => {
     passed,
     checks,
     artifactId: codeArtifacts[0]?.id ?? null,
+    projectId: task?.projectId ?? null,
+    fileCount: codeArtifacts.reduce((n, a) => n + (a.content?.files?.length ?? 0), 0),
     summary: passed ? 'Code artifact is present and structurally valid.' : 'Code verification failed: required artifact is missing or invalid.'
   };
 }, {

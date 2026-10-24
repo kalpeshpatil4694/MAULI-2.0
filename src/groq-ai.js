@@ -3,9 +3,9 @@
  * provider when Cloudflare Workers AI is unavailable or its daily allowance is spent.
  *
  * Groq is a CLOUD service (api.groq.com), so unlike Ollama it needs the network: it is the
- * cloud fallback in the chain Workers AI → Groq → deterministic templates, not the offline
- * path. Its purpose is to keep a founder's project getting a model-built app when Workers AI
- * has run out (4006) instead of dropping straight to a template.
+ * cloud fallback behind Workers AI, not the offline path. Its purpose is to keep a founder's
+ * project getting a model-built app when Workers AI has run out (4006); without it there is no
+ * product at all, because no ready-made template is substituted.
  */
 import { withDeadline } from './core.js';
 
@@ -141,7 +141,7 @@ async function groqComplete(env, key, model, messages, options = {}) {
       const retryAfterSec = Number(response.headers.get('retry-after')) ||
         (Number(response.headers.get('retry-after-ms')) > 0 ? Number(response.headers.get('retry-after-ms')) / 1000 : 0);
       const when = Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? `; retry after ~${Math.ceil(retryAfterSec)}s` : '';
-      throw new Error(`Groq rate limit reached (HTTP 429)${when}; falling back to deterministic templates`);
+      throw new Error(`Groq rate limit reached (HTTP 429)${when}; no other model provider is configured`);
     }
     throw new Error(`Groq request failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
   }

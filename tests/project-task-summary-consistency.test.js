@@ -21,15 +21,13 @@ function fakeSummaryD1(rows) {
 test('Projects task summary is authoritative and counts the same lifecycle states as Details', async () => {
   __resetProjectTaskSummaryCache();
   const pid = 'project_consistency';
-  const env = fakeSummaryD1([{
-    project_id: pid,
-    total: 14,
-    completed: 12,
-    failed: 0,
-    running: 0,
-    pending: 0,
-    blocked: 2
-  }]);
+  // The authoritative summary is ONE grouped pass over the tasks table (projectId, state,
+  // count) instead of six correlated COUNT(*) subqueries per project — that shape was the
+  // single largest dashboard read cost, and it read the same rows six times per project.
+  const env = fakeSummaryD1([
+    { project_id: pid, state: 'completed', cnt: 12 },
+    { project_id: pid, state: 'blocked', cnt: 2 }
+  ]);
   const summary = await projectTaskSummary(env, [{ id: pid, state: 'active' }]);
   assert.deepEqual(summary.get(pid), {
     total: 14,

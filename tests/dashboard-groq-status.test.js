@@ -81,7 +81,7 @@ test('on load the chip shows one symbol and keeps the detail in its tooltip', as
 });
 
 test('an absent key shows the Not Configured symbol instead of a reassuring blank', async () => {
-  const dom = domWith(HEALTH({ groqConfigured: false, groqModel: null, generationPath: 'deterministic-templates' }));
+  const dom = domWith(HEALTH({ groqConfigured: false, groqModel: null, generationPath: 'no-model' }));
   const chip = dom.elements.get('groqChip');
   await until(() => chip.textContent);
   assert.equal(chip.textContent, '❌');

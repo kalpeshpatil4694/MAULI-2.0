@@ -57,8 +57,8 @@ test('MAULI_GROQ_KEY is accepted as the same credential', async () => {
 });
 
 test('generationPath names the provider that will actually answer', async () => {
-  // No AI binding and no key: only the deterministic templates remain.
-  assert.equal((await health()).generationPath, 'deterministic-templates');
+  // No AI binding and no key: there is no model, and no template substitutes for one.
+  assert.equal((await health()).generationPath, 'no-model');
 
   // A key with no AI binding puts Groq in front of the templates.
   assert.equal((await health({ GROQ_API_KEY: KEY })).generationPath, 'groq');
@@ -109,7 +109,9 @@ test('Integrations reports a missing Groq key instead of a reassuring label', as
   assert.equal(groq.statusLabel, 'No key');
   // The hint has to say where the key goes, not merely that it is absent.
   assert.match(groq.hint, /Fallback LLM/);
-  assert.match(groq.detail, /deterministic templates/);
+  // And the detail must be honest about what its absence means now that no template is shipped
+  // in place of a generated product.
+  assert.match(groq.detail, /no template substitutes/i);
 });
 
 test('Integrations reports a configured Groq key, and the counts still add up', async () => {

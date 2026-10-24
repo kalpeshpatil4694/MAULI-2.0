@@ -1,12 +1,16 @@
 // End-to-end proof of the founder-visible promise: a queued command actually executes its
 // task chain to a final delivery, and the dashboard state/progress reflect the real work.
-// Runs against the in-memory path (no D1, no AI) exactly like the offline template fallback.
+// Runs against the in-memory path (no D1) with a deterministic stand-in model: there is no
+// ready-made template net any more, so a command completes only when a model writes its app.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { store } from '../src/store.js';
 import { queueCommand } from '../src/orchestrator.js';
 import { schedulerTick } from '../src/scheduler.js';
 import { getProjectProgress } from '../src/live-monitor.js';
+import { fakeModelEnv } from './helpers/fake-model.mjs';
+
+const ENV = fakeModelEnv({ MAULI_PER_FILE_PACING_MS: '0' });
 
 // A real cron tick is minutes apart, which is what lets orphan recovery reclaim an assigned
 // task whose agent was pinned. This loop runs instantly, so simulate the elapsed time
@@ -26,7 +30,7 @@ async function passTime(projectId, seconds = 20) {
 
 async function driveToCompletion(projectId, maxTicks = 80) {
   for (let i = 0; i < maxTicks; i++) {
-    await schedulerTick({}, { projectId, budgetMs: 0 });
+    await schedulerTick(ENV, { projectId, budgetMs: 0 });
     const project = store.get('projects', projectId);
     if (project && ['completed', 'failed', 'cancelled'].includes(project.state)) return project;
     passTime(projectId);
@@ -40,7 +44,7 @@ test('a queued founder command runs to a completed final delivery', async () => 
   store.events = [];
   store.hydrated = false;
 
-  const queued = await queueCommand('Build a simple to-do list web app', {});
+  const queued = await queueCommand('Build a simple to-do list web app', ENV);
   const projectId = queued.project?.id;
   assert.ok(projectId, 'queueCommand must return a project id');
   assert.ok(['queued', 'awaiting_approval'].includes(queued.status), `unexpected queue status ${queued.status}`);
@@ -83,7 +87,7 @@ test('the live counters move when a command runs', async () => {
   store.hydrated = true;
 
   const before = store.list('tasks').length;
-  const queued = await queueCommand('Build a notes web app', {});
+  const queued = await queueCommand('Build a notes web app', ENV);
   const projectId = queued.project.id;
   const afterQueue = store.list('tasks').length;
   assert.ok(afterQueue > before, 'queuing a command must increase the real task count');

@@ -3,11 +3,16 @@ import assert from 'node:assert/strict';
 import { planCommand } from '../src/orchestrator.js';
 import { store } from '../src/store.js';
 import { seedAgents } from '../src/agents.js';
+import { fakeModelEnv } from './helpers/fake-model.mjs';
+
+// A command only completes when its app is actually generated: the template fallback is gone,
+// so these runs need a model that answers the per-file requests.
+const ENV = fakeModelEnv({ MAULI_PER_FILE_PACING_MS: '0' });
 
 test('L1 end-to-end: founder command creates and executes a project flow', async () => {
   seedAgents();
 
-  const result = await planCommand('Create a simple e-commerce platform', {});
+  const result = await planCommand('Create a simple e-commerce platform', ENV);
 
   assert.ok(result?.project?.id, 'project must be created');
   assert.ok(Array.isArray(result.tasks), 'tasks must be returned');
@@ -29,8 +34,8 @@ test('L1 end-to-end: founder command creates and executes a project flow', async
 
 test('L1 completion requires final project QA and returns only current project tasks', async () => {
   seedAgents();
-  const first = await planCommand('Research a chess game product', {});
-  const second = await planCommand('Research a calculator product', {});
+  const first = await planCommand('Research a chess game product', ENV);
+  const second = await planCommand('Research a calculator product', ENV);
 
   assert.notEqual(first.project.id, second.project.id, 'each founder command must create a new project');
 
