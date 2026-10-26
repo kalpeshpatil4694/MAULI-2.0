@@ -262,6 +262,23 @@ test('a project retired for having no tasks is deferred too when writes are refu
   assert.equal(store.get('projects', 'project-no-tasks').state, 'queued', 'the project row is what the dashboard reads; it must not change in memory alone');
 });
 
+test('a chain that cannot move stops holding the fast path open', async () => {
+  resetStore({});
+  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+  store.data.set('projects', new Map([['p-zombie', { id: 'p-zombie', state: 'active', updatedAt: fiveDaysAgo }]]));
+  store.data.set('tasks', new Map([['t-blocked', { id: 't-blocked', projectId: 'p-zombie', state: 'blocked', updatedAt: fiveDaysAgo }]]));
+  assert.equal(schedulerHasLiveWork({}), false, 'a dead chain keeps the marker idle instead of hydrating every minute; the safety sweep still acts on it');
+
+  store.data.set('tasks', new Map([['t-fresh', { id: 't-fresh', projectId: 'p-zombie', state: 'queued', updatedAt: new Date().toISOString() }]]));
+  assert.equal(schedulerHasLiveWork({}), true, 'fresh work always re-opens the tick');
+
+  resetStore({});
+  store.data.set('projects', new Map([['p-old', { id: 'p-old', state: 'active', updatedAt: fiveDaysAgo }]]));
+  store.data.set('tasks', new Map([['t-working', { id: 't-working', projectId: 'p-old', state: 'working', updatedAt: fiveDaysAgo }]]));
+  store.data.set('runs', new Map([['r1', { id: 'r1', taskId: 't-working', state: 'running' }]]));
+  assert.equal(schedulerHasLiveWork({}), true, 'a live execution is progress, however old the row looks');
+});
+
 test('live work is detected from the scheduler view without a query', async () => {
   resetStore({});
   assert.equal(schedulerHasLiveWork(), false);
