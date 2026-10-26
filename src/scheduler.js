@@ -130,12 +130,27 @@ export async function schedulerIdleGate(env,{scheduledTime=Date.now(),nowMs=Date
   if(await rowsChangedSince(env,nowMs-IDLE_DIRTY_WINDOW_MS))return{run:true,reason:'rows-changed',wake};
   return{run:false,reason:'idle',wake};
 }
+// Work that cannot progress is not work. A chain whose rows have not moved for the retirement
+// window and has no live execution is exactly what the retirement pass removes — and while the
+// account write budget refuses those writes, the rows stay in D1 and would otherwise hold the
+// fast path open forever: measured in production, one zombie project from 2026-10-21 kept
+// `pending: true`, so every minute hydrated seven tables again even though nothing could move.
+// Stale rows still get a full tick on the safety sweep; they just stop costing a hydration a
+// minute. A row with no timestamp is treated as recent, so unknown state is never called dead.
+const DEAD_WORK_MS=6*60*60*1000;
+function touchedWithin(row,cutoff){
+  const stamp=Date.parse(row?.updatedAt??row?.claimedAt??row?.queuedAt??row?.createdAt??'');
+  return !Number.isFinite(stamp)||stamp>=cutoff;
+}
 // What the tick found, in terms a founder reads: is anything still expecting work? Read from
 // the in-memory scheduler view, so it costs no D1 query.
-export function schedulerHasLiveWork(){
-  if(store.list('tasks').some(task=>LIVE_TASK_STATES.has(task?.state)))return true;
+export function schedulerHasLiveWork(env=store.env,{nowMs=Date.now(),maxAgeMs}={}){
+  const configured=Number(maxAgeMs??env?.MAULI_STALE_WORK_MS);
+  const cutoff=nowMs-(Number.isFinite(configured)&&configured>0?configured:DEAD_WORK_MS);
+  const runningTaskIds=new Set(store.list('runs').filter(run=>run?.state==='running').map(run=>run.taskId).filter(Boolean));
+  if(store.list('tasks').some(task=>LIVE_TASK_STATES.has(task?.state)&&(runningTaskIds.has(task.id)||touchedWithin(task,cutoff))))return true;
   if(store.list('approvals').some(approval=>approval?.state==='pending'))return true;
-  return store.list('projects').some(project=>LIVE_PROJECT_STATES.has(project?.state));
+  return store.list('projects').some(project=>LIVE_PROJECT_STATES.has(project?.state)&&touchedWithin(project,cutoff));
 }
 // Cron (no drain target) advances up to 6 runnable tasks per project per tick so the
 // */5 schedule still delivers a full chain in a couple of ticks.

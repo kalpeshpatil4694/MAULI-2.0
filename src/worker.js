@@ -157,7 +157,7 @@ export default {
       await pruneOldResults(env).catch(() => null);
       // Record what is left so the next minute can take the cheap path. Derived from the
       // in-memory scheduler view (no query), and written only when the answer changes.
-      const pending = schedulerHasLiveWork();
+      const pending = schedulerHasLiveWork(env);
       await writeSchedulerWake(env, { pending, reason: pending ? 'work-pending' : 'idle', previous: gate.wake?.known ? gate.wake.pending : undefined }).catch(() => null);
       return { ran: true, reason: gate.reason, pending };
     };
