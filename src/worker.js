@@ -9,7 +9,7 @@ import { dedupeAgents, runMaintenance } from './maintenance.js';
 import { store } from './store.js';
 import { ensureBuiltinTools } from './tools.js';
 import { seedAgents } from './agents.js';
-import { schedulerTick } from './scheduler.js';
+import { schedulerTick, schedulerIdleGate, markSchedulerWork, writeSchedulerWake, schedulerHasLiveWork } from './scheduler.js';
 import { now } from './core.js';
 import { handleFounderCommand } from './command-endpoint.js';
 import { DASHBOARD_LIVE_SCRIPT } from './dashboard-live.js';
@@ -82,6 +82,11 @@ export default {
     // for the next cron tick (up to 1 minute delay).
     if (request.method === 'POST' && url.pathname.startsWith('/api/approvals/')) {
       const response = await app.fetch(request, env, ctx);
+      if (response.ok) {
+        // An approval releases work: open the cron fast path immediately instead of waiting
+        // for the next five-minute dirty probe.
+        await markSchedulerWork(env, 'approval-granted').catch(() => null);
+      }
       if (response.ok && ctx?.waitUntil) {
         const approvalId = url.pathname.split('/').pop();
         // index.js already ran governance.approveProject() (approval row -> 'approved',
@@ -103,6 +108,7 @@ export default {
     // so tasks start executing immediately instead of waiting for the next cron tick.
     if (request.method === 'POST' && url.pathname === '/api/chat') {
       const response = await app.fetch(request, env, ctx);
+      if (response.ok) await markSchedulerWork(env, 'chat-message').catch(() => null);
       if (response.ok && ctx?.waitUntil) {
         // Trigger scheduler in background - it picks up any newly queued projects/tasks
         ctx.waitUntil(schedulerTick(env, { trigger: 'chat-message', budgetMs: 20_000, skipLongExecutors: true }).catch(error => {
@@ -121,6 +127,14 @@ export default {
     return response;
   },  async scheduled(event, rawEnv, ctx) {
     const env = boundedD1(rawEnv);
+    const scheduledTime = Number(event?.scheduledTime) || Date.now();
+    // The gate decides whether this minute is worth a full tick at all. Without it an idle
+    // account paid for a complete scheduler bootstrap every single minute (measured: 743k
+    // rows read in a day where the founder ran nothing). One row read and one indexed probe
+    // are enough to answer "is anything waiting?" — a full sweep still happens every 15
+    // minutes, so time-only transitions are never missed for long.
+    const gate = await schedulerIdleGate(env, { scheduledTime });
+    if (!gate.run) return { skipped: true, reason: gate.reason };
     // Scheduler gets a deliberately small lifecycle-only bootstrap. A full store hydration
     // here used to read thousands of historical rows on every fresh cron isolate and could
     // consume the 5M/day D1 rows_read allowance by itself.
@@ -141,7 +155,12 @@ export default {
       // events shrink the audit table, results reclaim the 20KB-per-row command results.
       await pruneEvents(env).catch(() => null);
       await pruneOldResults(env).catch(() => null);
+      // Record what is left so the next minute can take the cheap path. Derived from the
+      // in-memory scheduler view (no query), and written only when the answer changes.
+      const pending = schedulerHasLiveWork();
+      await writeSchedulerWake(env, { pending, reason: pending ? 'work-pending' : 'idle', previous: gate.wake?.known ? gate.wake.pending : undefined }).catch(() => null);
+      return { ran: true, reason: gate.reason, pending };
     };
-    await run();
+    return run();
   }
 };

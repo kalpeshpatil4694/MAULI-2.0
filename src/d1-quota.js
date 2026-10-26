@@ -136,10 +136,15 @@ export async function flushAccountBudget(env, { force = false } = {}) {
 // A busted threshold alone would leave a quiet isolate's usage out of the shared ledger
 // forever, so time also triggers a flush: at most one extra row per minute while the isolate
 // is doing work, which keeps the account total within about a minute of the truth.
+// Reads alone no longer force a time-based flush. An idle account reads a few rows a minute
+// (the cron's idle gate) and each flush would cost a rows_written, so the guard was writing
+// 1,440 rows a day to record traffic that cost nothing. Reads still flush at the 100k
+// threshold, and pending WRITES still flush every minute because they are what the guard
+// protects.
 function ledgerFlushDue(s) {
   return s.reads >= ACCOUNT_LEDGER_FLUSH_READS
     || s.writes >= ACCOUNT_LEDGER_FLUSH_WRITES
-    || ((s.reads || s.writes) && (Date.now() - s.lastFlush) >= ACCOUNT_LEDGER_FLUSH_MS);
+    || (s.writes > 0 && (Date.now() - s.lastFlush) >= ACCOUNT_LEDGER_FLUSH_MS);
 }
 function noteAccountRead(env, rows) {
   const n = Math.max(0, Number(rows) || 0);

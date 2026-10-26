@@ -6,6 +6,64 @@ import { hasD1 } from './db.js';
 import { store } from './store.js';
 import { schedulerTick } from './scheduler.js';
 import { approveProject } from './governance.js';
+import { updateAgent } from './agents.js';
+
+// A task that has not moved for this long is not "in progress": nothing is executing it, and
+// nothing will claim it. Keeping it live is not harmless — every cron tick hydrates the whole
+// scheduler view because a task is technically runnable, so an abandoned chain keeps the
+// account working (and paying rows_read/rows_written) forever. Measured in production: one
+// project from 2026-10-21 still held 12 blocked tasks plus a task stuck in 'assigned' five
+// days later, so the one-minute cron never had a quiet minute. Retiring dead rows is what
+// makes "no command, no project" actually idle.
+const STALE_WORK_MS = 6 * 60 * 60 * 1000;
+const RETIREABLE_TASK_STATES = new Set(['queued', 'assigned', 'working', 'verifying', 'blocked']);
+
+function staleWorkAge(env) {
+  const configured = Number(env?.MAULI_STALE_WORK_MS);
+  return Number.isFinite(configured) && configured > 0 ? configured : STALE_WORK_MS;
+}
+
+function lastTouched(row) {
+  const stamp = Date.parse(row?.updatedAt ?? row?.claimedAt ?? row?.queuedAt ?? row?.createdAt ?? '');
+  return Number.isFinite(stamp) ? stamp : null;
+}
+
+/**
+ * Fail tasks whose chain has been dead for longer than the stale window, and free their
+ * agents. Called before stuck-project recovery so a dead chain is retired instead of being
+ * revived on every maintenance pass (that revival loop is what kept old projects alive and
+ * regenerating for days). Returns what it retired so the founder sees it, and is idempotent:
+ * an already-retired row is terminal and therefore skipped.
+ */
+export async function retireStaleWork(env, { maxAgeMs, dryRun = false } = {}) {
+  const maxAge = Number.isFinite(Number(maxAgeMs)) && Number(maxAgeMs) > 0 ? Number(maxAgeMs) : staleWorkAge(env);
+  const cutoff = Date.now() - maxAge;
+  const stamp = new Date().toISOString();
+  // A project with a live run is genuinely executing, however long its row has been quiet
+  // (a generation call can take minutes); never retire out from under it.
+  const liveProjects = new Set(
+    store.list('runs')
+      .filter(run => run?.state === 'running')
+      .map(run => store.get('tasks', run.taskId)?.projectId)
+      .filter(Boolean)
+  );
+  const retired = [];
+  for (const task of store.list('tasks')) {
+    if (!RETIREABLE_TASK_STATES.has(task?.state)) continue;
+    if (task.projectId && liveProjects.has(task.projectId)) continue;
+    const touched = lastTouched(task);
+    if (touched === null || touched > cutoff) continue;
+    if (dryRun) { retired.push({ taskId: task.id, projectId: task.projectId, state: task.state }); continue; }
+    const reason = `Retired: task stayed "${task.state}" for ${(maxAge / 3600000).toFixed(1)}h with no live execution, so it could never progress.`;
+    await store.putDurable('tasks', { ...task, state: 'failed', error: reason, retiredAt: stamp, updatedAt: stamp, id: task.id });
+    const agentId = task.agentId ?? task.assignedAgentId;
+    const agent = agentId ? store.get('agents', agentId) : null;
+    if (agent) updateAgent(agent.id, { state: 'available', currentTaskId: null, heartbeatAt: stamp });
+    store.addEvent('scheduler.task_retired', { projectId: task.projectId, taskId: task.id, from: task.state, reason, at: stamp });
+    retired.push({ taskId: task.id, projectId: task.projectId, state: task.state });
+  }
+  return { retired, maxAgeMs: maxAge, dryRun };
+}
 
 // A project is "stuck" when it is still not terminal but nothing can move it forward:
 // no live execution, no runnable task, and no pending founder gate. These accumulate on
@@ -70,9 +128,21 @@ export async function recoverStuckProjects({ dryRun = false } = {}) {
       reports.push({ projectId: project.id, state: project.state, verdict: dryRun ? 'would_reactivate' : 'reactivated_approved', approvalId: granted.id, counts });
       continue;
     }
-    // No tasks at all means the plan never landed (or was pruned). Nothing to re-queue;
-    // report it instead of inventing work.
+    // No tasks at all means the plan never landed (or was pruned). Nothing to re-queue —
+    // and a project that has sat here for longer than the stale window will never get one:
+    // it must be retired, or it stays "live" forever and keeps every cron tick hydrated.
     if (!own.length) {
+      const touched = lastTouched(project);
+      const stale = touched !== null && (Date.now() - touched) > staleWorkAge(store.env);
+      if (stale && !dryRun) {
+        await store.putDurable('projects', {
+          ...project, state: 'failed', failedAt: project.failedAt ?? stamp, updatedAt: stamp, id: project.id,
+          blockedReason: 'Retired: this project never produced a task plan, so nothing could ever run it. Send the command again to rebuild.',
+        });
+        store.addEvent('project.retired', { projectId: project.id, from: project.state, reason: 'no task plan was ever produced', at: stamp });
+        reports.push({ projectId: project.id, state: project.state, verdict: 'retired_no_tasks', counts });
+        continue;
+      }
       reports.push({ projectId: project.id, state: project.state, verdict: 'no_tasks', counts });
       continue;
     }
@@ -108,13 +178,27 @@ export async function recoverStuckProjects({ dryRun = false } = {}) {
       'automatic stuck-project recovery'
     );
     const after = store.list('tasks').filter(t => t.projectId === project.id);
-    const stillFailed = after.filter(t => t.state === 'failed');
+    // Retired tasks are not "unretriable failures" to report; they are work maintenance already
+    // gave up on. Counting them here would fail a project that still has live work to run.
+    const stillFailed = after.filter(t => t.state === 'failed' && !t.retiredAt);
     // A task that failed and cannot be retried is a real outcome, not a bug to paper over.
     // Retire the project as failed so it stops masquerading as active work in the list.
     if (stillFailed.length) {
       store.put('projects', { ...store.get('projects', project.id), state: 'failed', updatedAt: stamp, id: project.id });
       store.addEvent('project.recovered', { projectId: project.id, from: project.state, to: 'failed', reason: `${stillFailed.length} unretriable task(s)`, at: stamp });
       reports.push({ projectId: project.id, state: project.state, verdict: 'failed_chain', counts, failedTasks: stillFailed.length });
+      continue;
+    }
+    // Nothing was re-queued because every remaining task is retired: the chain is dead for
+    // good. Leaving the project 'active' is what kept a zombie project (and the scheduler)
+    // busy for days, so it is finalized as failed with the reason a founder can act on.
+    if (!approved?.requeuedTaskIds?.length) {
+      store.put('projects', {
+        ...store.get('projects', project.id), state: 'failed', updatedAt: stamp, id: project.id,
+        blockedReason: 'Retired: this project\'s task chain was dead for hours with no live execution. Send the command again to rebuild.',
+      });
+      store.addEvent('project.recovered', { projectId: project.id, from: project.state, to: 'failed', reason: 'every remaining task was retired', at: stamp });
+      reports.push({ projectId: project.id, state: project.state, verdict: 'retired_chain', counts, retiredTasks: after.filter(t => t.retiredAt).length });
       continue;
     }
     reports.push({
@@ -130,7 +214,7 @@ export async function recoverStuckProjects({ dryRun = false } = {}) {
     scanned: reports.length,
     requeued: reports.filter(r => r.verdict === 'requeued').length,
     finalized: reports.filter(r => r.verdict === 'finalize_completed').length,
-    failed: reports.filter(r => r.verdict === 'failed_chain').length,
+    failed: reports.filter(r => r.verdict === 'failed_chain' || r.verdict === 'retired_chain').length,
     dryRun,
     reports,
   };
@@ -249,11 +333,18 @@ let _lastStuckRecovery = 0;
 const STUCK_RECOVERY_INTERVAL = 30 * 60 * 1000; // at most twice per hour
 
 export async function runMaintenance(env, context = {}) {
+  // Retire dead chains FIRST. Recovery would otherwise re-queue them, they would fail the
+  // same way, and the project would keep the scheduler busy for days — the loop that burned
+  // D1 with no founder command. Only rows past the stale window are touched.
+  let retirement = { retired: [], skipped: 'cooldown' };
+  if (store.hydrated && Date.now() - _lastStuckRecovery > STUCK_RECOVERY_INTERVAL) {
+    _lastStuckRecovery = Date.now();
+    retirement = await retireStaleWork(env).catch(error => ({ retired: [], error: error?.message ?? String(error) }));
+  }
   // Self-heal before scheduling: a project whose chain was interrupted by a deploy or
   // restart is otherwise skipped by the scheduler forever (no runnable task, no live run).
   let recovery = { scanned: 0, requeued: 0, finalized: 0, skipped: 'cooldown' };
-  if (store.hydrated && Date.now() - _lastStuckRecovery > STUCK_RECOVERY_INTERVAL) {
-    _lastStuckRecovery = Date.now();
+  if (!retirement.skipped) {
     recovery = await recoverStuckProjects({ dryRun: false });
   }
   const scheduler = await schedulerTick(env, {
@@ -264,5 +355,5 @@ export async function runMaintenance(env, context = {}) {
     store.addEvent('scheduler.tick_error', { error: error?.message ?? String(error), at: new Date().toISOString() });
     return null;
   });
-  return { scheduler, recovery };
+  return { scheduler, recovery, retirement };
 }

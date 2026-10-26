@@ -10,7 +10,8 @@ import { listTools, ensureBuiltinTools } from './tools.js';
 import { getArtifact, getArtifactDurable, listProjectArtifacts, listTaskArtifacts } from './artifacts.js';
 import { collectProjectFiles, createZip } from './zip.js';
 import { ensureSchema, hasD1, d1List, d1Get, d1Events, claimBuildVersion, getBuildVersion, getUsageReport, cleanupD1, projectStateFromTasks } from './db.js';
-import { recoverStuckProjects } from './maintenance.js';
+import { recoverStuckProjects, retireStaleWork } from './maintenance.js';
+import { readSchedulerWake } from './scheduler.js';
 import { recoverRunningExecutions } from './execution.js';
 import { requireFounder, checkRateLimit, checkCommandRateLimit, getRateLimitStats, founderAuthStatus } from './auth.js';
 import { runL1SelfTest } from './self-test.js';
@@ -591,7 +592,10 @@ export default { async fetch(request, env, ctx) { try {
     return ok({service:'mauli2.0',// An account-level D1 write ceiling is not "healthy": every write is being rejected,
     // so nothing can progress and the founder needs to see that rather than a stall.
     status:blocked?'degraded':(env?.AI&&!aiAvailable?'degraded':'healthy'),degraded:Boolean(blocked)||Boolean(env?.AI&&!aiAvailable),degradedReason:blocked?'d1-write-limit':(env?.AI&&!aiAvailable?(aiStatus?.exhausted?'workers-ai-allowance-exhausted':'workers-ai-unavailable'):null),persistence:hasD1(env),durableObjects:Boolean(env?.MAULI_PROJECT_EXECUTOR),hydrated:store.hydrated,ai:Boolean(env?.AI),aiAvailable,aiReason:aiStatus?.reason??null,aiSince:aiStatus?.at??null,groqConfigured:groqReady,groqModel:groqReady?groqModel(env):null,generationPath,recoveredRuns:recoveredRuns.length,d1Quota:d1QuotaSnapshot(env),d1ReadQuota:d1ReadQuotaSnapshot(env),d1WriteSources:d1WriteSourcesSnapshot(env),d1WriteBlocked:blocked,// Account-wide daily usage (shared across isolates), the meter Cloudflare actually enforces.
-    d1AccountBudget:await accountBudget(env),stateReads:stateDiagnostics(),time:now()});}
+    d1AccountBudget:await accountBudget(env),// Why the one-minute cron is (or is not) doing work: a founder who sees D1 usage climbing
+    // with no command needs to know whether the scheduler is busy or the alarm clock is the
+    // only thing running. `idle` here means a cron tick costs one row read, not a hydration.
+    schedulerWake:await readSchedulerWake(env).catch(()=>({pending:true,known:false,reason:'unreadable'})),stateReads:stateDiagnostics(),time:now()});}
   if(request.method==='GET'&&url.pathname==='/api/heartbeat') return ok({alive:true,uptime:Date.now(),heartbeat:now(),builds:store.list('builds').length,projects:store.list('projects').length,agents:store.list('agents').length});
   // The Integrations page used to render six hardcoded cards that always said "Configured" /
   // "Connected" / "Bound" / "Deployed" and never asked the Worker anything — so an unset
@@ -680,7 +684,10 @@ export default { async fetch(request, env, ctx) { try {
     }
     return ok({probe:{objective,...probe}});
   }
-  if(request.method==='POST'&&url.pathname==='/api/maintenance/recover-stuck'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const report=await recoverStuckProjects({dryRun:body.dryRun===true});return ok({recoverStuck:report,projects:report.reports});}
+  if(request.method==='POST'&&url.pathname==='/api/maintenance/recover-stuck'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));// Dead chains are retired before recovery revives them; recovery would otherwise re-queue
+    // the same unrecoverable tasks on every pass and keep the scheduler (and D1) busy.
+    const retirement=await retireStaleWork(env,{dryRun:body.dryRun===true}).catch(error=>({retired:[],error:error?.message??String(error)}));
+    const report=await recoverStuckProjects({dryRun:body.dryRun===true});return ok({retirement,recoverStuck:report,projects:report.reports});}
   if(request.method==='POST'&&url.pathname==='/api/reset'){const auth=requireFounder(request,env);if(!auth.ok)return fail(auth.error,auth.status);const body=await json(request).catch(()=>({}));const keepAgents=body.keepAgents!==false;const before={projects:store.list('projects').length,tasks:store.list('tasks').length,artifacts:store.list('artifacts').length};store.put('projects',[]);store.put('tasks',[]);store.put('artifacts',[]);store.put('builds',[]);store.put('events',[]);store.put('approvals',[]);if(!keepAgents){const agents=store.list('agents');const fresh=agents.filter(a=>a._builtin);store.put('agents',fresh);}await store.flush();if(hasD1(env)){try{await env.DB.prepare('DELETE FROM entities').run();await env.DB.prepare('DELETE FROM events').run();}catch(e){console.warn('D1 reset failed:',e.message);}}store.addEvent('system.reset',{before,keepAgents,time:now()});return ok({reset:true,before,keepAgents});}
   if(request.method==='GET'&&url.pathname==='/api/state'){const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});return ok(await statePayload(env, recoveredRuns));}
   if(request.method==='GET'&&url.pathname==='/api/self-test'){const founder=requireFounder(request,env);if(!founder.ok)return fail(founder.error,founder.status);const limit=checkRateLimit(request);if(!limit.ok)return fail(limit.error,limit.status,{retryAfter:limit.retryAfter});const result=runL1SelfTest();store.addEvent('self_test.completed',{score:result.score,status:result.status});return ok({result});}
