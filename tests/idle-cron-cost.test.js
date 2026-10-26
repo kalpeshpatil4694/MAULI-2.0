@@ -221,6 +221,47 @@ test('retirement survives recovery: a zombie project is failed, not revived', as
   assert.ok(store.events.some(event => event.type === 'project.recovered' && event.payload?.to === 'failed'));
 });
 
+// An account that has spent its daily write budget refuses critical writes from the guard. The
+// retirement must then say so, instead of changing memory and leaving D1 holding the zombie.
+function exhaustedBudgetEnv() {
+  const day = new Date().toISOString().slice(0, 10);
+  return {
+    DB: {
+      prepare() {
+        return {
+          bind() { return this; },
+          async first() { return { data: JSON.stringify({ day, reads: 0, writes: 100000 }) }; },
+          async all() { return { results: [] }; },
+          async run() { return { meta: { rows_written: 1 } }; },
+        };
+      },
+    },
+  };
+}
+
+test('a retirement the write budget refuses is reported deferred, not retired', async () => {
+  resetStore({});
+  const stale = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  store.data.set('tasks', new Map([['task-zombie', { id: 'task-zombie', projectId: 'p1', state: 'blocked', dependsOn: [], updatedAt: stale }]]));
+
+  const report = await retireStaleWork(exhaustedBudgetEnv());
+  assert.deepEqual(report.retired, [], 'nothing was written, so nothing may be claimed as retired');
+  assert.deepEqual(report.deferred.map(r => r.taskId), ['task-zombie']);
+  assert.match(report.reason, /write budget/);
+  assert.equal(store.get('tasks', 'task-zombie').state, 'blocked', 'memory must not claim a state D1 never received');
+});
+
+test('a project retired for having no tasks is deferred too when writes are refused', async () => {
+  resetStore(exhaustedBudgetEnv());
+  const stale = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  store.data.set('projects', new Map([['project-no-tasks', { id: 'project-no-tasks', state: 'queued', createdAt: stale, updatedAt: stale }]]));
+
+  const report = await recoverStuckProjects({ dryRun: false });
+  const verdict = report.reports.find(r => r.projectId === 'project-no-tasks');
+  assert.equal(verdict.verdict, 'retire_deferred');
+  assert.equal(store.get('projects', 'project-no-tasks').state, 'queued', 'the project row is what the dashboard reads; it must not change in memory alone');
+});
+
 test('live work is detected from the scheduler view without a query', async () => {
   resetStore({});
   assert.equal(schedulerHasLiveWork(), false);

@@ -7,6 +7,7 @@ import { store } from './store.js';
 import { schedulerTick } from './scheduler.js';
 import { approveProject } from './governance.js';
 import { updateAgent } from './agents.js';
+import { optionalWriteAllowed } from './d1-quota.js';
 
 // A task that has not moved for this long is not "in progress": nothing is executing it, and
 // nothing will claim it. Keeping it live is not harmless — every cron tick hydrates the whole
@@ -34,6 +35,12 @@ function lastTouched(row) {
  * revived on every maintenance pass (that revival loop is what kept old projects alive and
  * regenerating for days). Returns what it retired so the founder sees it, and is idempotent:
  * an already-retired row is terminal and therefore skipped.
+ *
+ * A retirement is only reported once D1 actually holds it. When the account is out of write
+ * budget the guard refuses the write, and mutating memory alone produced the worst failure this
+ * codebase has: the isolate believed the chain was retired (so it stopped retrying), D1 still
+ * held the zombie rows, and the next isolate read them back and retried forever. Those rows are
+ * reported as `deferred` instead, so the founder is told the truth and the next pass retries.
  */
 export async function retireStaleWork(env, { maxAgeMs, dryRun = false } = {}) {
   const maxAge = Number.isFinite(Number(maxAgeMs)) && Number(maxAgeMs) > 0 ? Number(maxAgeMs) : staleWorkAge(env);
@@ -48,12 +55,25 @@ export async function retireStaleWork(env, { maxAgeMs, dryRun = false } = {}) {
       .filter(Boolean)
   );
   const retired = [];
+  const deferred = [];
+  // Asked once per pass and again per retired row, so a budget that closes mid-pass stops the
+  // remaining writes instead of reporting rows D1 never accepted.
+  let budgetOpen = null;
+  const writesAllowed = async () => {
+    if (budgetOpen === false) return false;
+    budgetOpen = await optionalWriteAllowed(env, { critical: true }).catch(() => true);
+    return budgetOpen;
+  };
   for (const task of store.list('tasks')) {
     if (!RETIREABLE_TASK_STATES.has(task?.state)) continue;
     if (task.projectId && liveProjects.has(task.projectId)) continue;
     const touched = lastTouched(task);
     if (touched === null || touched > cutoff) continue;
     if (dryRun) { retired.push({ taskId: task.id, projectId: task.projectId, state: task.state }); continue; }
+    if (!(await writesAllowed())) {
+      deferred.push({ taskId: task.id, projectId: task.projectId, state: task.state });
+      continue;
+    }
     const reason = `Retired: task stayed "${task.state}" for ${(maxAge / 3600000).toFixed(1)}h with no live execution, so it could never progress.`;
     await store.putDurable('tasks', { ...task, state: 'failed', error: reason, retiredAt: stamp, updatedAt: stamp, id: task.id });
     const agentId = task.agentId ?? task.assignedAgentId;
@@ -62,7 +82,10 @@ export async function retireStaleWork(env, { maxAgeMs, dryRun = false } = {}) {
     store.addEvent('scheduler.task_retired', { projectId: task.projectId, taskId: task.id, from: task.state, reason, at: stamp });
     retired.push({ taskId: task.id, projectId: task.projectId, state: task.state });
   }
-  return { retired, maxAgeMs: maxAge, dryRun };
+  return {
+    retired, deferred, maxAgeMs: maxAge, dryRun,
+    ...(deferred.length ? { reason: 'D1 write budget is exhausted for today; these rows stay in D1 until the budget resets at 00:00 UTC and the next pass retires them.' } : {}),
+  };
 }
 
 // A project is "stuck" when it is still not terminal but nothing can move it forward:
@@ -135,6 +158,11 @@ export async function recoverStuckProjects({ dryRun = false } = {}) {
       const touched = lastTouched(project);
       const stale = touched !== null && (Date.now() - touched) > staleWorkAge(store.env);
       if (stale && !dryRun) {
+        if (!(await optionalWriteAllowed(store.env, { critical: true }).catch(() => true))) {
+          // Do not report a retirement D1 refused: the project row is what the dashboard reads.
+          reports.push({ projectId: project.id, state: project.state, verdict: 'retire_deferred', counts });
+          continue;
+        }
         await store.putDurable('projects', {
           ...project, state: 'failed', failedAt: project.failedAt ?? stamp, updatedAt: stamp, id: project.id,
           blockedReason: 'Retired: this project never produced a task plan, so nothing could ever run it. Send the command again to rebuild.',
@@ -193,6 +221,10 @@ export async function recoverStuckProjects({ dryRun = false } = {}) {
     // good. Leaving the project 'active' is what kept a zombie project (and the scheduler)
     // busy for days, so it is finalized as failed with the reason a founder can act on.
     if (!approved?.requeuedTaskIds?.length) {
+      if (!(await optionalWriteAllowed(store.env, { critical: true }).catch(() => true))) {
+        reports.push({ projectId: project.id, state: project.state, verdict: 'retire_deferred', counts });
+        continue;
+      }
       store.put('projects', {
         ...store.get('projects', project.id), state: 'failed', updatedAt: stamp, id: project.id,
         blockedReason: 'Retired: this project\'s task chain was dead for hours with no live execution. Send the command again to rebuild.',
