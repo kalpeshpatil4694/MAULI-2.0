@@ -15,7 +15,7 @@ import { requireFounder, checkRateLimit } from './auth.js';
 import { PLATFORMS, normalizePlatform, resolvePlatform } from './platforms.js';
 import { queueCommand } from './orchestrator.js';
 import { saveCommandResult } from './result-recorder.js';
-import { schedulerTick } from './scheduler.js';
+import { schedulerTick, markSchedulerWork } from './scheduler.js';
 import { store } from './store.js';
 
 export function isIsolatedTestEnv(env) {
@@ -53,6 +53,11 @@ export async function handleFounderCommand(request, env, ctx) {
       ? { saved: true, skipped: true, testMode: true }
       : await saveCommandResult(payload, env).catch(() => ({ saved: false }));
 
+    if (queued.status === 'queued') {
+      // A queued command is work: open the cron fast path now so the next tick hydrates and
+      // picks the project up even if this hand-off (which may not start long executors) ends.
+      await markSchedulerWork(env, 'founder-command').catch(() => null);
+    }
     if (queued.status === 'queued' && ctx?.waitUntil) {
       // ctx.waitUntil only extends the invocation 30 s past the response (Cloudflare limit),
       // so the drain gets a 20 s budget AND is not allowed to start a long executor: a model

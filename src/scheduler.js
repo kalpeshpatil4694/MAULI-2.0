@@ -3,6 +3,7 @@
 // It never fabricates completion and is safe to invoke repeatedly.
 
 import { now, withDeadline } from './core.js';
+import { hasD1 } from './db.js';
 import { store } from './store.js';
 import { selectAgents, updateAgent } from './agents.js';
 import { executeTask, runOverLifetime } from './execution.js';
@@ -49,6 +50,93 @@ const LONG_EXECUTORS=new Set(['internal.code','internal.native','internal.pdf'])
 // finalizeCommand counted it as pending and the project read 'active' forever — measured
 // live as 0/14 tasks after 15 hours. Past this window it is an honest failure with a reason.
 const STALLED_RUNNABLE_MS=15*60*1000;
+// ── Idle cron gate ───────────────────────────────────────────────────────────
+// Cloudflare bills rows_read/rows_written for the whole account per day, and the free tier
+// is enforced against the ACCOUNT, not per invocation. The one-minute cron is what keeps
+// MAULI responsive, but a tick with nothing to do used to pay for a full scheduler bootstrap
+// (projects + live tasks + agents + approvals + runs + verifications + artifacts), an
+// incremental sync of seven tables and two prune probes. Measured live: 743k rows read in a
+// day of an idle account, on an alarm clock alone.
+//
+// One tiny ledger row now records whether work is pending. It is set the moment a command,
+// approval or chat releases work, cleared by a tick that left nothing runnable, and ignored
+// on the periodic safety sweep — so a missed update can delay a tick by minutes, never wedge
+// the scheduler. A quiet minute costs one row read plus one indexed existence probe.
+const WAKE_TYPE='stats';
+const WAKE_ID='scheduler_wake';
+const IDLE_DIRTY_WINDOW_MS=5*60_000;
+// Even when the marker says idle, a full tick runs this often. Time-only transitions (an
+// expired lease, a retry backoff) produce no row write, so they need a sweep to be seen.
+const IDLE_SAFETY_EVERY_MINUTES=15;
+const LIVE_TASK_STATES=new Set(['queued','assigned','working','verifying','blocked']);
+// awaiting_approval is deliberately absent: that state waits on a human, and the approval
+// route marks work itself. Counting it would keep the fast path shut for every parked project.
+const LIVE_PROJECT_STATES=new Set(['active','queued','planning','executing','escalated']);
+
+export async function readSchedulerWake(env){
+  if(!hasD1(env))return{pending:true,at:null,known:false,reason:'no-d1'};
+  try{
+    const row=await env.DB.prepare('SELECT data FROM entities WHERE type=? AND id=?').bind(WAKE_TYPE,WAKE_ID).first();
+    if(!row?.data)return{pending:true,at:null,known:false,reason:'no-marker'};
+    const data=JSON.parse(row.data);
+    return{pending:data?.pending!==false,at:data?.at??null,known:true,reason:data?.reason??null};
+  }catch(error){
+    // An unreadable marker must never silence the scheduler: treat it as "work may exist".
+    return{pending:true,at:null,known:false,reason:`marker-unreadable: ${error?.message??error}`};
+  }
+}
+// `previous` is what the caller already read, so a value that is already correct costs no
+// write. Being wrong here is not dangerous — it only costs one extra tick.
+export async function writeSchedulerWake(env,{pending,reason=null,previous}={}){
+  if(!hasD1(env))return{written:false,reason:'no-d1'};
+  const next=pending!==false;
+  if(previous!==undefined&&Boolean(previous)===next)return{written:false,reason:'unchanged',pending:next};
+  try{
+    const stamp=now();
+    const data=JSON.stringify({pending:next,reason,at:stamp});
+    await env.DB.prepare('INSERT INTO entities(type,id,data,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(type,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at')
+      .bind(WAKE_TYPE,WAKE_ID,data,stamp,stamp).run();
+    return{written:true,pending:next,at:stamp};
+  }catch(error){
+    return{written:false,pending:next,error:error?.message??String(error)};
+  }
+}
+export async function markSchedulerWork(env,reason='work-queued',{previous}={}){
+  return writeSchedulerWake(env,{pending:true,reason,previous});
+}
+// Did anything the scheduler cares about change recently? Four index-range probes (one per
+// live table, each LIMIT 1) instead of hydrating seven tables to find out. Rows read stays in
+// single digits on a quiet account, which is the whole point.
+export async function rowsChangedSince(env,sinceMs){
+  if(!hasD1(env))return true;
+  const types=['projects','tasks','approvals','runs'];
+  const since=new Date(Number(sinceMs)||0).toISOString();
+  const sql=types.map(()=>'SELECT 1 AS hit FROM entities WHERE type=? AND updated_at>? LIMIT 1').join(' UNION ALL ');
+  try{
+    const result=await env.DB.prepare(sql).bind(...types.flatMap(type=>[type,since])).all();
+    return (result?.results??[]).length>0;
+  }catch(_){
+    // A failed probe must not be read as "nothing changed".
+    return true;
+  }
+}
+// The cron decides here whether this minute is worth a full tick at all.
+export async function schedulerIdleGate(env,{scheduledTime=Date.now(),nowMs=Date.now(),force=false}={}){
+  if(force)return{run:true,reason:'forced',wake:null};
+  const minute=new Date(Number(scheduledTime)||nowMs).getUTCMinutes();
+  if(minute%IDLE_SAFETY_EVERY_MINUTES===0)return{run:true,reason:'safety-sweep',wake:null};
+  const wake=await readSchedulerWake(env);
+  if(wake.pending)return{run:true,reason:wake.reason??'work-pending',wake};
+  if(await rowsChangedSince(env,nowMs-IDLE_DIRTY_WINDOW_MS))return{run:true,reason:'rows-changed',wake};
+  return{run:false,reason:'idle',wake};
+}
+// What the tick found, in terms a founder reads: is anything still expecting work? Read from
+// the in-memory scheduler view, so it costs no D1 query.
+export function schedulerHasLiveWork(){
+  if(store.list('tasks').some(task=>LIVE_TASK_STATES.has(task?.state)))return true;
+  if(store.list('approvals').some(approval=>approval?.state==='pending'))return true;
+  return store.list('projects').some(project=>LIVE_PROJECT_STATES.has(project?.state));
+}
 // Cron (no drain target) advances up to 6 runnable tasks per project per tick so the
 // */5 schedule still delivers a full chain in a couple of ticks.
 const CRON_TASKS_PER_PROJECT=6;

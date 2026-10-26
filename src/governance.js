@@ -55,6 +55,10 @@ export function approveProject(approval, project, note = '') {
   for (const gate of store.list('tasks').filter(
     t => t.projectId === project.id && ['blocked','failed'].includes(t.state)
   )) {
+    // A retired task is deliberately terminal: maintenance retired it because its chain was
+    // dead for hours with no execution. Re-queuing it here is exactly what made old projects
+    // regenerate forever, one recovery pass after another. Only a new command rebuilds it.
+    if (gate.retiredAt) continue;
     if (allReady(gate.dependsOn)) {
       store.put('tasks', {
         ...gate, state: 'queued', agentId: null, assignedAgentId: null,
