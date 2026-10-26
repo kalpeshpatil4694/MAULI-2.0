@@ -176,13 +176,27 @@ test('a dead chain is retired instead of ticking forever', async () => {
 test('a project with a live run is never retired out from under its execution', async () => {
   resetStore({});
   const longAgo = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
-  store.data.set('runs', new Map([['run-1', { id: 'run-1', taskId: 'task-working', state: 'running' }]]));
+  store.data.set('runs', new Map([['run-1', { id: 'run-1', taskId: 'task-working', state: 'running', startedAt: new Date().toISOString(), heartbeatAt: new Date().toISOString() }]]));
   store.data.set('tasks', new Map([
     ['task-working', { id: 'task-working', projectId: 'project-live', state: 'working', updatedAt: longAgo }],
   ]));
 
   const report = await retireStaleWork({});
   assert.deepEqual(report.retired, [], 'a running execution is progress, however old the row looks');
+});
+
+test('a run whose lease expired does not protect the chain forever', async () => {
+  resetStore({});
+  const longAgo = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+  // "running" in D1 is not executing: when the failure write is refused, the row stays here.
+  store.data.set('runs', new Map([['run-stuck', { id: 'run-stuck', taskId: 'task-working', state: 'running', startedAt: longAgo, heartbeatAt: longAgo }]]));
+  store.data.set('tasks', new Map([
+    ['task-working', { id: 'task-working', projectId: 'project-zombie', state: 'working', dependsOn: [], updatedAt: longAgo }],
+  ]));
+
+  const report = await retireStaleWork({});
+  assert.deepEqual(report.retired.map(r => r.taskId), ['task-working']);
+  assert.equal(store.get('tasks', 'task-working').state, 'failed');
 });
 
 test('dry run reports without writing', async () => {
@@ -275,8 +289,13 @@ test('a chain that cannot move stops holding the fast path open', async () => {
   resetStore({});
   store.data.set('projects', new Map([['p-old', { id: 'p-old', state: 'active', updatedAt: fiveDaysAgo }]]));
   store.data.set('tasks', new Map([['t-working', { id: 't-working', projectId: 'p-old', state: 'working', updatedAt: fiveDaysAgo }]]));
-  store.data.set('runs', new Map([['r1', { id: 'r1', taskId: 't-working', state: 'running' }]]));
+  store.data.set('runs', new Map([['r1', { id: 'r1', taskId: 't-working', state: 'running', startedAt: new Date().toISOString(), heartbeatAt: new Date().toISOString() }]]));
   assert.equal(schedulerHasLiveWork({}), true, 'a live execution is progress, however old the row looks');
+
+  // The same row with an expired lease is not executing — that is the state a refused failure
+  // write leaves behind, and it must not keep the cron awake.
+  store.data.set('runs', new Map([['r1', { id: 'r1', taskId: 't-working', state: 'running', startedAt: fiveDaysAgo, heartbeatAt: fiveDaysAgo }]]));
+  assert.equal(schedulerHasLiveWork({}), false, 'an expired lease is not a live execution');
 });
 
 test('live work is detected from the scheduler view without a query', async () => {

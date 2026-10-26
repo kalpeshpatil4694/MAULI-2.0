@@ -4,7 +4,7 @@
 
 import { hasD1 } from './db.js';
 import { store } from './store.js';
-import { schedulerTick } from './scheduler.js';
+import { schedulerTick, stale as runStale } from './scheduler.js';
 import { approveProject } from './governance.js';
 import { updateAgent } from './agents.js';
 import { optionalWriteAllowed } from './d1-quota.js';
@@ -46,11 +46,14 @@ export async function retireStaleWork(env, { maxAgeMs, dryRun = false } = {}) {
   const maxAge = Number.isFinite(Number(maxAgeMs)) && Number(maxAgeMs) > 0 ? Number(maxAgeMs) : staleWorkAge(env);
   const cutoff = Date.now() - maxAge;
   const stamp = new Date().toISOString();
-  // A project with a live run is genuinely executing, however long its row has been quiet
-  // (a generation call can take minutes); never retire out from under it.
+  // A project with a LIVE run is genuinely executing, however long its row has been quiet
+  // (a generation call can take minutes); never retire out from under it. A run whose lease
+  // expired is not executing — it is a row waiting for a failure write, and when the write
+  // budget refuses that write it stays 'running' in D1 forever. Honouring it meant the oldest
+  // zombie chains could never be retired at all.
   const liveProjects = new Set(
     store.list('runs')
-      .filter(run => run?.state === 'running')
+      .filter(run => run?.state === 'running' && !runStale(run))
       .map(run => store.get('tasks', run.taskId)?.projectId)
       .filter(Boolean)
   );
@@ -111,7 +114,7 @@ export async function recoverStuckProjects({ dryRun = false } = {}) {
   }
   const runningRunProjectIds = new Set(
     store.list('runs')
-      .filter(r => r.state === 'running')
+      .filter(r => r.state === 'running' && !runStale(r))
       .map(r => store.get('tasks', r.taskId)?.projectId)
       .filter(Boolean)
   );

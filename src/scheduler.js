@@ -147,7 +147,11 @@ function touchedWithin(row,cutoff){
 export function schedulerHasLiveWork(env=store.env,{nowMs=Date.now(),maxAgeMs}={}){
   const configured=Number(maxAgeMs??env?.MAULI_STALE_WORK_MS);
   const cutoff=nowMs-(Number.isFinite(configured)&&configured>0?configured:DEAD_WORK_MS);
-  const runningTaskIds=new Set(store.list('runs').filter(run=>run?.state==='running').map(run=>run.taskId).filter(Boolean));
+  // "running" in D1 is not the same as executing: a run whose lease expired keeps that state
+  // until its own failure write lands, and while the write budget refuses it, the row is
+  // permanently "running". Treating that as progress is what kept a 5-day-old chain, and the
+  // whole scheduler, awake.
+  const runningTaskIds=new Set(store.list('runs').filter(run=>run?.state==='running'&&!stale(run,nowMs)).map(run=>run.taskId).filter(Boolean));
   if(store.list('tasks').some(task=>LIVE_TASK_STATES.has(task?.state)&&(runningTaskIds.has(task.id)||touchedWithin(task,cutoff))))return true;
   if(store.list('approvals').some(approval=>approval?.state==='pending'))return true;
   return store.list('projects').some(project=>LIVE_PROJECT_STATES.has(project?.state)&&touchedWithin(project,cutoff));
